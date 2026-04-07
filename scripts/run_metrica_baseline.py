@@ -31,7 +31,6 @@ def find_player_ids(df: pd.DataFrame, prefix: str) -> List[str]:
     return sorted(ids)
 
 
-
 def get_state(row: pd.Series, player_id: str) -> PlayerState | None:
     x_col = f"{player_id}_x"
     y_col = f"{player_id}_y"
@@ -44,7 +43,6 @@ def get_state(row: pd.Series, player_id: str) -> PlayerState | None:
     return PlayerState(player_id=player_id, x=float(x), y=float(y))
 
 
-
 def build_team_states(row: pd.Series, player_ids: List[str]) -> List[PlayerState]:
     states = []
     for pid in player_ids:
@@ -52,7 +50,6 @@ def build_team_states(row: pd.Series, player_ids: List[str]) -> List[PlayerState
         if s is not None:
             states.append(s)
     return states
-
 
 
 def best_teammate_option(teammates: List[PlayerState], defenders: List[PlayerState], excluded_id: str | None = None):
@@ -67,22 +64,18 @@ def best_teammate_option(teammates: List[PlayerState], defenders: List[PlayerSta
     return max(candidates, key=lambda x: x[1])
 
 
-
 def move_defender_toward_start(defenders_start: Dict[str, PlayerState], defenders_end: List[PlayerState], runner_start: PlayerState, runner_end: PlayerState) -> List[PlayerState]:
     if not defenders_end:
         return defenders_end
 
-    # pick the defender closest to the runner at the end frame as a crude "attracted" defender
     closest = min(defenders_end, key=lambda d: (d.x - runner_end.x) ** 2 + (d.y - runner_end.y) ** 2)
     cf_defenders = deepcopy(defenders_end)
     for d in cf_defenders:
         if d.player_id == closest.player_id and d.player_id in defenders_start:
             d0 = defenders_start[d.player_id]
-            # move partway back toward the start position, as a toy no-run counterfactual
             d.x = 0.7 * d0.x + 0.3 * d.x
             d.y = 0.7 * d0.y + 0.3 * d.y
     return cf_defenders
-
 
 
 def main() -> None:
@@ -94,13 +87,20 @@ def main() -> None:
     home = load_metrica_tracking(DATA_DIR, game=1, team="Home")
     away = load_metrica_tracking(DATA_DIR, game=1, team="Away")
 
-    key_cols = [c for c in ["Frame", "Time [s]", "Period"] if c in home.columns and c in away.columns]
-    merged = home.merge(away, on=key_cols, suffixes=("", ""))
+    if len(home) != len(away):
+        raise ValueError(f"Home/Away tracking lengths differ: {len(home)} vs {len(away)}")
+
+    key_cols = [c for c in ["Frame", "Time [s]", "Period"] if c in home.columns]
+    away_extra = away.drop(
+        columns=[c for c in away.columns if c in key_cols or c.startswith("ball_")],
+        errors="ignore",
+    )
+    merged = pd.concat([home.reset_index(drop=True), away_extra.reset_index(drop=True)], axis=1)
 
     home_ids = find_player_ids(merged, "Home_")
     away_ids = find_player_ids(merged, "Away_")
 
-    horizon = 25  # about 1 second in 25 Hz data
+    horizon = 25
     results = []
 
     for idx in range(0, len(merged) - horizon, horizon):
