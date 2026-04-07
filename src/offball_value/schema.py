@@ -59,6 +59,59 @@ class EventRecord:
     raw: dict[str, Any] = field(default_factory=dict)
 
 
+def _to_float(x: Any) -> float | None:
+    if x in [None, ""]:
+        return None
+    try:
+        return float(x)
+    except (TypeError, ValueError):
+        return None
+
+
+def _to_int(x: Any) -> int | None:
+    if x in [None, ""]:
+        return None
+    try:
+        return int(float(x))
+    except (TypeError, ValueError):
+        return None
+
+
+def _parse_time_to_seconds(x: Any) -> float | None:
+    """
+    Handles:
+      - 12.34
+      - "12.34"
+      - "00:12.3"
+      - "01:02:03.4"
+    """
+    if x in [None, ""]:
+        return None
+
+    if isinstance(x, (int, float)):
+        return float(x)
+
+    s = str(x).strip()
+
+    try:
+        return float(s)
+    except ValueError:
+        pass
+
+    parts = s.split(":")
+    try:
+        if len(parts) == 2:
+            mm, ss = parts
+            return float(mm) * 60.0 + float(ss)
+        elif len(parts) == 3:
+            hh, mm, ss = parts
+            return float(hh) * 3600.0 + float(mm) * 60.0 + float(ss)
+    except ValueError:
+        return None
+
+    return None
+
+
 def metrica_row_to_frame(
     row: dict[str, Any],
     match_id: str,
@@ -83,8 +136,8 @@ def metrica_row_to_frame(
         if x is None or y is None:
             continue
 
-        player_id = key[:-2]  # e.g. Home_11
-        team = matched_prefix[:-1]  # Home / Away
+        player_id = key[:-2]
+        team = matched_prefix[:-1]
         players.append(
             PlayerSnapshot(
                 player_id=player_id,
@@ -106,9 +159,9 @@ def metrica_row_to_frame(
     return FrameSnapshot(
         source="metrica",
         match_id=match_id,
-        period=int(row["Period"]) if row.get("Period") is not None else None,
-        frame_id=int(row["Frame"]) if row.get("Frame") is not None else None,
-        time_s=float(row["Time [s]"]) if row.get("Time [s]") is not None else None,
+        period=_to_int(row.get("Period")),
+        frame_id=_to_int(row.get("Frame")),
+        time_s=_to_float(row.get("Time [s]")),
         ball=ball,
         players=players,
         possession_team=None,
@@ -118,14 +171,32 @@ def metrica_row_to_frame(
 
 def skillcorner_frame_to_snapshot(frame: dict[str, Any], match_id: str) -> FrameSnapshot:
     players: list[PlayerSnapshot] = []
+
     for p in frame.get("player_data", []):
-        player_id = str(p.get("player_id", "unknown"))
-        team = str(p.get("team_id", p.get("team", "unknown")))
         x = p.get("x")
         y = p.get("y")
-        z = p.get("z")
+
+        # fallback for nested location-like structures
+        if (x is None or y is None) and isinstance(p.get("coordinates"), dict):
+            x = p["coordinates"].get("x")
+            y = p["coordinates"].get("y")
+
         if x is None or y is None:
             continue
+
+        player_id = str(
+            p.get("player_id")
+            or p.get("trackable_object")
+            or p.get("id")
+            or "unknown"
+        )
+        team = str(
+            p.get("team_id")
+            or p.get("team")
+            or p.get("team_shortname")
+            or "unknown"
+        )
+        z = p.get("z")
 
         players.append(
             PlayerSnapshot(
@@ -161,9 +232,9 @@ def skillcorner_frame_to_snapshot(frame: dict[str, Any], match_id: str) -> Frame
     return FrameSnapshot(
         source="skillcorner",
         match_id=match_id,
-        period=int(frame["period"]) if frame.get("period") is not None else None,
-        frame_id=int(frame["frame"]) if frame.get("frame") is not None else None,
-        time_s=float(frame["timestamp"]) if frame.get("timestamp") is not None else None,
+        period=_to_int(frame.get("period")),
+        frame_id=_to_int(frame.get("frame")),
+        time_s=_parse_time_to_seconds(frame.get("timestamp")),
         ball=ball_obj,
         players=players,
         possession_team=possession_team,
@@ -175,18 +246,18 @@ def skillcorner_event_to_record(row: dict[str, Any], match_id: str) -> EventReco
     return EventRecord(
         source="skillcorner",
         match_id=match_id,
-        event_id=str(row.get("event_id")) if row.get("event_id") is not None else None,
-        period=int(row["period"]) if row.get("period") not in [None, ""] else None,
-        time_s=float(row["time_start"]) if row.get("time_start") not in [None, ""] else None,
-        event_type=str(row.get("event_type")) if row.get("event_type") is not None else None,
+        event_id=str(row.get("event_id")) if row.get("event_id") not in [None, ""] else None,
+        period=_to_int(row.get("period")),
+        time_s=_parse_time_to_seconds(row.get("time_start")),
+        event_type=str(row.get("event_type")) if row.get("event_type") not in [None, ""] else None,
         player_id=str(row.get("player_id")) if row.get("player_id") not in [None, ""] else None,
         team=str(row.get("team_id")) if row.get("team_id") not in [None, ""] else None,
-        x_start=float(row["x_start"]) if row.get("x_start") not in [None, ""] else None,
-        y_start=float(row["y_start"]) if row.get("y_start") not in [None, ""] else None,
-        x_end=float(row["x_end"]) if row.get("x_end") not in [None, ""] else None,
-        y_end=float(row["y_end"]) if row.get("y_end") not in [None, ""] else None,
-        frame_start=int(row["frame_start"]) if row.get("frame_start") not in [None, ""] else None,
-        frame_end=int(row["frame_end"]) if row.get("frame_end") not in [None, ""] else None,
+        x_start=_to_float(row.get("x_start")),
+        y_start=_to_float(row.get("y_start")),
+        x_end=_to_float(row.get("x_end")),
+        y_end=_to_float(row.get("y_end")),
+        frame_start=_to_int(row.get("frame_start")),
+        frame_end=_to_int(row.get("frame_end")),
         raw=row,
     )
 
@@ -214,7 +285,7 @@ def statsbomb_event_to_record(event: dict[str, Any], match_id: str) -> EventReco
         source="statsbomb",
         match_id=match_id,
         event_id=str(event.get("id")) if event.get("id") is not None else None,
-        period=int(event["period"]) if event.get("period") is not None else None,
+        period=_to_int(event.get("period")),
         time_s=None,
         event_type=str(event["type"]["name"]) if isinstance(event.get("type"), dict) else None,
         player_id=str(event["player"]["id"]) if isinstance(event.get("player"), dict) else None,
