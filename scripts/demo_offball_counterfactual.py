@@ -9,6 +9,7 @@ import pandas as pd
 
 from offball_value.adapters import load_metrica_frames
 from offball_value.baseline import PlayerState, compute_toy_option_score, detect_candidate_run
+from offball_value.possession import infer_ball_carrier
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -34,10 +35,15 @@ def best_teammate_option(
     teammates: list[PlayerState],
     defenders: list[PlayerState],
     excluded_id: str | None = None,
+    excluded_ids: set[str] | None = None,
 ):
+    resolved_excluded_ids = set(excluded_ids or set())
+    if excluded_id is not None:
+        resolved_excluded_ids.add(excluded_id)
+
     candidates = []
     for tm in teammates:
-        if excluded_id is not None and tm.player_id == excluded_id:
+        if tm.player_id in resolved_excluded_ids:
             continue
         score = compute_toy_option_score(tm, defenders, attacking_direction=1)
         candidates.append((tm.player_id, score))
@@ -86,6 +92,8 @@ def main():
     parser.add_argument("--horizon", type=int, default=25)
     parser.add_argument("--attacking-team", type=str, default="Home")
     parser.add_argument("--min-run-distance", type=float, default=0.04)
+    parser.add_argument("--ball-control-distance", type=float, default=None)
+    parser.add_argument("--allow-uncontrolled", action="store_true")
     parser.add_argument("--top-k", type=int, default=30)
     args = parser.parse_args()
 
@@ -97,6 +105,14 @@ def main():
     for idx in range(0, len(frames) - args.horizon, args.horizon):
         f0 = frames[idx]
         f1 = frames[idx + args.horizon]
+        start_carrier = infer_ball_carrier(f0, max_distance=args.ball_control_distance)
+        end_carrier = infer_ball_carrier(f1, max_distance=args.ball_control_distance)
+
+        if not args.allow_uncontrolled:
+            if start_carrier is None or end_carrier is None:
+                continue
+            if start_carrier.team != args.attacking_team or end_carrier.team != args.attacking_team:
+                continue
 
         attackers0, defenders0 = split_teams(f0, attacking_team=args.attacking_team)
         attackers1, defenders1 = split_teams(f1, attacking_team=args.attacking_team)
@@ -109,6 +125,11 @@ def main():
         def0_map = build_player_map(defenders0)
 
         for runner_id, s0 in atk0_map.items():
+            if start_carrier is not None and runner_id == start_carrier.player_id:
+                continue
+            if end_carrier is not None and runner_id == end_carrier.player_id:
+                continue
+
             s1 = atk1_map.get(runner_id)
             if s1 is None:
                 continue
@@ -122,7 +143,14 @@ def main():
             best_actual_id, best_actual_score = best_teammate_option(
                 teammates=attackers1,
                 defenders=defenders1,
-                excluded_id=runner_id,
+                excluded_ids={
+                    player_id
+                    for player_id in [
+                        runner_id,
+                        end_carrier.player_id if end_carrier is not None else None,
+                    ]
+                    if player_id is not None
+                },
             )
             if best_actual_score is None:
                 continue
@@ -137,7 +165,14 @@ def main():
             best_cf_id, best_cf_score = best_teammate_option(
                 teammates=attackers1,
                 defenders=cf_defenders,
-                excluded_id=runner_id,
+                excluded_ids={
+                    player_id
+                    for player_id in [
+                        runner_id,
+                        end_carrier.player_id if end_carrier is not None else None,
+                    ]
+                    if player_id is not None
+                },
             )
             if best_cf_score is None:
                 continue
@@ -152,6 +187,8 @@ def main():
                     "frame_end": f1.frame_id,
                     "time_start_s": f0.time_s,
                     "time_end_s": f1.time_s,
+                    "ball_carrier_start": start_carrier.player_id if start_carrier is not None else None,
+                    "ball_carrier_end": end_carrier.player_id if end_carrier is not None else None,
                     "runner_id": runner_id,
                     "runner_start_x": s0.x,
                     "runner_start_y": s0.y,

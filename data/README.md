@@ -81,9 +81,11 @@ Current processed outputs from Metrica Game 1:
 
 Important limitation:
 
-The current Metrica toy baseline does not yet robustly infer possession, ball
-carrier, or true off-ball status. Some top-ranked scenes may involve loose-ball
-or ball-near-runner situations.
+The current checked-in Metrica CSVs were produced by an earlier toy baseline.
+They should still be treated cautiously because some top-ranked scenes may
+involve loose-ball or ball-near-runner situations. The current code now includes
+foot-control possession helpers and the demo script filters to controlled
+attacking possessions by default.
 
 ## SkillCorner Open Data
 
@@ -140,6 +142,11 @@ possession and off-ball-run-related fields, but many fields are engineered
 labels or downstream annotations. For model inputs, avoid leakage from fields
 that directly encode the target outcome. Use those richer fields first for
 validation and qualitative interpretation.
+
+For the project state definition, SkillCorner possession should be converted
+into foot-control states with `possession.player_id` and tracking distance. Pass
+success can be labeled after the receiver's next controlled touch, while
+pass-flight frames remain outside the state set.
 
 ## StatsBomb Open Data + 360
 

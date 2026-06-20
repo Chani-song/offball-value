@@ -8,10 +8,35 @@ How much does an attacking player's off-ball movement improve a teammate's attac
 
 For a candidate runner `i`, ball carrier `b`, and evaluation horizon `t -> t+Δ`:
 
+- require a controlled-possession frame for the attacking team at `t`
 - detect motion by `i`
+- exclude the ball carrier from off-ball runner and receiver-option candidates
 - compute option-quality summary for attacking team at `t+Δ`
 - compute a counterfactual summary with runner `i` held fixed or moved by a simple baseline trajectory
 - attribute the difference to runner `i`
+
+## State and possession convention
+
+Use a strict first-pass convention:
+
+- "we have the ball" means a tracked player has the ball close to their feet
+- pass-flight frames are not separate states
+- successful passes are labeled after the next controlled touch is observed
+- the receiver/outcome label is allowed for transitions and validation, not as a feature at pass time
+
+So an A-to-B pass is represented after the fact as:
+
+```text
+A foot-control state -> pass attempt -> B foot-control state
+```
+
+This avoids having to decide, frame by frame, whether an in-flight ball is
+"clearly going to B" before B actually controls it.
+
+State variables should include normalized player/ball geometry first. Pitch
+size can either be included directly as context or used to normalize positions.
+Weather and venue conditions can be added as low-frequency match context once
+the base possession/value pipeline is stable.
 
 ## Toy score
 

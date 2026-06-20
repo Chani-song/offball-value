@@ -113,6 +113,39 @@ def load_skillcorner_match_metadata(
     return _read_json(path)
 
 
+def _skillcorner_frame_context(metadata: dict[str, Any]) -> tuple[dict[str, str], dict[str, str], dict[str, str]]:
+    player_team_by_id: dict[str, str] = {}
+    player_role_by_id: dict[str, str] = {}
+
+    for player in metadata.get("players", []):
+        team_id = player.get("team_id")
+        if team_id is None:
+            continue
+
+        ids = [player.get("id"), player.get("trackable_object")]
+        for player_id in ids:
+            if player_id is not None:
+                player_team_by_id[str(player_id)] = str(team_id)
+
+        role = player.get("player_role")
+        if isinstance(role, dict):
+            role_name = role.get("acronym") or role.get("name")
+            if role_name is not None:
+                for player_id in ids:
+                    if player_id is not None:
+                        player_role_by_id[str(player_id)] = str(role_name)
+
+    possession_group_to_team: dict[str, str] = {}
+    home_team = metadata.get("home_team")
+    if isinstance(home_team, dict) and home_team.get("id") is not None:
+        possession_group_to_team["home team"] = str(home_team["id"])
+    away_team = metadata.get("away_team")
+    if isinstance(away_team, dict) and away_team.get("id") is not None:
+        possession_group_to_team["away team"] = str(away_team["id"])
+
+    return player_team_by_id, player_role_by_id, possession_group_to_team
+
+
 def _skillcorner_tracking_path(match_dir: Path, match_id: str) -> Path:
     preferred = match_dir / f"{match_id}_tracking_extrapolated.jsonl"
     if preferred.exists():
@@ -131,11 +164,19 @@ def iter_skillcorner_frames(
     base = _resolve_base(base_dir, SKILLCORNER_DIR)
     resolved_match_id, match_dir = _skillcorner_match_dir(base, match_id)
     path = _skillcorner_tracking_path(match_dir, resolved_match_id)
+    metadata = load_skillcorner_match_metadata(match_id=resolved_match_id, base_dir=base)
+    player_team_by_id, player_role_by_id, possession_group_to_team = _skillcorner_frame_context(metadata)
 
     with open(path, "r", encoding="utf-8") as f:
         for line in f:
             if line.strip():
-                yield skillcorner_frame_to_snapshot(json.loads(line), match_id=resolved_match_id)
+                yield skillcorner_frame_to_snapshot(
+                    json.loads(line),
+                    match_id=resolved_match_id,
+                    player_team_by_id=player_team_by_id,
+                    player_role_by_id=player_role_by_id,
+                    possession_group_to_team=possession_group_to_team,
+                )
 
 
 def load_skillcorner_frames(

@@ -46,6 +46,8 @@ The current toy baseline is useful only as a draft. The next real modeling step 
 
 Concretely:
 - identify the ball carrier at each frame,
+- treat only foot-control frames as model states,
+- collapse pass-flight periods into completed pass transitions after the receiver's next controlled touch,
 - define candidate receivers,
 - estimate option quality for each receiver,
 - compare option quality before and after the off-ball movement,
@@ -74,6 +76,8 @@ Goal: move from a toy heuristic toward a meaningful research proxy.
 
 Tasks:
 - infer or approximate ball-carrier identity frame by frame,
+- filter attacking states to frames where the attacking team has controlled possession,
+- use future frames only to label completed pass transitions, not as state features,
 - define candidate pass targets,
 - estimate a simple open-option score or availability proxy,
 - compute a counterfactual score where defender reaction to the runner is weakened,

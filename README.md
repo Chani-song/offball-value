@@ -40,6 +40,30 @@ This repository currently implements a **very rough baseline** around this idea 
 
 ---
 
+## Possession and state convention
+
+For the first modeling pass, an attacking state means the team has **controlled
+possession at a player's feet**. In code, this is approximated by a ball carrier
+whose tracked position is close enough to the ball.
+
+Pass-flight frames are not treated as separate possession states. Instead, a
+completed pass is represented as a transition:
+
+```text
+A controlled-possession state -> pass attempt -> B controlled-possession state
+```
+
+This means "B clearly receives the pass" is decided after the next controlled
+touch is observed. That receiver/outcome label can be used to build transitions
+or validation labels, but it should not be included as a feature in the state at
+pass time.
+
+The first state-value target should stay simple: start with an action/state
+value proxy from prior possession-value work, then replace the toy score only
+after the possession and option definitions are stable.
+
+---
+
 ## What is in the repo
 
 - `scripts/` download and setup helpers
@@ -63,6 +87,7 @@ The repository has now moved beyond the initial scaffold stage and includes a wo
   - Metrica sample data
   - SkillCorner open data
   - StatsBomb open data
+- possession helpers for foot-control ball-carrier inference and completed pass transitions
 - working Metrica frame-loading pipeline
 - first-draft baseline and counterfactual demo scaffolding
 
@@ -80,11 +105,11 @@ The current internal schema is centered around the following objects:
 
 - `FrameSnapshot`
   - unified frame-level representation across tracking providers
-  - fields include source, match id, period, frame id, time in seconds, ball snapshot, player snapshots, and optional possession team
+  - fields include source, match id, period, frame id, time in seconds, ball snapshot, player snapshots, optional possession team, and optional possession player
 
 - `EventRecord`
   - unified event-level representation across event providers
-  - fields include source, match id, event id, period, time in seconds, event type, player id, team, start/end location, optional frame start/end, and raw metadata
+  - fields include source, match id, event id, period, time in seconds, event type, player id, team, start/end location, optional frame start/end, optional receiver, optional outcome, and raw metadata
 
 ### Current source adapters
 
