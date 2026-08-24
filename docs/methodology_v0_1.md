@@ -90,13 +90,15 @@ Human review is used at several gates:
 3. visible local interaction;
 4. second-pass confirmation of reacting defender, derived option, and trade-off.
 
-The current second pass reviewed ten clear candidates:
+The second pass reviewed ten clear candidates:
 
 - eight were included;
 - two were held;
 - none were rejected.
 
-The eight included scenes come from four matches. They form a high-precision
+The two held scenes remain only in the human-review audit trail and are
+excluded from the shared demos and all downstream development payloads. The
+eight included scenes come from four matches. They form a high-precision
 development set for debugging the local-game representation, not a sampled
 estimate of prevalence or model accuracy.
 

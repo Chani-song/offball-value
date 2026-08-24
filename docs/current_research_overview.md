@@ -139,6 +139,10 @@ The structural v0.1 audit currently does the following:
   carrier;
 - measures two-sided changes in dynamic goal-side marking geometry.
 
+This audit is shared as an **in-progress working prototype** so collaborators
+can inspect the current representation and guide the next implementation. It
+is not presented as a completed local-game model or a research result.
+
 It does **not** yet:
 
 - search counterfactual runner actions in the outer loop;

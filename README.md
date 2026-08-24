@@ -59,7 +59,7 @@ The curated audit package is in
 non-regenerable human reviews, the confirmed scene manifest, and three
 self-contained demos:
 
-- [`clear_core_scene_audit.html`](examples/research_audit/current_demos/clear_core_scene_audit.html): ten second-pass candidates shown with observed motion only.
+- [`clear_core_scene_audit.html`](examples/research_audit/current_demos/clear_core_scene_audit.html): eight human-confirmed development scenes shown with observed motion only; the two held scenes are not displayed.
 - [`meeting_scene_gallery.html`](examples/research_audit/current_demos/meeting_scene_gallery.html): eight unique confirmed scenes; the Klaus scene also retains one clearly labeled legacy dynamic view.
 - [`structural_local_game_audit.html`](examples/research_audit/current_demos/structural_local_game_audit.html): defender-by-option geometry screen over the eight confirmed scenes.
 
@@ -86,6 +86,13 @@ files:
 ```bash
 .venv/bin/python scripts/render_structural_local_game_v0_1.py \
   --scenes-json examples/research_audit/manifests/confirmed_core_scenes.json
+```
+
+The confirmed observed-motion audit can be regenerated from the same payload:
+
+```bash
+.venv/bin/python scripts/render_clear_core_scene_audit_v0_1.py \
+  --confirmed-scenes-json examples/research_audit/manifests/confirmed_core_scenes.json
 ```
 
 The preserved meeting gallery can also be rendered directly from its curated

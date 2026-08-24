@@ -18,16 +18,18 @@ outputs are removed from `data/processed/`.
   scene payload.
 - `evidence/background_rollout/`: compact held-out evidence used to reject
   constant velocity as the only two-second background baseline.
-- `current_demos/`: the current clear-core audit, meeting gallery, structural
-  local-game audit, the curated meeting payload, and the compact structural
-  summary.
+- `current_demos/`: the eight-scene confirmed clear-core audit, meeting
+  gallery, in-progress structural local-game audit, the curated meeting
+  payload, and the compact structural summary. The two held clear-core scenes
+  are not included in these shared demos.
 
 The HTML files are self-contained. Download the file or clone the repository
 and open it in a web browser; GitHub's source view does not execute the page.
 
 These are research audit artifacts, not final model outputs. In particular,
-the structural local-game audit is a geometric diagnostic and does not yet
-represent a validated final threat function.
+the structural local-game audit is shared as an in-progress working prototype.
+It is a geometric diagnostic and does not yet represent a completed local-game
+model or a validated final threat function.
 
 The derived tracking excerpts originate from IDSSE (Bassek et al., 2025), are
 shared under CC BY 4.0, and retain the dataset attribution documented in

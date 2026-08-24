@@ -32,6 +32,15 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--confirmed-scenes-json",
+        type=Path,
+        default=None,
+        help=(
+            "Render an already confirmed scene payload instead of rebuilding "
+            "the ten-scene second-pass candidate set"
+        ),
+    )
+    parser.add_argument(
         "--output-dir",
         type=Path,
         default=Path("data/processed/clear_core_scene_audit_v0_1"),
@@ -41,10 +50,32 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    scenes = json.loads(args.audit_json.read_text(encoding="utf-8"))
-    with args.review_csv.open(encoding="utf-8-sig", newline="") as handle:
-        reviews = list(csv.DictReader(handle))
-    selected = select_clear_core_scenes(scenes, reviews)
+    if args.confirmed_scenes_json is not None:
+        selected = json.loads(
+            args.confirmed_scenes_json.read_text(encoding="utf-8")
+        )
+        status = "human-confirmed-development-scenes"
+        selection = {
+            "core_decision": "include",
+            "defender_visible": "yes",
+            "derived_visible": "yes",
+            "tradeoff_visible": "yes",
+        }
+        source_audit = str(args.confirmed_scenes_json)
+        source_review = None
+    else:
+        scenes = json.loads(args.audit_json.read_text(encoding="utf-8"))
+        with args.review_csv.open(encoding="utf-8-sig", newline="") as handle:
+            reviews = list(csv.DictReader(handle))
+        selected = select_clear_core_scenes(scenes, reviews)
+        status = "human-confirmation-candidates-not-final-labels"
+        selection = {
+            "onset_review": "correct",
+            "possession_review": "settled",
+            "interaction_review": "clear",
+        }
+        source_audit = str(args.audit_json)
+        source_review = str(args.review_csv)
     if not selected:
         raise SystemExit("No correct + settled + clear scenes found")
 
@@ -60,15 +91,11 @@ def main() -> None:
         json.dumps(
             {
                 "schema_version": "clear-core-local-game-v0.1",
-                "status": "human-confirmation-candidates-not-final-labels",
+                "status": status,
                 "scene_count": len(selected),
-                "selection": {
-                    "onset_review": "correct",
-                    "possession_review": "settled",
-                    "interaction_review": "clear",
-                },
-                "source_audit": str(args.audit_json),
-                "source_review": str(args.review_csv),
+                "selection": selection,
+                "source_audit": source_audit,
+                "source_review": source_review,
             },
             ensure_ascii=False,
             indent=2,

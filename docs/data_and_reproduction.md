@@ -53,7 +53,15 @@ excerpts and must retain this attribution when redistributed.
 ## Fast reproduction without raw match files
 
 The confirmed scene payload in `examples/` is sufficient to rebuild the
-current structural audit:
+confirmed observed-motion audit:
+
+```bash
+.venv/bin/python scripts/render_clear_core_scene_audit_v0_1.py \
+  --confirmed-scenes-json examples/research_audit/manifests/confirmed_core_scenes.json \
+  --output-dir data/processed/clear_core_scene_audit_v0_1
+```
+
+The same payload is sufficient to rebuild the current structural audit:
 
 ```bash
 .venv/bin/python scripts/render_structural_local_game_v0_1.py \

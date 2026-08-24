@@ -18,7 +18,8 @@
 파일:
 [`clear_core_scene_audit.html`](../examples/research_audit/current_demos/clear_core_scene_audit.html)
 
-이 페이지는 second-pass 이전의 clear 후보 10개를 실제 움직임으로만 보여준다.
+이 페이지는 second-pass에서 포함으로 확정된 장면 8개를 실제 움직임으로만
+보여준다. 보류된 2개 장면은 공유용 데모와 이후 개발 payload에서 제외했다.
 
 - 금색 테두리와 궤적: focal runner
 - 흰 테두리: `t=0`의 ball carrier
@@ -57,6 +58,10 @@ prototype은 과거 구현을 보존한 mechanism demo이며 Kownacki carry를 �
 
 파일:
 [`structural_local_game_audit.html`](../examples/research_audit/current_demos/structural_local_game_audit.html)
+
+이 페이지는 완성된 결과가 아니라, 지금까지 구현한 국소적 게임 구성의
+working prototype이다. 현재 표현이 축구적으로 타당한지 의견을 받기 위해
+공유하며, 숫자나 수비 경로를 최종 결과로 해석하지 않는다.
 
 각 장면은 후보 수비수 3명과 공격 옵션 5명을 비교한다. 공격 옵션에는 ball
 carrier가 항상 포함된다.

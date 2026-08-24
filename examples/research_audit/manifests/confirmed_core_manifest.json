@@ -3,7 +3,9 @@
   "status": "human-confirmed-development-scenes",
   "reviewed_scene_count": 10,
   "confirmed_scene_count": 8,
+  "shared_demo_scene_count": 8,
   "held_scene_count": 2,
+  "held_scenes_in_shared_demos": false,
   "rejected_scene_count": 0,
   "anchor_scene": {
     "match_id": "DFL-MAT-J03WOH",
