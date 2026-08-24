@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "offball-value"
 version = "0.1.0"
-description = "Draft research scaffold for quantifying off-ball attacking value in soccer."
+description = "Research prototype for feasible local off-ball attacker-defender games in soccer."
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [
