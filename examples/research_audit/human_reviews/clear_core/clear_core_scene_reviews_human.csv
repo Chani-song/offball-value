@@ -1,0 +1,11 @@
+match_id,onset_frame_id,runner_id,runner_name,core_decision,defender_visible,derived_visible,tradeoff_visible,primary_defender,derived_option,note
+DFL-MAT-J03WMX,37471,DFL-OBJ-0026PM,Kingsley Coman,include,yes,yes,yes,runner 아래와 위 수비수 두명,뒤쪽 패스 받을 선수가 더 넓은 공간,
+DFL-MAT-J03WOH,53844,DFL-OBJ-0000F8,F. Klaus,include,yes,yes,yes,runner 기준 자기보다 위에 있는 수비,볼 소유자 앞에 공간이 넓어짐.,
+DFL-MAT-J03WOH,53833,DFL-OBJ-00003X,D. Ginczek,include,yes,yes,yes,중앙 수비수,볼 소유자 앞쪽 공간이 넓어짐,
+DFL-MAT-J03WOH,36179,DFL-OBJ-00003X,D. Ginczek,include,yes,yes,yes,중앙 수비수,아래 공격수에게 일대일 공간을 더 넓혀준다.,
+DFL-MAT-J03WPY,144747,DFL-OBJ-0028BZ,C. Daferner,include,yes,yes,yes,오른쪽 풀백 수비수,"현재 볼 소유자가 수비 세명한테 둘러쌓여있는데, 한명을 데리고 올 수 있음.",
+DFL-MAT-J03WPY,149110,DFL-OBJ-J01KJ5,M. Karbownik,hold,yes,unclear,unclear,,,
+DFL-MAT-J03WR9,131237,DFL-OBJ-J01KJ5,M. Karbownik,include,yes,yes,yes,runner 근처 수비수,볼 소유자랑 아래 우리팀 선수에게 더 많은 공간 열어줌.,
+DFL-MAT-J03WR9,29751,DFL-OBJ-002GM1,Kristoffer Peterson,include,yes,yes,yes,오른쪽 풀백,순간적으로 볼 소유자의 공간이 넓어짐.,
+DFL-MAT-J03WR9,140518,DFL-OBJ-00265G,Kenny Prince Redondo,hold,yes,no,unclear,,,
+DFL-MAT-J03WR9,61841,DFL-OBJ-J01KJ5,M. Karbownik,include,yes,yes,yes,오른쪽 풀백 (시각화 기준 제일 위 수비수),볼 소유자가 측면으로 드리블 할 공간 확보,
