@@ -147,6 +147,20 @@ def _float_attr(elem: ET.Element, name: str) -> float | None:
         return None
 
 
+def _bool_attr(elem: ET.Element | None, name: str) -> bool | None:
+    if elem is None:
+        return None
+    value = elem.attrib.get(name)
+    if value is None:
+        return None
+    normalized = value.strip().lower()
+    if normalized == "true":
+        return True
+    if normalized == "false":
+        return False
+    return None
+
+
 def _centered_x(value: float | None) -> float | None:
     return None if value is None else value - FIELD_LENGTH / 2.0
 
@@ -249,14 +263,30 @@ def load_bundesliga_events(
         x_position = _float_attr(event_elem, "X-Position")
         y_position = _float_attr(event_elem, "Y-Position")
 
+        top_level_elem = next(iter(list(event_elem)), None)
         play_elem = event_elem.find(".//Play")
         action_elem = None
         if play_elem is not None:
             action_elem = next(iter(list(play_elem)), None)
 
         event_type = action_elem.tag if action_elem is not None else (
-            play_elem.tag if play_elem is not None else next(iter(list(event_elem)), event_elem).tag
+            play_elem.tag if play_elem is not None else (
+                top_level_elem.tag if top_level_elem is not None else event_elem.tag
+            )
         )
+        actor_elem = play_elem if play_elem is not None else top_level_elem
+        actor_attrib = actor_elem.attrib if actor_elem is not None else {}
+        top_level_type = top_level_elem.tag.lower() if top_level_elem is not None else None
+
+        from_open_play = _bool_attr(actor_elem, "FromOpenPlay")
+        shot_build_up = actor_attrib.get("BuildUp")
+        shot_setup = actor_attrib.get("TakerSetup")
+        if from_open_play is None and event_type.lower() == "shotatgoal":
+            open_play_tokens = f"{shot_build_up or ''} {shot_setup or ''}".lower()
+            if "openplay" in open_play_tokens or shot_build_up in {"run", "lossOfPossession"}:
+                from_open_play = True
+            elif shot_build_up in {"cornerKick", "freeKick", "penaltyKick", "throwIn"}:
+                from_open_play = False
 
         rows.append(
             {
@@ -266,11 +296,17 @@ def load_bundesliga_events(
                 "frame_id": frame_value,
                 "time": event_time,
                 "event_type": event_type.lower() if event_type else None,
-                "player_id": play_elem.attrib.get("Player") if play_elem is not None else None,
-                "team_id": play_elem.attrib.get("Team") if play_elem is not None else None,
-                "recipient_id": play_elem.attrib.get("Recipient") if play_elem is not None else None,
-                "evaluation": play_elem.attrib.get("Evaluation") if play_elem is not None else None,
-                "from_open_play": play_elem.attrib.get("FromOpenPlay") == "true" if play_elem is not None else None,
+                "parent_event_type": top_level_type,
+                "player_id": actor_attrib.get("Player"),
+                "team_id": actor_attrib.get("Team"),
+                "recipient_id": actor_attrib.get("Recipient"),
+                "evaluation": actor_attrib.get("Evaluation"),
+                "from_open_play": from_open_play,
+                "ball_possession_phase": actor_attrib.get("BallPossessionPhase"),
+                "xg": _float_attr(actor_elem, "xG") if actor_elem is not None else None,
+                "shot_build_up": shot_build_up,
+                "shot_setup": shot_setup,
+                "after_free_kick": _bool_attr(actor_elem, "AfterFreeKick"),
                 "x_start": _centered_x(x_source if x_source is not None else x_position),
                 "y_start": _centered_y(y_source if y_source is not None else y_position),
                 "x_end": _centered_x(x_position),
@@ -357,4 +393,3 @@ def infer_attacking_direction(
         return 1
     mean_x = sum(p.x for p in team_players) / len(team_players)
     return -1 if mean_x > 0 else 1
-
