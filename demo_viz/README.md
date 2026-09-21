@@ -105,7 +105,13 @@ it takes priority.
 `Scene` · `Mode` · `Pick` · `Auto triplet` · `Reset` · play/pause ·
 `Run` / `Reaction` / `Peak` jump buttons · time scrubber ·
 layer toggles (`Trail`, `Tether`, `Wake`, `Lane`, `Ghost`, `Labels`, `Paths`,
-`Hints`, `Fit`) · `Opened space` vs `Total space` · `PNG` · `JSON`.
+`Hints`) · `Full pitch` / `Focus` · `Opened space` vs `Total space` ·
+`PNG` · `JSON` · `Source`.
+
+`Focus` crops to the picked players; `Full pitch` is the default and is what you
+want while clicking. `Source` opens the provenance and method panel — what is
+measured, what is human-supplied, what is explanatory, and what is deliberately
+not drawn.
 
 `PNG` re-renders the current pick through the *video* renderer
 (`demo_viz.animate.render_still`), so an exploratory click can be exported at
@@ -146,7 +152,7 @@ compares against Python: 160 random cases agree to float64 machine precision
 is 0.8 ms.
 
 The page takes URL state, so a pick is linkable:
-`?scene=<clip id>&r=7&d=11&b=34&t=240&fit=1`.
+`?scene=<clip id>&r=7&d=11&b=34&t=240&fit=1&about=1`.
 
 Screenshots: `exports/web_annotation.png`, `web_manual.png`, `web_swapped.png`,
 `web_multidefender.png`, `web_medium.png`, `app_dock.png`.

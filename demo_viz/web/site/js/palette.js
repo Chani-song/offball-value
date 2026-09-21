@@ -26,3 +26,5 @@ export const ROLE_COLOUR = {
 };
 
 export const ROLE_SIDE = { runner: "attack", beneficiary: "attack", defender: "defend" };
+
+export const ROLE_LABEL = { runner: "Runner", beneficiary: "Beneficiary", defender: "Defender" };

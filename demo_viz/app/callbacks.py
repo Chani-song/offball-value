@@ -39,6 +39,7 @@ def register(app):
     _scene_callback(app)
     _selection_callback(app)
     _render_callback(app)
+    _panel_callbacks(app)
     _playback_callbacks(app)
     _export_callbacks(app)
 
@@ -68,8 +69,10 @@ def _scene_callback(app):
         Output("time", "marks"),
         Output("notes", "children"),
         Output("pick", "data"),
+        Output("hints-open", "data", allow_duplicate=True),
         Input("scene", "value"),
         Input("mode", "value"),
+        prevent_initial_call="initial_duplicate",
     )
     def on_scene(scene_id, mode):
         bundle = get_bundle(scene_id)
@@ -87,6 +90,7 @@ def _scene_callback(app):
             time_marks(scene),
             notes,
             selection.pick,
+            None,
         )
 
 
@@ -281,6 +285,10 @@ def _render_callback(app):
         Output("stat-value", "style"),
         Output("candidates-label", "children"),
         Output("candidates", "children"),
+        Output("hints-count", "children"),
+        Output("hints-chev", "children"),
+        Output("hints-card", "style"),
+        Output("pitch-caption", "children"),
         Output("time-readout", "children"),
         Output("hint", "children"),
         Input("store-selection", "data"),
@@ -288,12 +296,15 @@ def _render_callback(app):
         Input("layers", "value"),
         Input("wake-mode", "value"),
         Input("pick", "data"),
+        Input("view-mode", "value"),
+        Input("hints-open", "data"),
         State("store-scene", "data"),
     )
-    def on_render(stored, index, layers, wake_mode, pick, scene_store):
+    def on_render(stored, index, layers, wake_mode, pick, view_mode, hints_open,
+                  scene_store):
         scene_id = (scene_store or {}).get("scene_id")
         if not scene_id:
-            return (no_update,) * 16
+            return (no_update,) * 21
         bundle = get_bundle(scene_id)
         scene, cache = bundle.scene, bundle.cache
         selection = Selection.from_dict(stored)
@@ -301,11 +312,25 @@ def _render_callback(app):
         index = int(np.clip(index or 0, 0, scene.n_frames - 1))
 
         freeze_index, onset_method = onset_for(scene_id, selection.runner)
-        options = ViewOptions(layers=tuple(layers or ()), wake_mode=wake_mode or "gain")
+        layer_names = list(layers or ())
+        if view_mode == "focus":
+            layer_names.append("fit")
+        options = ViewOptions(layers=tuple(layer_names), wake_mode=wake_mode or "gain")
+        expanded = (selection.source != "annotation") if hints_open is None else hints_open
 
         candidate_ids, candidate_rows, candidate_label = _candidates(
             bundle, selection, freeze_index, index
         )
+        if not expanded:
+            candidate_count = str(len(candidate_rows)) if isinstance(candidate_rows, list) else ""
+            candidate_rows = []
+        else:
+            candidate_count = ""
+        hints_style = {**CARD, "flex": ("1 1 auto" if expanded else "0 0 auto"),
+                       "overflowY": "auto" if expanded else "visible",
+                       "minHeight": "58px" if expanded else "0",
+                       "padding": "10px 12px",
+                       "opacity": 1.0 if expanded or selection.source != "annotation" else 0.72}
         active_side = _ACTIVE_SIDE.get(selection.pick) if selection.armed else None
         figure = scene_figure(
             scene, index, selection, cache, options,
@@ -323,7 +348,9 @@ def _render_callback(app):
             figure, chart, *bodies, *styles,
             _dock_meta(scene, selection, freeze_index, onset_method),
             stat_label, stat_value, stat_style,
-            candidate_label, candidate_rows, readout,
+            candidate_label, candidate_rows, candidate_count,
+            "\u25be" if expanded else "\u25b8", hints_style,
+            f"{scene.title}  ·  {scene.subtitle}", readout,
             _hint(selection),
         )
 
@@ -400,15 +427,17 @@ def _dock_meta(scene, selection: Selection, freeze_index, onset_method):
     parts = []
     if selection.runners and freeze_index is not None:
         parts.append(html.Div(
-            f"run starts {scene.times[int(freeze_index)]:+.1f}s · {onset_method}",
+            f"Run starts {scene.times[int(freeze_index)]:+.1f} s",
+            title=f"detected by: {onset_method}",
             style={"marginBottom": "3px"}))
-    if selection.source != "manual":
-        note = selection.source
+    # "annotation" would only echo the mode button, so only the non-obvious
+    # sources are named here
+    if selection.source in ("pipeline", "suggested"):
         if selection.source == "pipeline":
             _path, kind = pipeline_source()
-            note = "from pipeline file" if kind == "pipeline" else "from example file"
-        elif selection.source == "suggested":
-            note = "suggested by demo_viz"
+            note = "From pipeline file" if kind == "pipeline" else "From example file"
+        else:
+            note = "Auto triplet"
         parts.append(html.Div(note, style={"marginBottom": "3px"}))
     parts.append(html.Div(
         style={"display": "flex", "gap": "12px", "marginTop": "5px",
@@ -512,6 +541,32 @@ def _candidate_list(scene, rows, colour, selection: Selection, role: str):
 # ---------------------------------------------------------------------------
 # playback
 # ---------------------------------------------------------------------------
+def _panel_callbacks(app):
+    @app.callback(
+        Output("hints-open", "data"),
+        Input("hints-toggle", "n_clicks"),
+        State("hints-open", "data"),
+        State("store-selection", "data"),
+        prevent_initial_call=True,
+    )
+    def on_hints_toggle(_clicks, open_state, stored):
+        if open_state is None:
+            selection = Selection.from_dict(stored)
+            open_state = selection.source != "annotation"
+        return not open_state
+
+    @app.callback(
+        Output("source-sheet", "style"),
+        Input("btn-source", "n_clicks"),
+        Input("btn-source-close", "n_clicks"),
+        prevent_initial_call=True,
+    )
+    def on_source(_open, _close):
+        if callback_context.triggered_id == "btn-source":
+            return {"display": "block"}
+        return {"display": "none"}
+
+
 def _playback_callbacks(app):
     @app.callback(
         Output("tick", "disabled"),

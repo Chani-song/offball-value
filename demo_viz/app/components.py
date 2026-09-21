@@ -17,7 +17,6 @@ LAYER_OPTIONS = [
     {"label": "Labels", "value": "labels"},
     {"label": "Paths", "value": "paths"},
     {"label": "Hints", "value": "candidates"},
-    {"label": "Fit", "value": "fit"},
 ]
 
 MODE_OPTIONS = [
@@ -98,6 +97,7 @@ def layout():
             dcc.Interval(id="tick", interval=80, disabled=True),
             dcc.Download(id="download"),
             _top_bar(options, first),
+            source_sheet(),
             html.Div(
                 style={"display": "flex", "gap": "12px", "marginTop": "10px",
                        "alignItems": "stretch", "height": "calc(100vh - 106px)"},
@@ -143,9 +143,11 @@ def _top_bar(options, first):
                 ),
             ]),
             dcc.Store(id="pick", data="runner"),
+            dcc.Store(id="hints-open", data=None),
             html.Div(style={"display": "flex", "gap": "8px"}, children=[
                 _button("Auto triplet", "btn-auto", palette.BENEFICIARY),
                 _button("Reset", "btn-reset"),
+                _button("Source", "btn-source"),
             ]),
         ],
     )
@@ -155,11 +157,31 @@ def _pitch_card():
     return html.Div(style={**CARD, "padding": "10px 12px 12px 12px", "height": "100%",
                            "boxSizing": "border-box", "display": "flex",
                            "flexDirection": "column"}, children=[
+        html.Div(
+            style={"display": "flex", "alignItems": "center", "gap": "10px",
+                   "marginBottom": "6px"},
+            children=[
+                html.Div(id="pitch-caption", style={"color": palette.TEXT_SECONDARY,
+                                                    "fontSize": "12px",
+                                                    "overflow": "hidden",
+                                                    "textOverflow": "ellipsis",
+                                                    "whiteSpace": "nowrap"}),
+                html.Div(style={"flex": "1 1 auto"}),
+                dcc.RadioItems(
+                    id="view-mode",
+                    options=[{"label": "Full pitch", "value": "full"},
+                             {"label": "Focus", "value": "focus"}],
+                    value="full", inline=True, className="chips segmented",
+                    inputStyle={"marginRight": "5px"},
+                    labelStyle={"marginRight": "10px", "fontSize": "11.5px"},
+                ),
+            ],
+        ),
         dcc.Graph(
             id="pitch",
             config={"displayModeBar": False, "scrollZoom": False,
                     "doubleClick": False, "responsive": True},
-            style={"height": "calc(100% - 92px)", "minHeight": "300px"},
+            style={"height": "calc(100% - 118px)", "minHeight": "290px"},
         ),
         html.Div(
             style={"display": "flex", "alignItems": "center", "gap": "12px",
@@ -221,9 +243,25 @@ def _side_panel():
                 dcc.Graph(id="chart", config={"displayModeBar": False},
                           style={"height": "138px", "marginTop": "2px"}),
             ]),
-            html.Div(style={**CARD, "flex": "1 1 auto", "overflowY": "auto",
-                            "minHeight": "84px", "padding": "10px 12px"}, children=[
-                html.Div(id="candidates-label", style=LABEL),
+            html.Div(id="hints-card",
+                     style={**CARD, "flex": "1 1 auto", "overflowY": "auto",
+                            "minHeight": "58px", "padding": "10px 12px"}, children=[
+                html.Button(
+                    id="hints-toggle", n_clicks=0,
+                    style={"display": "flex", "alignItems": "center", "gap": "7px",
+                           "width": "100%", "background": "none", "border": "0",
+                           "padding": "0 0 2px 0", "cursor": "pointer",
+                           "color": "inherit", "font": "inherit", "textAlign": "left"},
+                    children=[
+                        html.Span(id="hints-chev", style={"color": palette.TEXT_MUTED,
+                                                          "fontSize": "10px",
+                                                          "width": "9px"}),
+                        html.Span(id="candidates-label", style=LABEL),
+                        html.Span(id="hints-count",
+                                  style={"color": palette.TEXT_MUTED, "fontSize": "11px",
+                                         "marginLeft": "auto"}),
+                    ],
+                ),
                 html.Div(id="candidates"),
             ]),
             html.Div(style={**CARD, "padding": "10px 12px", "flex": "0 0 auto",
@@ -288,6 +326,19 @@ INDEX_CSS = f"""
       color: {palette.TEXT_PRIMARY} !important;
   }}
   .dash-options-list-option-checkbox {{ accent-color: {palette.BENEFICIARY}; }}
+
+  /* the view toggle reads as a segmented control, not a pair of radios */
+  .segmented .dash-options-list-option {{
+      border: 1px solid {palette.GRID}; border-radius: 7px; padding: 3px 10px;
+      margin-right: 6px !important;
+  }}
+  .segmented .dash-options-list-option[aria-selected="true"] {{
+      background: {palette.PANEL}; border-color: {palette.TEXT_MUTED};
+  }}
+  .segmented .dash-options-list-option[aria-selected="true"]
+  .dash-options-list-option-text {{ color: {palette.TEXT_PRIMARY} !important; }}
+  .segmented .dash-options-list-option-checkbox {{ display: none !important; }}
+  .segmented .dash-options-list-option-wrapper {{ display: none !important; }}
 
   /* the readout next to the slider already shows the time in seconds, and a
      raw frame index is not a useful thing to type into */
@@ -363,3 +414,78 @@ def _role_dock():
         html.Div(id="hint", style={"color": palette.TEXT_SECONDARY,
                                    "fontSize": "11px", "marginTop": "4px"}),
     ])
+
+
+# ---------------------------------------------------------------------------
+# source panel
+# ---------------------------------------------------------------------------
+FACTS = (
+    ("Measured", palette.BENEFICIARY,
+     "Player and ball positions from IDSSE Bundesliga tracking at 25 Hz. "
+     "Opened space is the beneficiary's goal-weighted residual space minus the same "
+     "quantity with the selected defenders replaced by a no-reaction baseline, computed "
+     "with offball_value.goal_weighted_influence on the Fernández & Bornn (2018) "
+     "influence surface."),
+    ("Human", palette.TEXT_SECONDARY,
+     "Which players are runner, defender and beneficiary comes from manual annotation of "
+     "45 scenes (shot_annotations.xlsx, effect strong and medium). The notes are a "
+     "reviewer's qualitative comment, not a metric."),
+    ("Explanatory", palette.DEFENDER,
+     "The held defender is a what-if device, not a learned or optimised defensive "
+     "response — this repository has none. Reacts most is an exploratory geometric "
+     "heuristic on the goal-side marking target, not a research-pipeline output. Run "
+     "starts come from the repository's kinematic onset detector where it fires, "
+     "otherwise from a labelled acceleration cue."),
+    ("Not shown", palette.TEXT_MUTED,
+     "No calibrated xT, pass probability, dribble probability or learned threat surface "
+     "is drawn, because this repository does not produce one."),
+)
+
+
+def source_sheet():
+    rows = []
+    for title, colour, body in FACTS:
+        rows.append(html.Div(
+            style={"display": "grid", "gridTemplateColumns": "104px 1fr",
+                   "gap": "16px", "marginBottom": "10px"},
+            children=[
+                html.Div(title.upper(), style={**LABEL, "color": colour,
+                                               "marginBottom": 0, "paddingTop": "3px"}),
+                html.Div(body, style={"color": palette.TEXT_SECONDARY,
+                                      "fontSize": "12.5px", "lineHeight": "1.6"}),
+            ],
+        ))
+    return html.Div(
+        id="source-sheet",
+        style={"display": "none"},
+        children=html.Div(
+            style={"position": "fixed", "inset": 0, "zIndex": 120,
+                   "background": "rgba(2,5,6,0.72)", "display": "flex",
+                   "alignItems": "center", "justifyContent": "center",
+                   "padding": "24px"},
+            children=html.Div(
+                style={**CARD, "maxWidth": "720px", "width": "100%",
+                       "maxHeight": "84vh", "overflowY": "auto", "padding": "20px 22px",
+                       "boxShadow": "0 24px 70px rgba(0,0,0,0.6)"},
+                children=[
+                    html.Div(
+                        style={"display": "flex", "alignItems": "center",
+                               "gap": "14px", "marginBottom": "14px"},
+                        children=[
+                            html.H2("Source & method",
+                                    style={"margin": 0, "fontSize": "15px",
+                                           "fontWeight": 700, "flex": "1 1 auto"}),
+                            _button("Close", "btn-source-close"),
+                        ],
+                    ),
+                    *rows,
+                    html.Div(
+                        style={"color": palette.TEXT_MUTED, "fontSize": "11.5px",
+                               "marginTop": "14px"},
+                        children="Research prototype. Not a validated off-ball value "
+                                 "metric, player ranking or coaching recommendation.",
+                    ),
+                ],
+            ),
+        ),
+    )

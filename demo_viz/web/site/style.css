@@ -27,9 +27,14 @@ body { display: flex; flex-direction: column; overflow: hidden; }
 body.dragging { cursor: grabbing; user-select: none; }
 
 /* ------------------------------------------------------------------ top bar */
+/* A very wide screen should not stretch a 105 x 68 pitch into a letterbox,
+   so the whole layout is capped and centred. */
+.top, main {
+  width: 100%; max-width: 1840px; margin-inline: auto;
+}
 .top {
-  display: flex; align-items: flex-end; gap: 18px;
-  padding: 10px 16px; border-bottom: 1px solid var(--grid);
+  display: flex; align-items: flex-end; gap: 20px;
+  padding: 12px 20px 11px 20px; border-bottom: 1px solid var(--grid);
   flex: 0 0 auto;
 }
 .brand { display: flex; flex-direction: column; line-height: 1.1; margin-right: 4px; }
@@ -39,7 +44,7 @@ body.dragging { cursor: grabbing; user-select: none; }
 .control.grow { flex: 1 1 auto; }
 .control > label, .label {
   color: var(--muted); font-size: 10px; font-weight: 700;
-  letter-spacing: 0.09em; text-transform: uppercase;
+  letter-spacing: 0.1em; text-transform: uppercase;
 }
 .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .spacer { flex: 1 1 auto; }
@@ -66,23 +71,40 @@ select:focus { outline: none; border-color: var(--text2); }
 .btn.pill { border-radius: 999px; padding: 3px 12px; font-size: 11px; }
 .repo { align-self: center; color: var(--text2); }
 
-.check { display: inline-flex; align-items: center; gap: 5px; color: var(--text2);
+.segmented {
+  display: inline-flex; border: 1px solid var(--grid); border-radius: 8px;
+  overflow: hidden; background: var(--ink); flex: 0 0 auto;
+}
+.seg {
+  background: transparent; color: var(--muted); border: 0; cursor: pointer;
+  font: inherit; font-size: 11.5px; font-weight: 600; padding: 5px 11px;
+}
+.seg + .seg { border-left: 1px solid var(--grid); }
+.seg:hover { color: var(--text2); }
+.seg.is-on { background: var(--panel); color: var(--text); }
+
+.check { display: inline-flex; align-items: center; gap: 6px; color: var(--text2);
          font-size: 12px; cursor: pointer; white-space: nowrap; }
 .check input { accent-color: var(--beneficiary); margin: 0; }
 
 /* -------------------------------------------------------------------- main */
 main {
-  flex: 1 1 auto; display: flex; gap: 12px; padding: 12px 16px 10px 16px;
+  flex: 1 1 auto; display: flex; gap: 14px; padding: 14px 20px 16px 20px;
   min-height: 0;
+  /* The pitch is aspect-locked, so beyond this the card only grows letterbox.
+     1080p is unaffected; a 1440p screen stops stretching. */
+  max-height: 1090px;
+  margin-block: auto;      /* centre the app when the screen is taller than it needs */
 }
 .pitch-card {
-  flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 8px;
+  flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 9px;
   background: var(--panel); border: 1px solid var(--grid); border-radius: 12px;
   padding: 11px 13px 12px 13px;
 }
 .scene-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
-.scene-head h1 { font-size: 16px; margin: 0; font-weight: 700; }
-.scene-head p { margin: 0; color: var(--text2); font-size: 12px; }
+.scene-head { min-height: 26px; }
+.scene-head h1 { font-size: 17px; margin: 0; font-weight: 700; letter-spacing: -0.01em; }
+.scene-head p { margin: 0; color: var(--text2); font-size: 12.5px; }
 
 .pitch-wrap { position: relative; flex: 1 1 auto; min-height: 0; }
 .pitch-svg { position: absolute; inset: 0; width: 100%; height: 100%; }
@@ -99,19 +121,32 @@ main {
 .timeline input[type=range] { flex: 1 1 auto; accent-color: var(--beneficiary); }
 .readout { font: 12px/1 ui-monospace, Menlo, monospace; color: var(--text2);
            min-width: 72px; text-align: right; }
-.layers { display: flex; align-items: center; gap: 13px; flex-wrap: wrap; }
+.layers { display: flex; align-items: center; gap: 15px; flex-wrap: wrap;
+          padding-top: 2px; }
 
 /* -------------------------------------------------------------------- dock */
 .dock {
-  flex: 0 0 316px; display: flex; flex-direction: column; gap: 10px;
-  min-height: 0; overflow: hidden;
+  flex: 0 0 clamp(316px, 23vw, 400px); display: flex; flex-direction: column;
+  gap: 11px; min-height: 0; overflow: hidden;
+  justify-content: flex-start;
 }
 .card {
   background: var(--panel); border: 1px solid var(--grid); border-radius: 12px;
   padding: 11px 12px; flex: 0 0 auto;
 }
-.card.list { flex: 1 1 auto; overflow-y: auto; min-height: 72px; }
-.card.notes { max-height: 108px; overflow-y: auto; }
+.card.list { flex: 1 1 auto; overflow-y: auto; min-height: 60px; }
+.card.list.is-collapsed { flex: 0 0 auto; overflow: visible; min-height: 0; }
+.card.list.is-secondary { opacity: 0.72; }
+.card.list.is-secondary:hover, .card.list.is-secondary:focus-within { opacity: 1; }
+.disclosure {
+  display: flex; align-items: center; gap: 7px; width: 100%;
+  background: none; border: 0; padding: 0 0 2px 0; cursor: pointer;
+  color: inherit; font: inherit; text-align: left;
+}
+.disclosure .chev { color: var(--muted); font-size: 10px; width: 9px; }
+.disclosure:hover .label { color: var(--text2); }
+.disclosure .muted { margin-left: auto; }
+.card.notes { max-height: 132px; overflow-y: auto; }
 
 .group { border: 1px solid var(--grid); border-radius: 11px; padding: 9px; }
 .group.attack { background: rgba(217, 207, 184, 0.04); }
@@ -134,8 +169,20 @@ main {
 #slot-runner.is-armed { border-color: var(--runner); box-shadow: 0 0 0 2px #FF2D8733; }
 #slot-beneficiary.is-armed { border-color: var(--beneficiary); box-shadow: 0 0 0 2px #5CE8F533; }
 #slot-defender.is-armed { border-color: var(--defender); box-shadow: 0 0 0 2px #FFA62B33; }
-.slot.is-droppable { border-style: solid; border-color: var(--muted); }
-.slot.is-over { background: rgba(255, 255, 255, 0.09); border-color: var(--text); }
+/* while dragging: compatible slots wake up in their own colour, the rest
+   visibly stay out of play */
+.slot.is-droppable { border-style: solid; }
+#slot-runner.is-droppable { border-color: var(--runner); }
+#slot-beneficiary.is-droppable { border-color: var(--beneficiary); }
+#slot-defender.is-droppable { border-color: var(--defender); }
+.slot.is-blocked { opacity: 0.38; border-style: dashed; }
+.slot.is-over { background: rgba(255, 255, 255, 0.07); }
+#slot-runner.is-over { box-shadow: inset 0 0 0 2px var(--runner), 0 0 0 3px #FF2D8733; }
+#slot-beneficiary.is-over { box-shadow: inset 0 0 0 2px var(--beneficiary), 0 0 0 3px #5CE8F533; }
+#slot-defender.is-over { box-shadow: inset 0 0 0 2px var(--defender), 0 0 0 3px #FFA62B33; }
+.slot.is-swap { border-style: solid; border-color: var(--text2);
+                background: rgba(255, 255, 255, 0.06); }
+.drag-ghost.is-swap { background: var(--text2); }
 .slot-title {
   font-size: 10px; font-weight: 700; letter-spacing: 0.08em;
   text-transform: uppercase; margin-bottom: 5px;
@@ -185,13 +232,41 @@ main {
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
 }
 
-/* ------------------------------------------------------------------ footer */
-.foot {
-  flex: 0 0 auto; display: flex; gap: 22px; flex-wrap: wrap;
-  padding: 7px 16px 9px 16px; border-top: 1px solid var(--grid);
-  color: var(--muted); font-size: 11px;
+/* ------------------------------------------------------------- source sheet */
+.sheet {
+  position: fixed; inset: 0; z-index: 120; background: rgba(2, 5, 6, 0.72);
+  display: flex; align-items: center; justify-content: center; padding: 24px;
 }
-.foot b { letter-spacing: 0.08em; font-size: 10px; margin-right: 5px; }
+.sheet[hidden] { display: none; }
+.sheet-card {
+  background: var(--panel); border: 1px solid var(--grid); border-radius: 14px;
+  padding: 20px 22px; max-width: 720px; width: 100%;
+  max-height: 84vh; overflow-y: auto;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.6);
+}
+.sheet-head { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+.sheet-head h2 { margin: 0; font-size: 15px; font-weight: 700; flex: 1 1 auto; }
+.facts { margin: 0; display: grid; grid-template-columns: 104px 1fr; gap: 9px 16px; }
+.facts dt {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+  padding-top: 3px;
+}
+.facts dd {
+  margin: 0; color: var(--text2); font-size: 12.5px; line-height: 1.6;
+}
+.facts dd b { color: var(--text); font-weight: 600; }
+.facts code {
+  font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; color: var(--text2);
+  background: var(--ink); border: 1px solid var(--grid); border-radius: 4px;
+  padding: 0 4px;
+}
+.sheet-links { display: flex; gap: 16px; flex-wrap: wrap; margin: 18px 0 0 0; }
+.sheet-links a { color: var(--beneficiary); font-size: 12.5px; text-decoration: none; }
+.sheet-links a:hover { text-decoration: underline; }
+.sheet-foot { color: var(--muted); font-size: 11.5px; margin: 10px 0 0 0; }
+.tag-muted { color: var(--muted); }
+
+/* ------------------------------------------------------------------ footer */
 .tag-measured { color: var(--beneficiary); }
 .tag-human { color: var(--text2); }
 .tag-explanatory { color: var(--defender); }
@@ -201,4 +276,5 @@ main {
   body { overflow: auto; }
   .dock { flex: 0 0 auto; overflow: visible; }
   .pitch-wrap { height: 58vh; }
+  .top, main { max-width: none; }
 }

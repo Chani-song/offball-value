@@ -266,7 +266,7 @@ The browser explorer takes URL state, which makes a particular pick linkable and
 the screenshots reproducible:
 
 ```
-?scene=J03WOH:shot_006_P1_1054&r=7&d=11&b=34&t=240&fit=1&swap=1
+?scene=J03WOH:shot_006_P1_1054&r=7&d=11&b=34&t=240&fit=1&swap=1&about=1
 ```
 
 `r`/`d`/`b` accept shirt numbers or player ids; `d` and `b` take comma lists.
@@ -311,23 +311,47 @@ In `demo_viz/exports/`:
 
 | file | what |
 | --- | --- |
-| `web_annotation.png` | browser, annotated triplet, Fit on (README hero) |
+| `web_annotation.png` | browser, annotated triplet, Focus view (README hero) |
 | `web_manual.png` | browser, manual pick (#10 / #23 / #34) |
 | `web_swapped.png` | browser, Runner ↔ Beneficiary swapped |
 | `web_multidefender.png` | browser, two pulled defenders, two ghosts |
 | `web_medium.png` | browser, a `medium` scene |
+| `web_source.png` | browser, the Source & method panel |
 | `app_dock.png` | local Dash explorer with the role dock |
 
 ---
+
+## 10b. Presentation pass
+
+A final pass moved implementation detail out of the default view:
+
+* the per-frame provenance strip is gone; **Source** opens a panel carrying the
+  measured / human / explanatory / not-shown breakdown, the method, and the
+  links to the reports. Nothing was weakened — the same statements are one
+  click away instead of set in 11 px type under the pitch.
+* `Run starts -2.9 s` no longer names the detector inline; the detector is the
+  element's tooltip and the panel explains both cases.
+* in **Annotation** mode the **Reacts most** list is collapsed and dimmed, so a
+  geometric heuristic cannot be mistaken for the annotated roles beside it. It
+  expands on click, and opens automatically as soon as you edit a role.
+* the `Fit` checkbox became a `Full pitch` / `Focus` segmented control next to
+  the pitch, where a view control belongs.
+* drag feedback: compatible slots light up in their own role colour, the
+  incompatible side visibly dims, the hovered slot gets an inset ring, and
+  dragging one attack role onto the other previews **⇅ Swap** on the cursor
+  before you drop.
+* layout: the app is capped at 1840 px wide and 1090 px tall and centred, so a
+  1440p screen no longer stretches an aspect-locked pitch into a letterbox.
 
 ## 11. Known limitations
 
 * **Pitch labels can overlap** when players are bunched — the tether and ghost
   captions have a dark outline but no collision avoidance. The rendered-video
   path has a proper label placer (`render/labels.py`); the browser does not.
-* **`Fit` is off by default** in both front ends. It makes the picked players
-  much larger and the opened space far more legible, but it crops players you
-  might want to click, so the default stays on the full pitch.
+* **`Full pitch` is the default view** in both front ends, with a `Focus`
+  toggle beside the pitch. Focus makes the picked players much larger and the
+  opened space far more legible, but it crops players you might want to click,
+  so it is not the default.
 * **No drag and drop in the Dash build**, by choice — see §3.
 * **Playback is a timer**, not a video player: `setInterval` at 80 ms advancing
   two frames. The MP4 exports are the thing to show when smoothness matters.

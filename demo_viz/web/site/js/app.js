@@ -1,7 +1,7 @@
 // Wiring: scene loading, the role dock, drag and drop, overlays, playback.
 
 import { InfluenceCache } from "./influence.js";
-import { P, ROLE_COLOUR, ROLE_SIDE } from "./palette.js";
+import { P, ROLE_COLOUR, ROLE_LABEL, ROLE_SIDE } from "./palette.js";
 import { Pitch } from "./pitch.js";
 import { autoTriplet, rankBeneficiaries, rankDefenders } from "./ranking.js";
 import { drawChart } from "./chart.js";
@@ -20,6 +20,8 @@ const state = {
   playing: false,
   timer: null,
   layers: new Set(["trail", "tether", "wake", "lane", "ghost", "labels", "hints"]),
+  view: "full",              // "full" | "focus"
+  hintsOpen: null,           // null = follow the mode, true/false = user's choice
   drag: null,
 };
 
@@ -42,6 +44,7 @@ function urlState() {
     time: params.get("t"),
     swap: params.get("swap") === "1",
     fit: params.get("fit"),
+    about: params.get("about") === "1",
   };
 }
 
@@ -65,12 +68,7 @@ function applyUrlState(wanted) {
     state.selection = new Selection({ runners, defenders, beneficiaries, source: "manual" });
   }
   if (wanted.swap) state.selection.swapAttackRoles();
-  if (wanted.fit != null) {
-    const on = wanted.fit === "1";
-    if (on) state.layers.add("fit"); else state.layers.delete("fit");
-    const box = document.querySelector('[data-layer="fit"]');
-    if (box) box.checked = on;
-  }
+  if (wanted.fit != null) setView(wanted.fit === "1" ? "focus" : "full");
   if (wanted.time != null && wanted.time !== "") {
     const frame = Number(wanted.time);
     if (Number.isFinite(frame)) {
@@ -101,6 +99,7 @@ async function boot() {
     if (match) start = match;
   }
   if (start) await openScene(start.file, wanted);
+  if (wanted && wanted.about) openSheet(true);
   window.addEventListener("resize", () => render());
 }
 
@@ -123,8 +122,7 @@ function refreshSceneList() {
 }
 
 async function openScene(file, wanted = null) {
-  $("status").textContent = "loading…";
-  const started = performance.now();
+  $("status").textContent = "loading\u2026";
   const scene = await loadScene(file);
   state.scene = scene;
   state.cache = new InfluenceCache(scene, { every: 5 });
@@ -142,7 +140,7 @@ async function openScene(file, wanted = null) {
   $("team-attack").textContent = scene.attacking_team;
   $("team-defend").textContent = scene.defending_team;
   render();
-  $("status").textContent = `${Math.round(performance.now() - started)} ms`;
+  $("status").textContent = "";
 }
 
 // ---------------------------------------------------------------------------
@@ -187,9 +185,12 @@ function render() {
   const slot = cache.slotFor(index);
   const swap = swapSpec();
   const freeze = freezeIndex();
-  const activeSide = selection.armed ? ROLE_SIDE[selection.pick] : null;
+  // the side that can take the pick comes forward: while a slot is armed, and
+  // while a compatible player is being dragged
+  const activeSide = state.drag ? state.drag.side
+    : (selection.armed ? ROLE_SIDE[selection.pick] : null);
 
-  pitch.setView(state.layers.has("fit") ? fitBox() : null);
+  pitch.setView(state.view === "focus" ? fitBox() : null);
   pitch.clearDynamic();
 
   let hints = [];
@@ -326,10 +327,21 @@ function renderChart(swap, freeze) {
 function renderCandidates(freeze, slot) {
   const { scene, cache, selection } = state;
   const list = $("candidates");
+  const card = $("hints-card");
+  const toggle = $("hints-toggle");
+  const expanded = hintsExpanded();
+  const secondary = selection.source === "annotation";
   list.replaceChildren();
+  card.classList.toggle("is-secondary", secondary);
+  card.classList.toggle("is-collapsed", !expanded);
+  toggle.setAttribute("aria-expanded", String(expanded));
+  $("hints-chev").textContent = expanded ? "▾" : "▸";
+  list.hidden = !expanded;
+
   if (!selection.runner) {
     $("candidates-label").textContent = "Hints";
-    list.innerHTML = '<div class="muted">Pick a runner first.</div>';
+    $("hints-count").textContent = "";
+    if (expanded) list.innerHTML = '<div class="muted">Pick a runner first.</div>';
     return;
   }
   const wantBeneficiaries = selection.pick === "beneficiary"
@@ -343,21 +355,26 @@ function renderCandidates(freeze, slot) {
     $("candidates-label").textContent = "Gains most";
   } else if (wantBeneficiaries) {
     $("candidates-label").textContent = "Gains most";
-    list.innerHTML = '<div class="muted">Pick a defender first.</div>';
+    $("hints-count").textContent = "";
+    if (expanded) list.innerHTML = '<div class="muted">Pick a defender first.</div>';
     return;
   } else {
     rows = rankDefenders(scene, selection.runner, freeze).slice(0, 8);
     role = "defender";
     $("candidates-label").textContent = "Reacts most";
   }
+  $("hints-count").textContent = expanded ? "" : `${rows.length}`;
+  if (!expanded) return;
+
   for (const row of rows) {
     const item = document.createElement("div");
     item.className = "cand";
     if (selection.roleOf(row.id)) item.classList.add("is-picked");
-    item.innerHTML = `<span class="cand-shirt">#${row.shirt}</span>`
-      + `<span class="cand-name"></span>`
-      + `<span class="cand-value">${row.caption}</span>`;
+    item.innerHTML = '<span class="cand-shirt"></span><span class="cand-name"></span>'
+      + '<span class="cand-value"></span>';
+    item.querySelector(".cand-shirt").textContent = `#${row.shirt}`;
     item.querySelector(".cand-name").textContent = row.name;
+    item.querySelector(".cand-value").textContent = row.caption;
     item.addEventListener("click", () => {
       state.selection.arm(role).applyClick(scene, row.id);
       render();
@@ -366,9 +383,6 @@ function renderCandidates(freeze, slot) {
   }
 }
 
-// ---------------------------------------------------------------------------
-// role dock
-// ---------------------------------------------------------------------------
 function renderDock() {
   const { scene, selection } = state;
   for (const role of ["runner", "beneficiary", "defender"]) {
@@ -395,14 +409,14 @@ function renderDock() {
   if (selection.runner) {
     const onset = onsetFor(scene, selection.runner);
     const line = document.createElement("div");
-    line.textContent =
-      `run starts ${scene.times[onset.index] >= 0 ? "+" : ""}`
-      + `${scene.times[onset.index].toFixed(1)}s · ${onset.method}`;
+    line.textContent = `Run starts ${scene.times[onset.index] >= 0 ? "+" : ""}`
+      + `${scene.times[onset.index].toFixed(1)} s`;
+    line.title = `detected by: ${onset.method}`;
     meta.appendChild(line);
   }
-  if (selection.source !== "manual") {
+  if (selection.source === "suggested") {
     const line = document.createElement("div");
-    line.textContent = selection.source;
+    line.textContent = "Auto triplet";
     meta.appendChild(line);
   }
 }
@@ -456,14 +470,27 @@ function beginDrag(event, player, fromRole = null) {
     const dx = moveEvent.clientX - start.x;
     const dy = moveEvent.clientY - start.y;
     if (!state.drag.moved && Math.hypot(dx, dy) < 4) return;
+    const first = !state.drag.moved;
     state.drag.moved = true;
     ghost.style.display = "block";
     ghost.style.left = `${moveEvent.clientX}px`;
     ghost.style.top = `${moveEvent.clientY}px`;
     const slot = slotUnder(moveEvent.clientX, moveEvent.clientY);
+    const role = slot ? slot.dataset.role : null;
+    const droppable = role && ROLE_SIDE[role] === state.drag.side;
+    // dropping one attack role on the other swaps them; say so before the drop
+    const swapping = droppable && fromRole && fromRole !== role
+      && ROLE_SIDE[fromRole] === ROLE_SIDE[role];
     for (const node of document.querySelectorAll(".slot")) {
-      node.classList.toggle("is-over", node === slot);
+      node.classList.toggle("is-over", droppable && node === slot);
+      node.classList.toggle("is-swap", Boolean(swapping)
+        && (node === slot || node.dataset.role === fromRole));
     }
+    ghost.classList.toggle("is-swap", Boolean(swapping));
+    ghost.textContent = swapping
+      ? `⇅ Swap ${ROLE_LABEL[fromRole]} and ${ROLE_LABEL[role]}`
+      : `#${player.shirt} ${player.name}`;
+    if (first) render();             // bring the compatible side forward
   };
 
   const up = (upEvent) => {
@@ -472,7 +499,7 @@ function beginDrag(event, player, fromRole = null) {
     ghost.remove();
     document.body.classList.remove("dragging");
     for (const node of document.querySelectorAll(".slot")) {
-      node.classList.remove("is-over", "is-droppable");
+      node.classList.remove("is-over", "is-droppable", "is-blocked", "is-swap");
     }
     const slot = state.drag.moved ? slotUnder(upEvent.clientX, upEvent.clientY) : null;
     const dragged = state.drag;
@@ -481,8 +508,6 @@ function beginDrag(event, player, fromRole = null) {
     if (slot) {
       const role = slot.dataset.role;
       if (ROLE_SIDE[role] === dragged.side) {
-        // dragging one attack role onto the other swaps them, which is the
-        // gesture people reach for first
         if (dragged.fromRole && dragged.fromRole !== role
             && ROLE_SIDE[dragged.fromRole] === ROLE_SIDE[role]) {
           state.selection.swapAttackRoles();
@@ -503,7 +528,9 @@ function beginDrag(event, player, fromRole = null) {
 
 function markDropTargets(side) {
   for (const node of document.querySelectorAll(".slot")) {
-    node.classList.toggle("is-droppable", ROLE_SIDE[node.dataset.role] === side);
+    const ok = ROLE_SIDE[node.dataset.role] === side;
+    node.classList.toggle("is-droppable", ok);
+    node.classList.toggle("is-blocked", !ok);   // stays visibly inactive
   }
 }
 
@@ -518,7 +545,36 @@ function slotUnder(x, y) {
 // ---------------------------------------------------------------------------
 // controls
 // ---------------------------------------------------------------------------
+function setView(view) {
+  state.view = view;
+  for (const button of document.querySelectorAll("#view-toggle .seg")) {
+    button.classList.toggle("is-on", button.dataset.view === view);
+  }
+}
+
+/** Hints stay collapsed while the roles are the annotated ones. */
+function hintsExpanded() {
+  if (state.hintsOpen !== null) return state.hintsOpen;
+  return state.selection.source !== "annotation";
+}
+
 function bindControls() {
+  for (const button of document.querySelectorAll("#view-toggle .seg")) {
+    button.addEventListener("click", () => { setView(button.dataset.view); render(); });
+  }
+  $("hints-toggle").addEventListener("click", () => {
+    state.hintsOpen = !hintsExpanded();
+    render();
+  });
+  $("btn-source").addEventListener("click", () => openSheet(true));
+  $("source-close").addEventListener("click", () => openSheet(false));
+  $("source-sheet").addEventListener("click", (event) => {
+    if (event.target.id === "source-sheet") openSheet(false);
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") openSheet(false);
+  });
+
   $("scene").addEventListener("change", (event) => openScene(event.target.value));
   for (const effect of ["strong", "medium"]) {
     $(`effect-${effect}`).addEventListener("change", (event) => {
@@ -590,6 +646,10 @@ function bindControls() {
     });
   }
   $("wake-mode").addEventListener("change", render);
+}
+
+function openSheet(open) {
+  $("source-sheet").hidden = !open;
 }
 
 function togglePlay() {

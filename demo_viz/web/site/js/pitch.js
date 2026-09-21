@@ -261,7 +261,7 @@ export class Pitch {
         const distance = Math.hypot(to[0] - from[0], to[1] - from[1]);
         this.add("labels", "text", {
           x: (from[0] + to[0]) / 2, y: (from[1] + to[1]) / 2 - 0.8 * this.k,
-          "text-anchor": "middle", "font-size": 1.5, fill: P.defender,
+          "text-anchor": "middle", "font-size": 1.5 * this.k, fill: P.defender,
           class: "pitch-label",
         }, `${distance.toFixed(0)} m`);
       }
@@ -287,7 +287,7 @@ export class Pitch {
       if (labels) {
         const pulled = Math.hypot(now[0] - held[0], now[1] - held[1]);
         this.add("labels", "text", {
-          x: held[0], y: held[1] + 4.0 * this.k, "text-anchor": "middle",
+          x: held[0], y: held[1] - 2.6 * this.k, "text-anchor": "middle",
           "font-size": 1.4 * this.k, fill: P.defender, class: "pitch-label",
         }, `held · ${pulled.toFixed(0)} m`);
       }
