@@ -1,3 +1,7 @@
+
+
+https://github.com/user-attachments/assets/d2858d41-faef-45e1-bb2d-fa8bad273b3d
+
 # Local Off-Ball Game in Soccer
 
 [![Interactive demo](https://img.shields.io/badge/interactive%20demo-open-5CE8F5?style=for-the-badge)](https://chani-song.github.io/offball-value/)
@@ -21,9 +25,9 @@ teammates.
 
 ### Video examples
 
-[![Off-the-ball investigation examples](demo_viz/exports/strong/strong_01.png)](demo_viz/exports/strong/strong_five_montage.mp4)
 
-▶ **[Watch the 5-scene video montage](demo_viz/exports/strong/strong_five_montage.mp4)**
+https://github.com/user-attachments/assets/7271f437-92af-4c2a-a3b9-8c60addaf9ce
+
 
 Five human-annotated Bundesliga examples showing the runner, responding defender, beneficiary, and available space throughout the play.
 
