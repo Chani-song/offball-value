@@ -33,10 +33,18 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Install the project
+        # demo_viz.web.build imports the package, which reaches numpy, so the
+        # runner needs the project installed even though the site itself is
+        # plain HTML/CSS/JS.
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[app]"
+
       - name: Assemble the site
         # demo_viz.web.build copies web/site plus the exported scene JSON into
-        # one folder. The exported data is committed, so no tracking data or
-        # heavy dependency is needed here.
+        # one folder. The exported data is committed, so no tracking data is
+        # needed here.
         run: python -m demo_viz.web.build --out _site
 
       - name: Check the build looks sane
