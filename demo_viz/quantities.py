@@ -430,6 +430,7 @@ def baseline_tracks(
     freeze_index: int,
     mode: str = "hold",
     velocity_window_s: float = 0.6,
+    defender_ids: Sequence[str] | None = None,
 ) -> tuple[dict[str, np.ndarray], dict[str, tuple[float, float]]]:
     """No-response tracks for the reacting defenders.
 
@@ -441,13 +442,16 @@ def baseline_tracks(
 
     Before ``freeze_index`` the baseline is the observed track, so the two
     curves start identical and separate only once the run has begun.
+
+    ``defender_ids`` overrides the scene's annotated defenders, which is what
+    the interactive app uses when the user picks a different one.
     """
 
     tracks: dict[str, np.ndarray] = {}
     velocities: dict[str, tuple[float, float]] = {}
     half_l, half_w = scene.pitch_length / 2.0, scene.pitch_width / 2.0
     window = max(2, int(round(velocity_window_s * scene.fps)))
-    for player_id in scene.defender_ids:
+    for player_id in (scene.defender_ids if defender_ids is None else defender_ids):
         player = scene.players.get(player_id)
         if player is None:
             continue

@@ -83,9 +83,14 @@ quantities it shades come from `offball_value.goal_weighted_influence` and
 or learned defensive response is drawn, because this repository does not
 produce one.
 
+There is also an interactive explorer: click a player on the pitch to make them
+the runner, click a defender to see who gets pulled, and click a teammate to see
+what they gain.
+
 ```bash
-.venv/bin/python -m demo_viz.export_preview --all-strong
-.venv/bin/python -m demo_viz.render_scene --scene synthetic --png   # needs no data
+.venv/bin/python -m demo_viz.export_preview --all-strong          # rendered videos
+.venv/bin/python -m demo_viz.render_scene --scene synthetic --png # needs no data
+.venv/bin/python -m demo_viz.app.interactive_app                  # explorer, needs .[app]
 ```
 
 See [`demo_viz/README.md`](demo_viz/README.md) for the architecture and the

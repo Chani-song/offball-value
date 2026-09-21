@@ -23,10 +23,15 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Only demo_viz's interactive HTML viewer needs this; every other part of the
+# Only demo_viz's static HTML viewer needs this; every other part of the
 # renderer works without it.
 demo = [
   "plotly>=5.20",
+]
+# demo_viz's interactive explorer (demo_viz/app).
+app = [
+  "plotly>=5.20",
+  "dash>=3.0",
 ]
 
 [tool.setuptools]
