@@ -1,0 +1,42 @@
+{
+  "_comment": [
+    "Human-curated PRESENTATION settings only. Nothing here changes a measured",
+    "quantity: these keys trim the window, nudge the camera and pick which",
+    "space layer to shade, exactly the way a video editor would. Scientific",
+    "inputs (roles, tracking, the residual-space formula) are untouched.",
+    "Unlisted scenes fall back to the defaults in sources/annotation_scene.py."
+  ],
+  "defaults": {
+    "before_s": 8.0,
+    "after_s": 3.0,
+    "wake_mode": "residual"
+  },
+  "scenes": {
+    "J03WOH:shot_006_P1_1054": {
+      "headline": "A one-two run pins the full-back and opens the overlap",
+      "before_s": 8.0,
+      "after_s": 3.0,
+      "camera": {"minimum_width_m": 48.0}
+    },
+    "J03WOY:shot_002_P1_0580": {
+      "headline": "One run, two defenders drawn, the striker's lane appears",
+      "before_s": 8.0,
+      "after_s": 3.0
+    },
+    "J03WOY:shot_011_P2_0903": {
+      "headline": "A near-post attack takes both markers with it",
+      "before_s": 8.0,
+      "after_s": 3.0
+    },
+    "J03WPY:shot_018_P2_1375": {
+      "headline": "Overlap plus a wide run empties the channel between centre-backs",
+      "before_s": 8.0,
+      "after_s": 3.0
+    },
+    "J03WOH:shot_010_P1_1759": {
+      "headline": "The centre-forward's run drags the centre-back out of the shot lane",
+      "before_s": 8.0,
+      "after_s": 3.0
+    }
+  }
+}

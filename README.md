@@ -66,6 +66,33 @@ self-contained demos:
 GitHub displays HTML source rather than executing these pages. Clone or
 download the repository and open the files in a local web browser.
 
+## Scene demo renderer
+
+[`demo_viz/`](demo_viz/README.md) is a self-contained visualization module that
+renders one off-ball sequence as a narrated animation:
+
+```text
+off-ball runner moves -> defender is pulled -> space opens -> beneficiary gains
+```
+
+It reads the manual triplets in `shot_annotations.xlsx`, joins them to the raw
+IDSSE tracking window, and renders MP4 / GIF / PNG / interactive HTML. Every
+layer is tagged on screen as measured, human-supplied, or explanatory; the
+quantities it shades come from `offball_value.goal_weighted_influence` and
+`offball_value.fernandez_influence`, and no calibrated threat, pass probability
+or learned defensive response is drawn, because this repository does not
+produce one.
+
+```bash
+.venv/bin/python -m demo_viz.export_preview --all-strong
+.venv/bin/python -m demo_viz.render_scene --scene synthetic --png   # needs no data
+```
+
+See [`demo_viz/README.md`](demo_viz/README.md) for the architecture and the
+grounding table, and [`demo_viz/OVERNIGHT_REPORT.md`](demo_viz/OVERNIGHT_REPORT.md)
+for what the counterfactual difference actually measures on the five annotated
+`strong` scenes.
+
 ## Quick start
 
 Python 3.11 is required.

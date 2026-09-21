@@ -22,6 +22,13 @@ dependencies = [
   "statsbombpy>=1.16.0",
 ]
 
+[project.optional-dependencies]
+# Only demo_viz's interactive HTML viewer needs this; every other part of the
+# renderer works without it.
+demo = [
+  "plotly>=5.20",
+]
+
 [tool.setuptools]
 package-dir = {"" = "src"}
 

@@ -8,3 +8,5 @@ data/raw/
 data/processed/
 relatedworks/
 .DS_Store
+demo_viz/cache/
+demo_viz/exports/*_nohold.mp4
