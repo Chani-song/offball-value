@@ -218,8 +218,14 @@ def read_window(
 # ---------------------------------------------------------------------------
 # disk cache
 # ---------------------------------------------------------------------------
+#: Bumped when the cache payload changes meaning. v2 stores float64: the feed
+#: gives two decimal places, and float32 was quantising them by ~1e-6 m, which
+#: is physically irrelevant but breaks exact agreement with the browser port.
+_CACHE_VERSION = "v2"
+
+
 def _cache_key(match_id: str, period: int, first: int, last: int) -> str:
-    raw = f"{match_id}|{period}|{first}|{last}"
+    raw = f"{_CACHE_VERSION}|{match_id}|{period}|{first}|{last}"
     digest = hashlib.sha1(raw.encode()).hexdigest()[:10]
     return f"{short_bundesliga_match_id(match_id)}_P{period}_{first}_{last}_{digest}"
 
@@ -266,8 +272,8 @@ def load_window_cached(
     window = read_window(files.positions, period, first_frame, last_frame)
     payload: dict[str, np.ndarray] = {"frame_ids": window.frame_ids}
     for object_id, array in window.tracks.items():
-        payload[f"xy_{object_id}"] = array.astype(np.float32)
-        payload[f"sp_{object_id}"] = window.speeds[object_id].astype(np.float32)
+        payload[f"xy_{object_id}"] = array
+        payload[f"sp_{object_id}"] = window.speeds[object_id]
     np.savez_compressed(npz_path, **payload)
     meta_path.write_text(
         json.dumps(

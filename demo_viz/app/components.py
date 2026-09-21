@@ -26,11 +26,16 @@ MODE_OPTIONS = [
     {"label": "Pipeline", "value": "pipeline"},
 ]
 
-PICK_OPTIONS = [
-    {"label": "Runner", "value": "runner"},
-    {"label": "Defender", "value": "defender"},
-    {"label": "Beneficiary", "value": "beneficiary"},
+EFFECT_OPTIONS = [
+    {"label": "Strong", "value": "strong"},
+    {"label": "Medium", "value": "medium"},
 ]
+
+ROLE_SLOTS = (
+    ("runner", "Runner", palette.RUNNER),
+    ("beneficiary", "Beneficiary", palette.BENEFICIARY),
+    ("defender", "Defender", palette.DEFENDER),
+)
 
 CARD = {
     "background": palette.PANEL,
@@ -80,7 +85,8 @@ def layout():
     return html.Div(
         style={
             "background": palette.INK,
-            "minHeight": "100vh",
+            "height": "100vh",
+            "overflow": "hidden",
             "color": palette.TEXT_PRIMARY,
             "fontFamily": "Inter, Helvetica, Arial, sans-serif",
             "padding": "12px 16px 14px 16px",
@@ -93,11 +99,13 @@ def layout():
             dcc.Download(id="download"),
             _top_bar(options, first),
             html.Div(
-                style={"display": "flex", "gap": "14px", "marginTop": "12px",
-                       "alignItems": "stretch"},
+                style={"display": "flex", "gap": "12px", "marginTop": "10px",
+                       "alignItems": "stretch", "height": "calc(100vh - 106px)"},
                 children=[
-                    html.Div(style={"flex": "1 1 auto", "minWidth": 0}, children=[_pitch_card()]),
-                    html.Div(style={"flex": "0 0 330px"}, children=[_side_panel()]),
+                    html.Div(style={"flex": "1 1 auto", "minWidth": 0},
+                             children=[_pitch_card()]),
+                    html.Div(style={"flex": "0 0 336px", "minWidth": 0},
+                             children=[_side_panel()]),
                 ],
             ),
         ],
@@ -126,14 +134,15 @@ def _top_bar(options, first):
                 ),
             ]),
             html.Div(children=[
-                html.Div("Pick", style=LABEL),
-                dcc.RadioItems(
-                    id="pick", options=PICK_OPTIONS, value="runner",
+                html.Div("Effect", style=LABEL),
+                dcc.Checklist(
+                    id="effects", options=EFFECT_OPTIONS, value=["strong", "medium"],
                     inline=True, className="chips",
                     inputStyle={"marginRight": "5px"},
                     labelStyle={"marginRight": "12px", "fontSize": "12px"},
                 ),
             ]),
+            dcc.Store(id="pick", data="runner"),
             html.Div(style={"display": "flex", "gap": "8px"}, children=[
                 _button("Auto triplet", "btn-auto", palette.BENEFICIARY),
                 _button("Reset", "btn-reset"),
@@ -143,12 +152,14 @@ def _top_bar(options, first):
 
 
 def _pitch_card():
-    return html.Div(style={**CARD, "padding": "10px 12px 12px 12px"}, children=[
+    return html.Div(style={**CARD, "padding": "10px 12px 12px 12px", "height": "100%",
+                           "boxSizing": "border-box", "display": "flex",
+                           "flexDirection": "column"}, children=[
         dcc.Graph(
             id="pitch",
             config={"displayModeBar": False, "scrollZoom": False,
                     "doubleClick": False, "responsive": True},
-            style={"height": "calc(100vh - 292px)", "minHeight": "460px"},
+            style={"height": "calc(100% - 92px)", "minHeight": "300px"},
         ),
         html.Div(
             style={"display": "flex", "alignItems": "center", "gap": "12px",
@@ -198,41 +209,39 @@ def _pitch_card():
 
 def _side_panel():
     return html.Div(
-        style={"display": "flex", "flexDirection": "column", "gap": "12px",
-               "height": "100%"},
+        style={"display": "flex", "flexDirection": "column", "gap": "10px",
+               "height": "100%", "overflow": "hidden"},
         children=[
-            html.Div(style=CARD, children=[
-                html.Div("Selection", style=LABEL),
-                html.Div(id="selection-rows"),
-                html.Div(id="hint", style={"color": palette.TEXT_MUTED,
-                                           "fontSize": "11px", "marginTop": "8px"}),
-            ]),
-            html.Div(style=CARD, children=[
+            _role_dock(),
+            html.Div(style={**CARD, "padding": "10px 12px", "flex": "0 0 auto"},
+                     children=[
                 html.Div(id="stat-label", style=LABEL),
                 html.Div(id="stat-value", style={"fontSize": "30px", "fontWeight": 700,
                                                  "lineHeight": "1.05"}),
                 dcc.Graph(id="chart", config={"displayModeBar": False},
-                          style={"height": "190px", "marginTop": "4px"}),
+                          style={"height": "138px", "marginTop": "2px"}),
             ]),
             html.Div(style={**CARD, "flex": "1 1 auto", "overflowY": "auto",
-                            "maxHeight": "260px"}, children=[
+                            "minHeight": "84px", "padding": "10px 12px"}, children=[
                 html.Div(id="candidates-label", style=LABEL),
                 html.Div(id="candidates"),
             ]),
-            html.Div(style=CARD, children=[
+            html.Div(style={**CARD, "padding": "10px 12px", "flex": "0 0 auto",
+                            "maxHeight": "104px", "overflowY": "auto"}, children=[
                 html.Div("Notes", style=LABEL),
                 html.Div(id="notes", style={"fontSize": "12px",
                                             "color": palette.TEXT_SECONDARY,
                                             "lineHeight": "1.5"}),
-                html.Div(style={"display": "flex", "gap": "8px", "marginTop": "10px"},
-                         children=[
-                             _button("PNG", "btn-png"),
-                             _button("JSON", "btn-json"),
-                         ]),
-                html.Div(id="export-status", style={"color": palette.TEXT_MUTED,
-                                                    "fontSize": "11px",
-                                                    "marginTop": "6px"}),
             ]),
+            html.Div(style={"display": "flex", "gap": "8px", "alignItems": "center",
+                            "flex": "0 0 auto"},
+                     children=[
+                         _button("PNG", "btn-png"),
+                         _button("JSON", "btn-json"),
+                         html.Div(id="export-status",
+                                  style={"color": palette.TEXT_MUTED,
+                                         "fontSize": "11px"}),
+                     ]),
         ],
     )
 
@@ -286,3 +295,71 @@ INDEX_CSS = f"""
   .dash-slider-mark {{ color: {palette.TEXT_MUTED} !important; font-size: 10px !important; }}
 </style>
 """
+
+
+# ---------------------------------------------------------------------------
+# role dock
+# ---------------------------------------------------------------------------
+def _slot(role: str, title: str, colour: str):
+    """One role slot: a drop target that arms on click and holds a player chip."""
+
+    return html.Div(
+        id=f"slot-{role}",
+        n_clicks=0,
+        className="slot",
+        style={
+            "border": f"1px dashed {palette.GRID}",
+            "borderRadius": "9px",
+            "padding": "7px 9px",
+            "cursor": "pointer",
+            "background": palette.INK,
+            "transition": "border-color .12s, background .12s",
+        },
+        children=[
+            html.Div(title, style={"color": colour, "fontSize": "10px",
+                                   "fontWeight": 700, "letterSpacing": "0.08em",
+                                   "textTransform": "uppercase",
+                                   "marginBottom": "5px"}),
+            html.Div(id=f"body-{role}",
+                     style={"display": "flex", "flexWrap": "wrap", "gap": "5px",
+                            "minHeight": "24px", "alignItems": "center"}),
+        ],
+    )
+
+
+def _role_dock():
+    return html.Div(style={**CARD, "padding": "11px 12px"}, children=[
+        html.Div(
+            style={"border": f"1px solid {palette.GRID}", "borderRadius": "11px",
+                   "padding": "9px", "background": "rgba(217,207,184,0.04)"},
+            children=[
+                html.Div("Attack", style={**LABEL, "marginBottom": "7px",
+                                          "color": palette.ATTACK_NEUTRAL}),
+                _slot("runner", "Runner", palette.RUNNER),
+                html.Div(
+                    style={"display": "flex", "justifyContent": "center",
+                           "margin": "5px 0"},
+                    children=[html.Button(
+                        "⇅ Swap", id="btn-swap", n_clicks=0,
+                        style={**BUTTON, "padding": "3px 12px", "fontSize": "11px",
+                               "borderRadius": "999px"},
+                    )],
+                ),
+                _slot("beneficiary", "Beneficiary", palette.BENEFICIARY),
+            ],
+        ),
+        html.Div(
+            style={"border": f"1px solid {palette.GRID}", "borderRadius": "11px",
+                   "padding": "9px", "background": "rgba(95,115,146,0.07)",
+                   "marginTop": "9px"},
+            children=[
+                html.Div("Defence", style={**LABEL, "marginBottom": "7px",
+                                           "color": palette.DEFEND_NEUTRAL}),
+                _slot("defender", "Defender", palette.DEFENDER),
+            ],
+        ),
+        html.Div(id="dock-meta", style={"color": palette.TEXT_MUTED,
+                                        "fontSize": "11px", "marginTop": "8px"}),
+        html.Div(id="hint", style={"color": palette.TEXT_SECONDARY,
+                                   "fontSize": "11px", "marginTop": "4px"}),
+    ])

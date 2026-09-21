@@ -10,6 +10,9 @@ ROLES = ("runner", "defender", "beneficiary")
 #: role name -> the attribute holding its ids (beneficiary does not pluralise)
 _FIELD = {"runner": "runners", "defender": "defenders", "beneficiary": "beneficiaries"}
 
+#: which team a role can be filled from
+_SIDE = {"runner": "attack", "beneficiary": "attack", "defender": "defend"}
+
 
 @dataclass
 class Selection:
@@ -17,6 +20,7 @@ class Selection:
     defenders: list[str] = field(default_factory=list)
     beneficiaries: list[str] = field(default_factory=list)
     pick: str = "runner"                 # which role the next pitch click fills
+    armed: bool = False                  # True when the user armed a slot explicitly
     source: str = "manual"               # manual | annotation | pipeline | suggested
 
     # -- access ---------------------------------------------------------
@@ -75,26 +79,37 @@ class Selection:
             defenders=list(data.get("defenders", [])),
             beneficiaries=list(data.get("beneficiaries", [])),
             pick=data.get("pick", "runner"),
+            armed=bool(data.get("armed", False)),
             source=data.get("source", "manual"),
         )
 
     # -- clicking --------------------------------------------------------
     def apply_click(self, scene, player_id: str) -> "Selection":
-        """Assign a clicked player to a role and move the pick target on.
+        """Assign a clicked player to a role.
 
-        Three rules, in order:
+        Four rules, in order:
 
-        1. a player who already holds a role loses it, so a second click is
-           always "undo" no matter which pick target is armed;
-        2. the clicked side wins over the pick target, so clicking a defender
-           while 'Runner' is armed sets the defender;
-        3. an attacker fills the runner slot if it is empty, otherwise the
-           beneficiary slot.
+        1. if a slot was explicitly armed and the clicked player can fill it,
+           that slot takes the player, replacing whoever was there;
+        2. otherwise a player who already holds a role loses it, so a second
+           click is always "undo";
+        3. otherwise the clicked side decides: a defender fills Defender;
+        4. an attacker fills Runner when it is empty, else Beneficiary.
         """
 
         player = scene.players.get(player_id)
         if player is None:
             return self
+
+        if self.armed and _SIDE.get(self.pick) == player.side:
+            if player_id in self.ids(self.pick):
+                self.toggle(self.pick, player_id)
+            else:
+                self.toggle(self.pick, player_id, single=True)
+            self.armed = False
+            self.source = "manual"
+            return self
+
         existing = self.role_of(player_id)
         if existing is not None:
             role = existing                       # a second click drops the role
@@ -104,10 +119,28 @@ class Selection:
             role = "runner"
         else:
             role = "beneficiary"                  # runner is taken, so this is a gainer
+
         self.toggle(role, player_id, single=(role == "runner"))
+        self.armed = False
         self.source = "manual"
         self.pick = role
         self.advance()
+        return self
+
+    def arm(self, role: str) -> "Selection":
+        """Point the next compatible pitch click at one slot."""
+
+        if role in ROLES:
+            self.pick = role
+            self.armed = True
+        return self
+
+    def swap_attack_roles(self) -> "Selection":
+        """Runner <-> Beneficiary. Both are attackers, so the swap is total."""
+
+        self.runners, self.beneficiaries = self.beneficiaries, self.runners
+        self.armed = False
+        self.source = "manual"
         return self
 
     @classmethod

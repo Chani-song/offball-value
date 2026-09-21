@@ -1,0 +1,38 @@
+<!doctype html>
+<!-- Parity harness: not part of the published site. Loaded by demo_viz/web/validate.py. -->
+<html><head><meta charset="utf-8"><title>parity</title></head>
+<body><pre id="out">running</pre>
+<script type="module">
+import { InfluenceCache } from "./js/influence.js";
+
+async function run() {
+  const fixtures = await (await fetch("./fixtures.json")).json();
+  const results = [];
+  const caches = new Map();
+  for (const item of fixtures.cases) {
+    let entry = caches.get(item.file);
+    if (!entry) {
+      const scene = await (await fetch(`./data/${item.file}`)).json();
+      scene.byId = new Map(scene.players.map((p) => [p.id, p]));
+      entry = new InfluenceCache(scene, { every: fixtures.every });
+      caches.set(item.file, entry);
+    }
+    const swap = item.defenders.map((playerId) => ({
+      playerId, freezeIndex: item.freeze_index, mode: item.baseline,
+    }));
+    const factual = entry.combined(item.beneficiaries, item.slot);
+    const counter = swap.length ? entry.combined(item.beneficiaries, item.slot, swap) : null;
+    results.push({
+      key: item.key,
+      factual: factual.value,
+      counterfactual: counter ? counter.value : null,
+      gain: counter ? factual.value - counter.value : null,
+      peak: Math.max(...factual.field),
+    });
+  }
+  document.getElementById("out").textContent = JSON.stringify({ results });
+}
+run().catch((error) => {
+  document.getElementById("out").textContent = JSON.stringify({ error: String(error) });
+});
+</script></body></html>

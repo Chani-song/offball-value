@@ -31,6 +31,10 @@ _ROLE_COLOUR = {
     "beneficiary": palette.BENEFICIARY,
 }
 
+#: which team each marker group belongs to
+_ROLE_SIDE = {"runner": "attack", "beneficiary": "attack", "defender": "defend",
+              "attack": "attack", "defend": "defend"}
+
 
 @dataclass
 class ViewOptions:
@@ -111,6 +115,7 @@ def scene_figure(
     freeze_index: int | None = None,
     baseline: str = "hold",
     candidates: tuple[str, ...] = (),
+    active_side: str | None = None,
 ) -> go.Figure:
     """The clickable pitch for one frame and one role selection."""
 
@@ -124,7 +129,7 @@ def scene_figure(
     traces += _tether_traces(scene, index, selection, options)
     traces += _ghost_traces(scene, index, selection, options, freeze_index, baseline, cache)
     traces += _trail_traces(scene, index, selection, options)
-    traces += _player_traces(scene, index, selection, options, candidates)
+    traces += _player_traces(scene, index, selection, options, candidates, active_side)
     traces.append(_ball_trace(scene, index))
 
     if options.on("fit") and not selection.is_empty:
@@ -333,7 +338,7 @@ def _lane_traces(scene, index, selection, options, maximum_m: float = 34.0):
                        line=dict(color=palette.BENEFICIARY, width=2), opacity=0.85)]
 
 
-def _player_traces(scene, index, selection, options, candidates):
+def _player_traces(scene, index, selection, options, candidates, active_side=None):
     groups: dict[str, dict[str, list]] = {}
     for key in ("attack", "defend", "runner", "defender", "beneficiary"):
         groups[key] = {"x": [], "y": [], "text": [], "ids": [], "label": []}
@@ -376,6 +381,8 @@ def _player_traces(scene, index, selection, options, candidates):
                             line=dict(color=palette.DEFENDER, width=2)), opacity=0.55,
             ))
 
+    # When a slot is armed, the side that can fill it comes forward and the
+    # other side drops back, so the pitch itself says what is clickable.
     for key, colour, size in (
         ("attack", palette.ATTACK_NEUTRAL, 20),
         ("defend", palette.DEFEND_NEUTRAL, 20),
@@ -387,6 +394,20 @@ def _player_traces(scene, index, selection, options, candidates):
         if not bucket["x"]:
             continue
         is_role = key in _ROLE_COLOUR
+        side = _ROLE_SIDE.get(key, key)
+        if active_side is None or is_role:
+            opacity = 1.0 if is_role else 0.55
+        elif side == active_side:
+            opacity = 0.95
+        else:
+            opacity = 0.22
+        if active_side is not None and side == active_side and not is_role:
+            out.append(go.Scatter(
+                x=bucket["x"], y=bucket["y"], mode="markers", hoverinfo="skip",
+                marker=dict(size=size + 11, color="rgba(0,0,0,0)",
+                            line=dict(color=palette.TEXT_SECONDARY, width=1)),
+                opacity=0.5,
+            ))
         out.append(go.Scatter(
             x=bucket["x"], y=bucket["y"],
             customdata=bucket["ids"],
@@ -400,7 +421,7 @@ def _player_traces(scene, index, selection, options, candidates):
                 color=colour, size=size,
                 line=dict(color=palette.INK if not is_role else colour,
                           width=1 if not is_role else 3),
-                opacity=1.0 if is_role else 0.55,
+                opacity=opacity,
             ),
         ))
     return out

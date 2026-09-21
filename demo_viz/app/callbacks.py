@@ -18,7 +18,14 @@ from ..core.role_logic import (
 )
 from ..core.selection import Selection
 from .components import CARD, LABEL
-from .state import get_bundle, onset_for, pipeline_source, pipeline_triplets, time_marks
+from .state import (
+    get_bundle,
+    onset_for,
+    pipeline_source,
+    pipeline_triplets,
+    scene_options,
+    time_marks,
+)
 
 ROLE_COLOUR = {
     "runner": palette.RUNNER,
@@ -41,13 +48,26 @@ def register(app):
 # ---------------------------------------------------------------------------
 def _scene_callback(app):
     @app.callback(
+        Output("scene", "options"),
+        Output("scene", "value"),
+        Input("effects", "value"),
+        State("scene", "value"),
+    )
+    def on_effects(effects, current):
+        options = scene_options(tuple(effects or ("strong", "medium")))
+        values = [o["value"] for o in options]
+        if current in values:
+            return options, current
+        return options, (values[0] if values else "synthetic")
+
+    @app.callback(
         Output("store-scene", "data"),
         Output("store-selection", "data"),
         Output("time", "max"),
         Output("time", "value"),
         Output("time", "marks"),
         Output("notes", "children"),
-        Output("pick", "value"),
+        Output("pick", "data"),
         Input("scene", "value"),
         Input("mode", "value"),
     )
@@ -158,18 +178,25 @@ def _selection_from_triplet(triplet) -> Selection:
 def _selection_callback(app):
     @app.callback(
         Output("store-selection", "data", allow_duplicate=True),
-        Output("pick", "value", allow_duplicate=True),
+        Output("pick", "data", allow_duplicate=True),
         Input("pitch", "clickData"),
         Input("btn-reset", "n_clicks"),
         Input("btn-auto", "n_clicks"),
+        Input("btn-swap", "n_clicks"),
+        Input("slot-runner", "n_clicks"),
+        Input("slot-beneficiary", "n_clicks"),
+        Input("slot-defender", "n_clicks"),
         Input({"type": "cand-row", "role": ALL, "player": ALL}, "n_clicks"),
-        State("pick", "value"),
+        Input({"type": "slot-clear", "role": ALL, "player": ALL}, "n_clicks"),
+        State("pick", "data"),
         State("store-selection", "data"),
         State("store-scene", "data"),
         prevent_initial_call=True,
     )
-    def on_pick(click, _reset, _auto, _rows, pick, stored, scene_store):
+    def on_pick(click, _reset, _auto, _swap, _sr, _sb, _sd, _rows, _clears,
+                pick, stored, scene_store):
         trigger = callback_context.triggered_id
+        fired = callback_context.triggered[0].get("value") or 0
         scene_id = (scene_store or {}).get("scene_id")
         if not scene_id:
             return no_update, no_update
@@ -179,6 +206,25 @@ def _selection_callback(app):
 
         if trigger == "btn-reset":
             return Selection(pick="runner", source="manual").to_dict(), "runner"
+
+        if trigger == "btn-swap":
+            selection.swap_attack_roles()
+            return selection.to_dict(), selection.pick
+
+        if isinstance(trigger, str) and trigger.startswith("slot-"):
+            selection.arm(trigger.split("-", 1)[1])
+            return selection.to_dict(), selection.pick
+
+        if isinstance(trigger, dict) and trigger.get("type") == "slot-clear":
+            if not fired:
+                return no_update, no_update
+            role, player_id = trigger.get("role"), trigger.get("player")
+            bucket = selection.ids(role)
+            if player_id in bucket:
+                bucket.remove(player_id)
+            selection.pick = role
+            selection.source = "manual"
+            return selection.to_dict(), role
 
         if trigger == "btn-auto":
             runner = selection.runner
@@ -190,9 +236,9 @@ def _selection_callback(app):
         if isinstance(trigger, dict) and trigger.get("type") == "cand-row":
             # a row in the hint list is just another way to pick that player;
             # ignore the zero-click fire that pattern inputs emit on render
-            if not (callback_context.triggered[0].get("value") or 0):
+            if not fired:
                 return no_update, no_update
-            selection.pick = trigger.get("role", selection.pick)
+            selection.arm(trigger.get("role", selection.pick))
             selection.apply_click(bundle.scene, trigger.get("player"))
             return selection.to_dict(), selection.pick
 
@@ -223,7 +269,13 @@ def _render_callback(app):
     @app.callback(
         Output("pitch", "figure"),
         Output("chart", "figure"),
-        Output("selection-rows", "children"),
+        Output("body-runner", "children"),
+        Output("body-beneficiary", "children"),
+        Output("body-defender", "children"),
+        Output("slot-runner", "style"),
+        Output("slot-beneficiary", "style"),
+        Output("slot-defender", "style"),
+        Output("dock-meta", "children"),
         Output("stat-label", "children"),
         Output("stat-value", "children"),
         Output("stat-value", "style"),
@@ -235,13 +287,13 @@ def _render_callback(app):
         Input("time", "value"),
         Input("layers", "value"),
         Input("wake-mode", "value"),
-        Input("pick", "value"),
+        Input("pick", "data"),
         State("store-scene", "data"),
     )
     def on_render(stored, index, layers, wake_mode, pick, scene_store):
         scene_id = (scene_store or {}).get("scene_id")
         if not scene_id:
-            return (no_update,) * 10
+            return (no_update,) * 16
         bundle = get_bundle(scene_id)
         scene, cache = bundle.scene, bundle.cache
         selection = Selection.from_dict(stored)
@@ -254,72 +306,102 @@ def _render_callback(app):
         candidate_ids, candidate_rows, candidate_label = _candidates(
             bundle, selection, freeze_index, index
         )
+        active_side = _ACTIVE_SIDE.get(selection.pick) if selection.armed else None
         figure = scene_figure(
             scene, index, selection, cache, options,
             freeze_index=freeze_index, candidates=tuple(candidate_ids),
+            active_side=active_side,
         )
         chart = space_chart(scene, cache, selection, index, freeze_index)
         stat_label, stat_value, stat_style = _stat(bundle, selection, freeze_index, index)
-        rows = _selection_rows(scene, selection, freeze_index, onset_method)
+        bodies = [_slot_body(scene, selection, role)
+                  for role in ("runner", "beneficiary", "defender")]
+        styles = [_slot_style(selection, role)
+                  for role in ("runner", "beneficiary", "defender")]
         readout = f"{scene.times[index]:+.2f} s"
         return (
-            figure, chart, rows, stat_label, stat_value, stat_style,
+            figure, chart, *bodies, *styles,
+            _dock_meta(scene, selection, freeze_index, onset_method),
+            stat_label, stat_value, stat_style,
             candidate_label, candidate_rows, readout,
             _hint(selection),
         )
 
 
 def _hint(selection: Selection) -> str:
+    if selection.armed:
+        return f"Now click a{'n' if selection.pick == 'attacker' else ''} " + {
+            "runner": "attacking player.",
+            "beneficiary": "attacking player.",
+            "defender": "defending player.",
+        }[selection.pick]
     if not selection.runners:
-        return "Click an attacker to set the runner."
+        return "Click an attacker, or a slot then a player."
     if not selection.defenders:
-        return "Click a defender. Ringed ones move most like a reaction."
+        return "Click a defender. Ringed ones react most."
     if not selection.beneficiaries:
-        return "Click a teammate. Ringed ones gain the most space."
-    return "Click any player to swap a role. Click again to drop it."
+        return "Click a teammate. Ringed ones gain most."
+    return "Click a slot to replace it, or × to clear."
 
 
-def _selection_rows(scene, selection: Selection, freeze_index, onset_method):
-    rows = []
-    for role in ("runner", "defender", "beneficiary"):
-        ids = selection.ids(role)
-        colour = ROLE_COLOUR[role]
-        chips = []
-        for player_id in ids:
-            player = scene.players.get(player_id)
-            if player is None:
-                continue
-            chips.append(html.Span(
-                f"#{player.label} {player.name}",
-                style={"background": colour, "color": palette.INK, "borderRadius": "5px",
-                       "padding": "2px 7px", "fontSize": "11px", "fontWeight": 700,
-                       "marginRight": "5px", "whiteSpace": "nowrap"},
-            ))
-        if not chips:
-            chips = [html.Span("—", style={"color": palette.TEXT_MUTED, "fontSize": "12px"})]
-        rows.append(html.Div(
-            style={"display": "flex", "alignItems": "center", "gap": "8px",
-                   "marginBottom": "6px"},
+_ACTIVE_SIDE = {"runner": "attack", "beneficiary": "attack", "defender": "defend"}
+
+SLOT_BASE = {
+    "borderRadius": "9px", "padding": "7px 9px", "cursor": "pointer",
+    "background": palette.INK, "transition": "border-color .12s, background .12s",
+}
+
+
+def _slot_style(selection: Selection, role: str) -> dict:
+    colour = ROLE_COLOUR[role]
+    if selection.armed and selection.pick == role:
+        return {**SLOT_BASE, "border": f"1px solid {colour}",
+                "background": "rgba(255,255,255,0.05)",
+                "boxShadow": f"0 0 0 2px {colour}33"}
+    if selection.ids(role):
+        return {**SLOT_BASE, "border": f"1px solid {palette.GRID}"}
+    return {**SLOT_BASE, "border": f"1px dashed {palette.GRID}"}
+
+
+def _slot_body(scene, selection: Selection, role: str):
+    colour = ROLE_COLOUR[role]
+    ids = [pid for pid in selection.ids(role) if pid in scene.players]
+    if not ids:
+        armed = selection.armed and selection.pick == role
+        return html.Span(
+            "pick on pitch" if armed else "empty",
+            style={"color": colour if armed else palette.TEXT_MUTED, "fontSize": "11px"},
+        )
+    chips = []
+    for player_id in ids:
+        player = scene.players[player_id]
+        chips.append(html.Span(
+            style={"background": colour, "color": palette.INK, "borderRadius": "6px",
+                   "padding": "3px 5px 3px 8px", "fontSize": "11px", "fontWeight": 700,
+                   "display": "inline-flex", "alignItems": "center", "gap": "6px",
+                   "whiteSpace": "nowrap"},
             children=[
-                html.Span(ROLE_LABEL[role], style={
-                    "color": colour, "fontSize": "10px", "fontWeight": 700,
-                    "letterSpacing": "0.06em", "width": "78px", "flex": "0 0 78px"}),
-                html.Div(chips, style={"display": "flex", "flexWrap": "wrap", "gap": "3px"}),
+                html.Span(f"#{player.label} {_short(player.name)}"),
+                html.Span("×", id={"type": "slot-clear", "role": role,
+                                   "player": player_id},
+                          n_clicks=0, className="chip-x",
+                          style={"cursor": "pointer", "fontWeight": 700,
+                                 "fontSize": "13px", "lineHeight": "11px"}),
             ],
         ))
-    rows.append(html.Div(
-        style={"display": "flex", "gap": "14px", "marginTop": "8px",
-               "paddingTop": "8px", "borderTop": f"1px solid {palette.GRID}"},
-        children=[
-            _team_key(palette.ATTACK_NEUTRAL, scene.attacking_team_name, "attacking"),
-            _team_key(palette.DEFEND_NEUTRAL, scene.defending_team_name, "defending"),
-        ],
-    ))
+    return chips
+
+
+def _short(name: str, width: int = 16) -> str:
+    return name if len(name) <= width else name[: width - 1] + "\u2026"
+
+
+def _dock_meta(scene, selection: Selection, freeze_index, onset_method):
+    parts = []
     if selection.runners and freeze_index is not None:
-        rows.append(html.Div(
+        parts.append(html.Div(
             f"run starts {scene.times[int(freeze_index)]:+.1f}s · {onset_method}",
-            style={"color": palette.TEXT_MUTED, "fontSize": "11px", "marginTop": "6px"},
-        ))
+            style={"marginBottom": "3px"}))
     if selection.source != "manual":
         note = selection.source
         if selection.source == "pipeline":
@@ -327,11 +409,16 @@ def _selection_rows(scene, selection: Selection, freeze_index, onset_method):
             note = "from pipeline file" if kind == "pipeline" else "from example file"
         elif selection.source == "suggested":
             note = "suggested by demo_viz"
-        rows.append(html.Div(
-            note, style={"color": palette.TEXT_MUTED, "fontSize": "11px",
-                         "marginTop": "2px"},
-        ))
-    return rows
+        parts.append(html.Div(note, style={"marginBottom": "3px"}))
+    parts.append(html.Div(
+        style={"display": "flex", "gap": "12px", "marginTop": "5px",
+               "paddingTop": "6px", "borderTop": f"1px solid {palette.GRID}"},
+        children=[
+            _team_key(palette.ATTACK_NEUTRAL, scene.attacking_team_name, "attacking"),
+            _team_key(palette.DEFEND_NEUTRAL, scene.defending_team_name, "defending"),
+        ],
+    ))
+    return parts
 
 
 def _team_key(colour, team, side):

@@ -1,5 +1,21 @@
 # Local Off-Ball Game in Soccer
 
+[![Interactive demo](https://img.shields.io/badge/interactive%20demo-open-5CE8F5?style=for-the-badge)](https://chani-song.github.io/offball-value/)
+
+[<img src="demo_viz/exports/web_annotation.png" alt="Interactive off-ball explorer: pick a runner, a reacting defender and a beneficiary, and see the space that opens" width="100%">](https://chani-song.github.io/offball-value/)
+
+**▶ [Explore the interactive demo](https://chani-song.github.io/offball-value/)** — click a
+player to make them the runner, click a defender to see who gets pulled, click a
+teammate to see what they gain. 45 human-annotated Bundesliga scenes, recomputed
+in the browser as you click.
+
+The same explorer runs locally with a Dash back end
+(`python -m demo_viz.app.interactive_app`), and the same scenes render as
+narrated videos (`python -m demo_viz.export_preview`). See
+[`demo_viz/`](demo_viz/README.md).
+
+---
+
 Research prototype for studying how an off-ball run reallocates a defender
 between the runner's direct threat and the attacking opportunities left to
 teammates.
@@ -66,37 +82,30 @@ self-contained demos:
 GitHub displays HTML source rather than executing these pages. Clone or
 download the repository and open the files in a local web browser.
 
-## Scene demo renderer
+## demo_viz
 
-[`demo_viz/`](demo_viz/README.md) is a self-contained visualization module that
-renders one off-ball sequence as a narrated animation:
+[`demo_viz/`](demo_viz/README.md) turns one annotated sequence into something a
+first-time viewer understands:
 
 ```text
 off-ball runner moves -> defender is pulled -> space opens -> beneficiary gains
 ```
 
-It reads the manual triplets in `shot_annotations.xlsx`, joins them to the raw
-IDSSE tracking window, and renders MP4 / GIF / PNG / interactive HTML. Every
-layer is tagged on screen as measured, human-supplied, or explanatory; the
-quantities it shades come from `offball_value.goal_weighted_influence` and
-`offball_value.fernandez_influence`, and no calibrated threat, pass probability
-or learned defensive response is drawn, because this repository does not
-produce one.
+| | |
+| --- | --- |
+| **Interactive explorer** (browser) | [live demo](https://chani-song.github.io/offball-value/) · static, no server · [`demo_viz/web/`](demo_viz/web/) |
+| **Interactive explorer** (local) | `python -m demo_viz.app.interactive_app` · Dash · [`demo_viz/app/`](demo_viz/app/) |
+| **Narrated videos** | `python -m demo_viz.export_preview --all-strong` · MP4 / GIF / PNG / HTML |
 
-There is also an interactive explorer: click a player on the pitch to make them
-the runner, click a defender to see who gets pulled, and click a teammate to see
-what they gain.
+Every layer is tagged on screen as measured, human-supplied, or explanatory.
+The shaded space comes from `offball_value.goal_weighted_influence` and
+`offball_value.fernandez_influence`; no calibrated threat, pass probability or
+learned defensive response is drawn, because this repository does not produce
+one.
 
-```bash
-.venv/bin/python -m demo_viz.export_preview --all-strong          # rendered videos
-.venv/bin/python -m demo_viz.render_scene --scene synthetic --png # needs no data
-.venv/bin/python -m demo_viz.app.interactive_app                  # explorer, needs .[app]
-```
-
-See [`demo_viz/README.md`](demo_viz/README.md) for the architecture and the
-grounding table, and [`demo_viz/OVERNIGHT_REPORT.md`](demo_viz/OVERNIGHT_REPORT.md)
-for what the counterfactual difference actually measures on the five annotated
-`strong` scenes.
+Reports: [`demo_viz/INTERACTIVE_REPORT.md`](demo_viz/INTERACTIVE_REPORT.md) (explorer),
+[`demo_viz/OVERNIGHT_REPORT.md`](demo_viz/OVERNIGHT_REPORT.md) (renderer, and what
+the counterfactual difference actually measures).
 
 ## Quick start
 

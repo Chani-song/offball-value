@@ -11,7 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
 import numpy as np
 
@@ -46,23 +46,28 @@ _BUNDLES: dict[str, SceneBundle] = {}
 _ONSETS: dict[tuple[str, str], tuple[int, str]] = {}
 
 
-def scene_options() -> list[dict[str, str]]:
-    """Dropdown entries: annotated scenes first, strongest first, then synthetic."""
+#: The public demo shows human-confirmed scenes only. Low and ignore rows stay
+#: out by default; pass them explicitly if you want them locally.
+DEFAULT_EFFECTS = ("strong", "medium")
+EFFECT_ORDER = {"strong": 0, "medium": 1, "low": 2}
 
-    options: list[dict[str, str]] = []
+
+def scene_options(effects: Sequence[str] = DEFAULT_EFFECTS) -> list[dict[str, str]]:
+    """Dropdown entries for the requested effect labels, strongest first."""
+
+    wanted = {str(e).lower() for e in (effects or ())}
     try:
         clips = load_annotations()
     except Exception:
         clips = []
-    order = {"strong": 0, "medium": 1, "low": 2}
-    renderable = [c for c in clips if c.is_renderable and c.effect in order]
-    renderable.sort(key=lambda c: (order.get(c.effect, 9), c.clip_id))
-    for clip in renderable:
-        options.append({
-            "label": f"{clip.effect}  ·  {clip.clip_id}  ·  {clip.shape}",
-            "value": clip.clip_id,
-        })
-    options.append({"label": "synthetic  ·  smoke test", "value": "synthetic"})
+    renderable = [c for c in clips if c.is_renderable and c.effect in wanted]
+    renderable.sort(key=lambda c: (EFFECT_ORDER.get(c.effect, 9), c.clip_id))
+    options = [
+        {"label": f"{clip.effect.upper()} · {clip.clip_id} · {clip.shape}",
+         "value": clip.clip_id}
+        for clip in renderable
+    ]
+    options.append({"label": "SYNTHETIC · smoke test", "value": "synthetic"})
     return options
 
 

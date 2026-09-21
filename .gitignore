@@ -11,3 +11,5 @@ relatedworks/
 demo_viz/cache/
 demo_viz/exports/*_nohold.mp4
 demo_viz.zip
+demo_viz/web_build/
+demo_viz*.zip

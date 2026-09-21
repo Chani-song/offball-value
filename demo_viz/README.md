@@ -21,7 +21,14 @@ return.
 
 ## Interactive explorer
 
-A local Dash app for asking the question the videos can only answer once:
+Two front ends, one set of rules:
+
+| | |
+| --- | --- |
+| **Browser** | [live demo](https://chani-song.github.io/offball-value/) · static, no server, no build step · [`web/`](web/) |
+| **Local** | `python -m demo_viz.app.interactive_app` · Dash · [`app/`](app/) |
+
+Both ask the question the videos can only answer once:
 
 > if **this** player makes the run, which defender gets pulled, where does space
 > open, and which teammate gains?
@@ -34,18 +41,48 @@ uv pip install -e ".[app]"          # or: pip install -e ".[app]"
 
 Options: `--port`, `--host`, `--scene <clip id>`, `--mode {manual,annotation,pipeline}`, `--debug`.
 
-### Clicking
+### The role dock
 
-Click a player on the pitch and it takes a role. Three rules, in this order:
+Beside the pitch:
 
-1. a player who already holds a role **loses it** — a second click is always undo;
-2. the clicked **side wins** over the armed Pick button, so clicking a defender
-   while *Runner* is armed sets the defender;
-3. an attacker fills the **runner** slot if it is empty, otherwise **beneficiary**.
+```
+ATTACK                    DEFENCE
+  Runner  [ #7 … × ]        Defender [ #11 … × ]
+      ⇅ Swap
+  Beneficiary [ #34 … × ]
+```
 
-The Pick buttons advance on their own (runner -> defender -> beneficiary), so the
-normal flow is just three clicks. Rows in the hint list are clickable too, which
-is the fastest way to compare two defenders or two beneficiaries.
+Runner and Beneficiary share the **Attack** box with the swap control between
+them, because the same attacker can hold either. Defender is separate.
+
+Click a player on the pitch and they take a role. Four rules, in this order:
+
+1. an **armed slot** (click the slot first) takes a compatible player, replacing
+   whoever was there;
+2. otherwise a player who already holds a role **loses it** — a second click is
+   always undo;
+3. otherwise the clicked **side** decides: a defender fills Defender;
+4. an attacker fills **Runner** when empty, else **Beneficiary**.
+
+So the quick path is three clicks, and clicking a slot first always wins when
+you want to be explicit. The × on a chip clears that player; `⇅ Swap` exchanges
+the two attacking roles. Rows in the hint list do the same thing as clicking
+that player, which is the fastest way to compare two defenders.
+
+While a slot is armed the side that can fill it comes forward and the other
+side drops back, so the pitch itself shows what is clickable.
+
+The browser build additionally supports **drag and drop**: drag a player or a
+chip onto a slot, and dragging the Runner chip onto Beneficiary swaps them. It
+uses pointer events rather than the HTML5 drag API, which does not work on SVG.
+The Dash build is click-to-arm only, on purpose — Dash has no drag primitive
+and reliability matters more than the gesture.
+
+### Scenes
+
+The dropdown offers every annotated scene with a complete triplet at the effect
+labels you tick — **Strong** and **Medium** by default, 45 scenes. Low and
+ignore rows are not in the public demo.
 
 ### Modes
 
@@ -92,9 +129,29 @@ and the method that found it.
 * **run starts** — `offball_value.run_onset.detect_kinematic_run_onsets` where it
   fires, otherwise a labelled peak-acceleration cue. The panel says which.
 
-Screenshots: `demo_viz/exports/app_annotation.png`, `app_manual.png`,
-`app_pipeline.png`. Implementation notes and limitations:
-[`APP_REPORT.md`](APP_REPORT.md).
+### Browser build
+
+```bash
+python -m demo_viz.web.export_data        # 45 scenes -> demo_viz/web_data/
+python -m demo_viz.web.build              # -> demo_viz/web_build/ + a size report
+python -m http.server -d demo_viz/web_build 8090
+```
+
+Plain HTML, CSS and seven ES modules; no bundler, no runtime dependency. The
+residual-space arithmetic is ported to JavaScript, so the browser recomputes
+**any** triplet the visitor picks rather than replaying a pre-rendered one.
+`python -m demo_viz.web.validate` runs the JavaScript in headless Chrome and
+compares against Python: 160 random cases agree to float64 machine precision
+(worst absolute difference 1.4e-13). `--bench` measures latency; role switching
+is 0.8 ms.
+
+The page takes URL state, so a pick is linkable:
+`?scene=<clip id>&r=7&d=11&b=34&t=240&fit=1`.
+
+Screenshots: `exports/web_annotation.png`, `web_manual.png`, `web_swapped.png`,
+`web_multidefender.png`, `web_medium.png`, `app_dock.png`.
+Reports: [`INTERACTIVE_REPORT.md`](INTERACTIVE_REPORT.md) (explorer and browser
+build), [`APP_REPORT.md`](APP_REPORT.md) (the first Dash pass).
 
 ---
 
