@@ -13,3 +13,21 @@ demo_viz/exports/*_nohold.mp4
 demo_viz.zip
 demo_viz/web_build/
 demo_viz*.zip
+
+# Local annotation media and generated files (the canonical XLSX is tracked).
+*.mp4
+*.mov
+*.mkv
+*.avi
+*.webm
+ALL_SHOT_CLIPS/
+ALL_SHOT_CLIPS.zip
+tracking_overlay_cache/
+tools/shot_annotation_app/output/
+tools/shot_annotation_app/media/
+tools/shot_annotation_app/*.log
+annotations/*.csv
+~$*.xlsx
+*.tmp
+.pytest_cache/
+!annotations/shot_annotations.xlsx

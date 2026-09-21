@@ -107,6 +107,13 @@ Reports: [`demo_viz/INTERACTIVE_REPORT.md`](demo_viz/INTERACTIVE_REPORT.md) (exp
 [`demo_viz/OVERNIGHT_REPORT.md`](demo_viz/OVERNIGHT_REPORT.md) (renderer, and what
 the counterfactual difference actually measures).
 
+## Manual annotation tool
+
+[`annotations/shot_annotations.xlsx`](annotations/shot_annotations.xlsx) contains
+the canonical manual labels. The original labeling UI is in
+[`tools/shot_annotation_app`](tools/shot_annotation_app/README.md); see its README
+for local startup and media configuration. Raw video clips are not stored in GitHub.
+
 ## Quick start
 
 Python 3.11 is required.
