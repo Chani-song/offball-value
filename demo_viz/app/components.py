@@ -92,7 +92,7 @@ def layout():
             "height": "100vh",
             "overflow": "hidden",
             "color": palette.TEXT_PRIMARY,
-            "fontFamily": "Inter, Helvetica, Arial, sans-serif",
+            "fontFamily": "Helvetica, 'Helvetica Neue', Arial, sans-serif",
             "padding": "12px 16px 14px 16px",
             "boxSizing": "border-box",
         },
@@ -312,6 +312,12 @@ INDEX_CSS = f"""
       --Dash-Shading-Weak: rgba(0,0,0,0.35);
       --Dash-Tooltip-Background-Color: {palette.PANEL};
       --Dash-Tooltip-Border-Color: {palette.GRID};
+  }}
+  /* Dash's own components carry their own font stack; name Helvetica once here
+     so the dropdown, radios and checklists match the rest of the frame. */
+  html, body, button, input, select, textarea,
+  .dash-dropdown, [class*="dash-options-list"], [class*="dash-slider"] {{
+      font-family: Helvetica, "Helvetica Neue", Arial, sans-serif;
   }}
   body {{ margin: 0; background: {palette.INK}; }}
   * {{ scrollbar-color: {palette.GRID} {palette.PANEL}; }}

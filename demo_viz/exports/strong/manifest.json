@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-21T15:07:08-0400",
+  "generated_at": "2026-09-21T16:33:28-0400",
   "space_view": "available",
   "roles": "human annotation (shot_annotations.xlsx, effect=strong)",
   "scenes": [
@@ -21,8 +21,11 @@
       },
       "space_view": "available",
       "layers_off": [
-        "lane"
+        "lane",
+        "future"
       ],
+      "intro_seconds": 3.9,
+      "pacing": "presentation",
       "files": [
         "strong_01.png",
         "strong_01.mp4"
@@ -47,8 +50,11 @@
       },
       "space_view": "available",
       "layers_off": [
-        "lane"
+        "lane",
+        "future"
       ],
+      "intro_seconds": 3.9,
+      "pacing": "presentation",
       "files": [
         "strong_02.png",
         "strong_02.mp4"
@@ -73,8 +79,11 @@
       },
       "space_view": "available",
       "layers_off": [
-        "lane"
+        "lane",
+        "future"
       ],
+      "intro_seconds": 3.9,
+      "pacing": "presentation",
       "files": [
         "strong_03.png",
         "strong_03.mp4"
@@ -100,8 +109,11 @@
       },
       "space_view": "available",
       "layers_off": [
-        "lane"
+        "lane",
+        "future"
       ],
+      "intro_seconds": 4.4,
+      "pacing": "presentation",
       "files": [
         "strong_04.png",
         "strong_04.mp4"
@@ -127,8 +139,11 @@
       },
       "space_view": "available",
       "layers_off": [
-        "lane"
+        "lane",
+        "future"
       ],
+      "intro_seconds": 4.4,
+      "pacing": "presentation",
       "files": [
         "strong_05.png",
         "strong_05.mp4"

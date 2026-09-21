@@ -187,7 +187,7 @@ def export_html(
         template="plotly_dark",
         paper_bgcolor=palette.INK,
         plot_bgcolor=palette.INK,
-        font=dict(family="DejaVu Sans, Helvetica, Arial", color=palette.TEXT_PRIMARY, size=12),
+        font=dict(family="Helvetica, Arial, sans-serif", color=palette.TEXT_PRIMARY, size=12),
         title=dict(
             text=f"<b>{scene.title}</b><br>"
                  f"<span style='font-size:12px;color:{palette.TEXT_SECONDARY}'>"
@@ -275,7 +275,7 @@ def _annotations(scene: Scene, storyboard: Storyboard, index: int) -> list[dict]
 
 _FOOTER_CSS = """
 <style>
-  body {{ background: {ink}; color: {text}; font-family: 'DejaVu Sans', Helvetica, Arial;
+  body {{ background: {ink}; color: {text}; font-family: Helvetica, Arial, sans-serif;
           margin: 0; }}
   .offball-footer {{ max-width: 1180px; margin: 4px auto 28px auto; padding: 14px 22px;
       border-top: 1px solid {grid}; font-size: 12px; line-height: 1.7; color: {muted}; }}

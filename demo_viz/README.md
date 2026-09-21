@@ -183,9 +183,15 @@ build), [`APP_REPORT.md`](APP_REPORT.md) (the first Dash pass).
 # all five 'strong' scenes, into demo_viz/exports/
 .venv/bin/python -m demo_viz.export_preview --all-strong
 
-# the demo reel: the five 'strong' scenes with their full human annotation
-# (every annotated runner, defender and beneficiary), plus a montage,
-# into demo_viz/exports/strong/
+# the demo reel — off-the-ball investigation examples: the five 'strong' scenes
+# with their full human annotation (every annotated runner, defender and
+# beneficiary), plus a montage, into demo_viz/exports/strong/
+#
+# Each video names the roles one at a time over its opening frame, settles back
+# to the play framing, then runs the scene with every role and the space field
+# held on from the first frame. The captions walk the causal chain on a fixed
+# clock rather than on detector times, which the frame states under the
+# timeline; nothing measured is paced.
 .venv/bin/python -m demo_viz.export_strong
 
 # interactive viewer in a browser

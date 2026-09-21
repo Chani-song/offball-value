@@ -472,6 +472,10 @@ def _baseline_label(scene: Scene) -> str:
     return "IF HELD" if mode == "hold" else "IF NO REACTION"
 
 
+#: Below this displacement the held-defender caption says nothing worth the ink.
+GHOST_LABEL_MIN_M = 1.0
+
+
 def draw_ghost(
     ax: Axes,
     scene: Scene,
@@ -507,7 +511,9 @@ def draw_ghost(
         radius = ROLE_R * mark_scale(unit)
         if not marker:
             shift = float(np.linalg.norm(p_now - p_held))
-            if label and strength > 0.4 and placer is not None:
+            # Before the defender has moved, the held marker sits on top of them
+            # and the caption would read "pulled 0.0 m", which is noise.
+            if label and shift >= GHOST_LABEL_MIN_M and strength > 0.4 and placer is not None:
                 placer.place(
                     p_held, f"{_baseline_label(scene)} · pulled {shift:.1f} m", palette.GHOST,
                     fontsize=6.4, alpha=0.92 * strength, chip=True,

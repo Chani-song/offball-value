@@ -2,16 +2,15 @@
 
 [![Interactive demo](https://img.shields.io/badge/interactive%20demo-open-5CE8F5?style=for-the-badge)](https://chani-song.github.io/offball-value/)
 
-[<img src="demo_viz/exports/web_annotation.png" alt="Interactive off-ball explorer: pick a runner, a reacting defender and a beneficiary, and see the space that opens" width="100%">](https://chani-song.github.io/offball-value/)
+[<img src="demo_viz/exports/web_annotation.png" alt="Off-the-ball value explorer: click a runner, a defender and a beneficiary in human-annotated Bundesliga scenes" width="100%">](https://chani-song.github.io/offball-value/)
 
-**▶ [Explore the interactive demo](https://chani-song.github.io/offball-value/)** — click a
-player to make them the runner, click a defender to see who gets pulled, click a
-teammate to see what they gain. 45 human-annotated Bundesliga scenes, recomputed
-in the browser as you click.
+**▶ [Off-the-ball value explorer](https://chani-song.github.io/offball-value/)** —
+click a runner, a defender and a beneficiary, and explore how the space changes.
+45 human-annotated Bundesliga scenes, recomputed in the browser as you click.
 
 The same explorer runs locally with a Dash back end
-(`python -m demo_viz.app.interactive_app`), and the same scenes render as
-narrated videos (`python -m demo_viz.export_preview`). See
+(`python -m demo_viz.app.interactive_app`). Off-the-ball investigation examples
+render as videos (`python -m demo_viz.export_strong`). See
 [`demo_viz/`](demo_viz/README.md).
 
 ---

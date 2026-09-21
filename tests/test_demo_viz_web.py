@@ -17,6 +17,7 @@ import unittest
 from pathlib import Path
 
 import matplotlib
+import numpy as np
 
 matplotlib.use("Agg")
 
@@ -291,7 +292,7 @@ class WorkflowTests(unittest.TestCase):
 
 
 class StrongVideoSelectionTests(unittest.TestCase):
-    """The rendered demo videos use exactly the five human-confirmed strong scenes."""
+    """The demo videos use exactly the five annotated `strong` scenes."""
 
     @unittest.skipIf(demo_paths().annotations_xlsx is None, "no shot_annotations.xlsx")
     def test_exactly_the_five_strong_scenes_are_rendered(self):
@@ -364,6 +365,178 @@ class BrowserRoleStateTests(unittest.TestCase):
         report = json.loads(payload)
         self.assertEqual([], report["failures"])
         self.assertGreaterEqual(report["checks"], 15)
+
+
+class PresentationVideoTests(unittest.TestCase):
+    """The demo videos lead with the roles instead of waiting for a detector."""
+
+    def setUp(self):
+        from demo_viz.quantities import attach_quantities
+
+        self.scene = attach_quantities(synthetic_scene(), every=20, grid_resolution_m=4.0)
+
+    def test_every_role_is_lit_from_the_first_played_frame(self):
+        from demo_viz.story import build_presentation_storyboard
+
+        board = build_presentation_storyboard(self.scene)
+        first = board.state(float(self.scene.times[0]))
+        for layer in ("runner", "defender", "beneficiary", "wake"):
+            self.assertEqual(1.0, first[layer], layer)
+
+    def test_the_highlights_never_drop_out_mid_clip(self):
+        from demo_viz.story import build_presentation_storyboard
+
+        board = build_presentation_storyboard(self.scene)
+        for t in self.scene.times:
+            state = board.state(float(t))
+            for layer in ("runner", "defender", "beneficiary", "wake"):
+                self.assertEqual(1.0, state[layer], f"{layer} dropped at t={t:.2f}")
+
+    def test_caption_times_are_fixed_fractions_not_detector_moments(self):
+        from demo_viz.story import PRESENTATION_MARKS, build_presentation_storyboard
+
+        board = build_presentation_storyboard(self.scene)
+        t0 = float(self.scene.times[0])
+        span = float(self.scene.times[-1]) - t0
+        self.assertEqual([0, 1, 2, 3], [b.chain_step for b in board.beats])
+        for beat, mark in zip(board.beats, PRESENTATION_MARKS):
+            self.assertAlmostEqual(t0 + mark * span, beat.start, places=6)
+
+    def test_the_frame_says_the_pacing_is_not_measured(self):
+        from demo_viz.story import build_presentation_storyboard
+
+        build_presentation_storyboard(self.scene)
+        self.assertEqual("presentation", self.scene.provenance.get("beat_pacing"))
+
+    def test_the_intro_names_each_role_once_then_the_cast(self):
+        from demo_viz.story import build_role_intro
+
+        _, marks, seconds = build_role_intro(self.scene)
+        self.assertEqual(["runner", "defender", "beneficiary", "cast"],
+                         [role for _, role, _ in marks])
+        self.assertGreater(seconds, 3.0)
+        self.assertEqual([0.0, 1.0, 2.0, 3.0], [start for start, _, _ in marks])
+
+    def test_a_split_role_is_visited_one_player_at_a_time(self):
+        from demo_viz.story import build_role_intro
+
+        scene = self.scene
+        runners = list(scene.runner_ids)
+        if len(runners) < 2:                      # give the synthetic scene a second runner
+            spare = next(pid for pid, player in scene.players.items()
+                         if player.side == "attack" and pid not in scene.role_ids)
+            scene.runner_ids = tuple(list(runners) + [spare])
+        _, marks, _ = build_role_intro(scene, split_roles=("runner",))
+        runner_marks = [ids for _, role, ids in marks if role == "runner"]
+        self.assertEqual(len(scene.runner_ids), len(runner_marks))
+        for ids in runner_marks:
+            self.assertEqual(1, len(ids))
+
+    def test_roles_standing_together_share_one_shot(self):
+        from demo_viz.story import build_role_intro
+
+        _, marks, _ = build_role_intro(self.scene, split_roles=())
+        self.assertEqual(1, sum(1 for _, role, _ in marks if role == "runner"))
+
+    @unittest.skipIf(demo_paths().annotations_xlsx is None, "no shot_annotations.xlsx")
+    def test_only_widely_separated_roles_are_split(self):
+        import matplotlib
+
+        matplotlib.use("Agg")
+        from demo_viz.export_strong import (SPLIT_SEPARATION_M, _config_for, _role_ids,
+                                            _split_roles, strong_scenes)
+        from demo_viz.loader import load_scene
+        from demo_viz.render.figure import SceneFigure
+        from demo_viz.story import build_presentation_storyboard
+
+        entry = [e for e in strong_scenes() if e.shape.startswith("2R")][0]
+        scene = load_scene(entry.clip_id, surfaces=False, every=25)
+        figure = SceneFigure(scene, build_presentation_storyboard(scene), _config_for(scene))
+        split = _split_roles(scene, figure, 0)
+        for role in ("runner", "defender", "beneficiary"):
+            ids = [i for i in _role_ids(scene, role) if i in scene.players]
+            if len(ids) < 2:
+                self.assertNotIn(role, split)
+                continue
+            points = [scene.view_xy(scene.players[i].xy[0]) for i in ids]
+            spread = max(float(np.linalg.norm(np.asarray(a) - np.asarray(b)))
+                         for a in points for b in points)
+            self.assertEqual(spread > SPLIT_SEPARATION_M, role in split, role)
+
+    def test_the_video_shows_available_space_not_the_difference(self):
+        import matplotlib
+
+        matplotlib.use("Agg")
+        from demo_viz.export_strong import _config_for
+
+        config = _config_for(self.scene)
+        self.assertEqual("residual", config.wake_mode)
+        self.assertFalse(config.delta_outline)
+        for layer in ("lane", "future"):
+            self.assertIn(layer, config.disabled_layers)
+
+
+class HouseStyleTests(unittest.TestCase):
+    """Helvetica everywhere it renders, and no marketing phrasing."""
+
+    def test_the_render_font_stack_leads_with_helvetica_then_arial(self):
+        import matplotlib
+
+        matplotlib.use("Agg")
+        from demo_viz.render.figure import SANS_STACK, sans_stack
+
+        self.assertEqual("Helvetica", SANS_STACK[0])
+        self.assertEqual("Arial", SANS_STACK[1])
+        # at the dpi the demo actually renders at, Helvetica has to survive
+        self.assertEqual("Helvetica", sans_stack(120)[0])
+
+    def test_a_small_dpi_falls_back_rather_than_failing(self):
+        import matplotlib
+
+        matplotlib.use("Agg")
+        from demo_viz.render.figure import FigureConfig, SceneFigure, sans_stack
+        from demo_viz.story import build_storyboard
+
+        # macOS Helvetica cannot load glyphs this small; the fallback must hold
+        self.assertNotEqual("Helvetica", sans_stack(40)[0])
+        scene = synthetic_scene()
+        figure = SceneFigure(scene, build_storyboard(scene),
+                             FigureConfig(width_px=640, height_px=360, dpi=40))
+        figure.draw(0)
+
+    def test_the_browser_and_dash_name_helvetica(self):
+        from demo_viz.app.components import INDEX_CSS, layout
+
+        css = (SITE / "style.css").read_text()
+        self.assertIn("Helvetica", css.split("font:")[1].split(";")[0])
+        self.assertNotIn("Inter", css)
+        self.assertIn("font-family: Helvetica", INDEX_CSS)
+        self.assertIn("Helvetica", str(layout()))
+
+    def test_no_marketing_phrasing_in_the_demo_surface(self):
+        from demo_viz import export_strong
+
+        # The demo surface only. The research sections below the rule describe
+        # the audit pipeline, where "human-confirmed" is that pipeline's own
+        # term and renaming it would misreport what those scripts produce.
+        readme = (REPO_ROOT / "README.md").read_text().split("\n---\n")[0]
+        surfaces = [
+            (SITE / "index.html").read_text(),
+            Path(export_strong.__file__).read_text(),
+            readme,
+        ]
+        for text in surfaces:
+            self.assertNotIn("human-confirmed", text)
+            self.assertNotIn("human confirmed", text)
+
+    def test_the_montage_card_uses_the_agreed_wording(self):
+        import matplotlib
+
+        matplotlib.use("Agg")
+        from demo_viz.export_strong import SUBTITLE, TITLE
+
+        self.assertEqual("Off-the-ball investigation examples", SUBTITLE)
+        self.assertIn("OFF-THE-BALL", TITLE)
 
 
 if __name__ == "__main__":

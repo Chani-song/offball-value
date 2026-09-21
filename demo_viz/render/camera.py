@@ -142,3 +142,61 @@ def _smooth(values: np.ndarray, window: int) -> np.ndarray:
     # a second pass makes the motion feel like a camera operator, not a filter
     padded = np.pad(smooth, (window, window), mode="edge")
     return np.convolve(padded, kernel, mode="same")[window:-window]
+
+
+def focus_box(
+    scene: Scene,
+    index: int,
+    player_ids,
+    aspect: float,
+    margin_m: float = 9.0,
+    minimum_width_m: float = 27.0,
+) -> tuple[float, float, float, float]:
+    """A close viewport around ``player_ids`` at one frame, in view coordinates.
+
+    Used by the role introduction at the head of a demo video: the point is to
+    say *which players these are*, so the box is tight and the ball is ignored.
+    Several players spread across the pitch widen the box rather than splitting
+    it, which keeps the move a simple push-in instead of a cut.
+    """
+
+    points = [
+        scene.view_xy(scene.players[pid].xy[index])
+        for pid in player_ids
+        if pid in scene.players
+    ]
+    if not points:
+        return Camera(scene, aspect).viewport(index, 1.0)
+
+    array = np.asarray(points, dtype=float)
+    lo, hi = array.min(axis=0), array.max(axis=0)
+    centre = (lo + hi) / 2.0
+    extent = (hi - lo) + 2.0 * margin_m
+    width = max(float(extent[0]), float(extent[1]) * aspect, float(minimum_width_m))
+
+    bleed = 4.0
+    half_l = scene.pitch_length / 2.0 + bleed
+    half_w = scene.pitch_width / 2.0 + bleed
+    width = min(width, 2 * half_l)
+    height = min(width / aspect, 2 * half_w)
+    width = height * aspect
+    cx = float(np.clip(centre[0], -half_l + width / 2, half_l - width / 2))
+    cy = float(np.clip(centre[1], -half_w + height / 2, half_w - height / 2))
+    return cx - width / 2, cx + width / 2, cy - height / 2, cy + height / 2
+
+
+def blend_boxes(first, second, weight: float) -> tuple[float, float, float, float]:
+    """Ease between two viewports; widths blend in log space, as in ``Camera``."""
+
+    weight = float(min(1.0, max(0.0, weight)))
+    weight = weight * weight * (3.0 - 2.0 * weight)
+    ax0, ax1, ay0, ay1 = first
+    bx0, bx1, by0, by1 = second
+    a_cx, a_cy, a_w = (ax0 + ax1) / 2, (ay0 + ay1) / 2, ax1 - ax0
+    b_cx, b_cy, b_w = (bx0 + bx1) / 2, (by0 + by1) / 2, bx1 - bx0
+    width = float(np.exp(np.log(a_w) + (np.log(b_w) - np.log(a_w)) * weight))
+    aspect = a_w / max(ay1 - ay0, 1e-6)
+    height = width / aspect
+    cx = a_cx + (b_cx - a_cx) * weight
+    cy = a_cy + (b_cy - a_cy) * weight
+    return cx - width / 2, cx + width / 2, cy - height / 2, cy + height / 2

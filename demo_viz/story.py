@@ -302,3 +302,173 @@ def beat_table(storyboard: Storyboard, scene: Scene) -> str:
             source += f"  [moved {adjusted[key]:+.2f}s for pacing]"
         rows.append(f"  {beat.key:<12} {beat.start:+6.2f}   {source}")
     return "\n".join(rows)
+
+
+# ---------------------------------------------------------------------------
+# presentation storyboards
+#
+# The detectors place beats where the *measured* signals move, which is the
+# right thing for an analysis render and the wrong thing for a talk: on several
+# scenes the first role does not light up until halfway through the clip, and
+# on others there is dead air between "space opens" and "beneficiary gains".
+# The two builders below drive the demo reel instead. Nothing measured moves —
+# the field, the curve and the stat are still per-frame values — only when the
+# captions change and when the highlights appear.
+# ---------------------------------------------------------------------------
+
+#: Where the four captions land, as a fraction of the clip. Fixed, so a scene
+#: can never open on an unlabelled crowd.
+PRESENTATION_MARKS = (0.0, 0.26, 0.50, 0.72)
+
+#: Every role is emphasised from the first played frame, so the viewer never
+#: has to wait to find out who to watch.
+_PLAY_FLOOR = {
+    "runner": 1.0, "defender": 1.0, "beneficiary": 1.0,
+    "wake": 1.0, "ghost": 0.55, "mute": 1.0, "zoom": 1.0,
+}
+
+
+def build_presentation_storyboard(scene: Scene, space_view: str = "available") -> Storyboard:
+    """Four captions on a fixed clock, with every role lit from frame one.
+
+    The layer strengths never drop below :data:`_PLAY_FLOOR`, so runner,
+    defender, beneficiary and the space field are continuously visible for the
+    whole clip. The captions still walk the causal chain, but their times are
+    laid out for reading rather than taken from a detector — which is recorded
+    in ``scene.provenance`` and printed under the timeline.
+    """
+
+    t0 = float(scene.times[0])
+    span = max(float(scene.times[-1]) - t0, 1e-6)
+    scene.provenance["beat_pacing"] = "presentation"
+
+    runner = _name(scene, scene.runner_ids)
+    defender = _name(scene, scene.defender_ids)
+    beneficiary = _name(scene, scene.beneficiary_ids)
+    many_runners = _count(scene, scene.runner_ids) > 1
+    many_defenders = _count(scene, scene.defender_ids) > 1
+    many_beneficiaries = _count(scene, scene.beneficiary_ids) > 1
+
+    captions = (
+        (
+            "THE RUNNER", 0,
+            f"{runner} "
+            + ("run off the ball. These movements are the intervention"
+               if many_runners else
+               "runs off the ball. This movement is the intervention")
+            + " — the ball is somewhere else.",
+        ),
+        (
+            "THE DEFENDER IS PULLED", 1,
+            f"{defender} "
+            + ("commit to the runs and are carried away from the positions"
+               if many_defenders else
+               "commits to the run and is carried away from the position")
+            + " they were holding.",
+        ),
+        (
+            "SPACE", 2,
+            f"Shaded: the space {beneficiary} can use, measured every frame.",
+        ),
+        (
+            "THE BENEFICIARY", 3,
+            f"{beneficiary} "
+            + ("hold that space — teammates who never touched"
+               if many_beneficiaries else
+               "holds that space — a teammate who never touched")
+            + " the ball during the run.",
+        ),
+    )
+
+    beats = []
+    for (title, step, caption), mark in zip(captions, PRESENTATION_MARKS):
+        strengths = dict(_PLAY_FLOOR)
+        beats.append(Beat(
+            key=("runner", "defender", "space", "beneficiary")[step],
+            title=title,
+            caption=caption,
+            start=t0 + mark * span,
+            chain_step=step,
+            strengths=strengths,
+        ))
+    return Storyboard(beats=tuple(beats), blend_seconds=0.6)
+
+
+def build_role_intro(
+    scene: Scene,
+    seconds_per_role: float = 1.0,
+    reset_seconds: float = 0.9,
+    split_roles: Sequence[str] = (),
+    seconds_per_player: float = 0.75,
+) -> tuple[Storyboard, tuple[tuple[float, str, tuple[str, ...]], ...], float]:
+    """The opening: each annotated role named once, then all three together.
+
+    A role listed in ``split_roles`` is visited one player at a time — the
+    caller decides that, because it depends on how far apart they are on the
+    pitch, which is a camera question. The whole role still lights up together;
+    only the camera moves, because the highlight is per role and pretending
+    otherwise would mean drawing a player in a role colour they do not hold.
+
+    Returns the storyboard, the ``(start, role, ids_to_frame)`` keyframes the
+    camera needs, and the total duration. Roles with no annotated player are
+    skipped rather than shown empty.
+    """
+
+    order = [
+        ("runner", list(scene.runner_ids)),
+        ("defender", list(scene.defender_ids)),
+        ("beneficiary", list(scene.beneficiary_ids)),
+    ]
+    present = [(role, [i for i in ids if i in scene.players]) for role, ids in order]
+    present = [(role, ids) for role, ids in present if ids]
+
+    titles = {
+        "runner": ("THE RUNNER", "THE RUNNERS"),
+        "defender": ("THE DEFENDER", "THE DEFENDERS"),
+        "beneficiary": ("THE BENEFICIARY", "THE BENEFICIARIES"),
+    }
+    blurbs = {
+        "runner": ("makes the off-ball run.", "make the off-ball runs."),
+        "defender": ("is the defender who reacts.", "are the defenders who react."),
+        "beneficiary": ("is the teammate the space is measured for.",
+                        "are the teammates the space is measured for."),
+    }
+
+    beats: list[Beat] = []
+    marks: list[tuple[float, str, tuple[str, ...]]] = []
+    shown: dict[str, float] = {"mute": 1.0, "zoom": 1.0}
+    clock = 0.0
+    for position, (role, ids) in enumerate(present):
+        many = len(ids) > 1
+        for earlier, _ in present[:position]:
+            shown[earlier] = 0.45          # keep the ones already named, quietly
+        shown[role] = 1.0
+        if role == "beneficiary":
+            shown["wake"] = 1.0            # the field belongs to the beneficiary
+        title = titles[role][1 if many else 0]
+        caption = f"{_name(scene, ids)} {blurbs[role][1 if many else 0]}"
+        visits = [(pid,) for pid in ids] if (role in split_roles and many) else [tuple(ids)]
+        hold = seconds_per_player if len(visits) > 1 else seconds_per_role
+        for visit in visits:
+            beats.append(Beat(
+                key=role,
+                title=title,
+                caption=caption,
+                start=clock,
+                chain_step=-1,             # the chain belongs to the play, not the intro
+                strengths=dict(shown),
+            ))
+            marks.append((clock, role, visit))
+            clock += hold
+
+    beats.append(Beat(
+        key="cast",
+        title="THE CAST",
+        caption="Runner, defender and beneficiary, as annotated by hand.",
+        start=clock,
+        chain_step=-1,
+        strengths=dict(_PLAY_FLOOR),
+    ))
+    marks.append((clock, "cast", ()))
+    return (Storyboard(beats=tuple(beats), blend_seconds=0.30),
+            tuple(marks), clock + reset_seconds)

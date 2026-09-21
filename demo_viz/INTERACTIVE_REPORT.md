@@ -442,6 +442,59 @@ claiming a gain the panel is not showing.
   cases through the browser copy in headless Chrome. Breaking `move()` in the
   JS copy fails this test, which is the point of it.
 
+## 10d. Helvetica, wording, and the presentation pass on the videos
+
+**Helvetica.** `render/figure.py` sets `font.sans-serif` to Helvetica, then
+Arial, then Liberation/DejaVu, and the browser and Dash name the same stack.
+One catch worth recording: macOS ships Helvetica as a `.ttc` whose glyphs
+FreeType cannot load below about six pixels, so a small-dpi render raised
+`RuntimeError: failed to load glyph` rather than falling back. `sans_stack(dpi)`
+probes the smallest type in the frame at the figure's own dpi and drops any
+leading font that cannot draw it — Helvetica at the 120 dpi the demo renders at,
+Arial for a thumbnail or a test. The chain-rail separator moved from U+276F to
+U+203A for the same reason: matplotlib does not fall back per character.
+
+**Wording.** "five human-confirmed scenes" is gone; the montage card reads
+**Off-the-ball investigation examples**, the site and the README landing read
+**Off-the-ball value explorer**, and the hero line is "click a runner, a
+defender and a beneficiary, and explore how the space changes". The research
+sections of the root README still say *human-confirmed*, because that is the
+audit pipeline's own term for what those scripts produce and renaming it there
+would misreport them.
+
+**The videos lead with the roles.** The beat detectors place their moments
+where the measured signals move, which is right for an analysis render and
+wrong for a talk: the first role did not light up until 47 % of the clip on
+scene 1 and 62 % on scene 5, and scenes 3 and 4 had dead air between "space
+opens" and "beneficiary gains". Each demo video now runs in three phases:
+
+1. **Role introduction.** The clip freezes on its opening frame and each
+   annotated role is named in turn — runner, defender, beneficiary — about a
+   second each, with the camera pushed in on them and the rest of the pitch
+   dropped back. A role whose players stand more than 18 m apart is visited one
+   player at a time; closer than that, one box holds both. In these five scenes
+   the pairs fall cleanly either side of that line (8 m apart, or 16–24 m), so
+   only the two-runner scenes split.
+2. **Reset.** A "cast" beat settles on the framing the play opens with, so the
+   cut into phase 3 is invisible.
+3. **Play.** The scene runs with runner, defender, beneficiary and the space
+   field all at full strength from the first frame to the last. They never drop
+   out, and nothing waits for a detector.
+
+The captions still walk the causal chain, but on fixed fractions of the clip
+(0, 26, 50, 72 %) rather than on detected times. That is a presentation choice,
+not a measurement, so the frame says so under the timeline: *caption marks are
+presentation-paced, not detector times*. Everything measured — the space field,
+the curve, the stat — is still the per-frame value at the frame being drawn,
+which is why `SceneFigure.draw` takes the storyboard's clock separately from
+the scene's.
+
+The held-defender caption no longer reads "pulled 0.0 m" during the
+introduction, and the passing-lane and player-movement layers stay off.
+
+Videos are 1920×1080, 25 fps, about 16–17 s each; the montage is
+`strong_five_montage.mp4`.
+
 ## 11. Known limitations
 
 * **Pitch labels can overlap** when players are bunched — the tether and ghost

@@ -10,6 +10,7 @@ from __future__ import annotations
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Sequence
 
 import numpy as np
 from matplotlib.animation import FFMpegWriter, PillowWriter
@@ -68,6 +69,60 @@ def render_still(
     figure.draw(scene.index_at(float(at_time)))
     path.parent.mkdir(parents=True, exist_ok=True)
     figure.fig.savefig(path, dpi=dpi or figure.config.dpi, facecolor=figure.fig.get_facecolor())
+    return path
+
+
+@dataclass
+class Shot:
+    """One frame of a hand-composed sequence.
+
+    ``index`` is the scene frame to draw. ``story_time`` runs the storyboard on
+    its own clock, so a sequence can hold on one frame while a narration plays
+    over it; ``viewport`` overrides the camera; ``storyboard`` swaps the
+    narration itself, which is how a demo video puts a role introduction in
+    front of the play without rebuilding the figure.
+    """
+
+    index: int
+    story_time: float | None = None
+    viewport: tuple[float, float, float, float] | None = None
+    storyboard: Storyboard | None = None
+
+
+def render_shots(
+    scene: Scene,
+    storyboard: Storyboard,
+    shots: Sequence[Shot],
+    path: Path,
+    config: ExportConfig | None = None,
+    figure_config: FigureConfig | None = None,
+    progress: bool = True,
+) -> Path:
+    """Write an MP4 from an explicit frame list rather than a frame plan."""
+
+    config = config or ExportConfig()
+    figure = SceneFigure(scene, storyboard, figure_config)
+    out_fps = config.fps
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if not has_ffmpeg():
+        raise RuntimeError("ffmpeg is required for MP4 export")
+    writer = FFMpegWriter(
+        fps=out_fps,
+        bitrate=config.bitrate,
+        codec="libx264",
+        extra_args=["-pix_fmt", "yuv420p", "-preset", "slow", "-crf", "18"],
+    )
+    dpi = config.dpi or figure.config.dpi
+    with writer.saving(figure.fig, str(path), dpi):
+        for step, shot in enumerate(shots):
+            figure.storyboard = shot.storyboard or storyboard
+            figure.draw(int(shot.index), story_time=shot.story_time,
+                        viewport=shot.viewport)
+            writer.grab_frame(facecolor=figure.fig.get_facecolor())
+            if progress and step % 25 == 0:
+                print(f"    frame {step + 1}/{len(shots)}", flush=True)
+    figure.storyboard = storyboard
     return path
 
 

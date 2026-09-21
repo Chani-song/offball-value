@@ -7,6 +7,7 @@ artist bookkeeping); the header is drawn once.
 
 from __future__ import annotations
 
+import functools
 import textwrap
 from dataclasses import dataclass, field
 
@@ -45,9 +46,48 @@ def _unicode_font() -> str | None:
 UNICODE_FONT = _unicode_font()
 
 
+#: Helvetica where the machine has it, then Arial, then matplotlib's own font.
+#: Listing all of them means a Linux CI box still renders rather than falling
+#: back to a serif.
+SANS_STACK = ["Helvetica", "Arial", "Helvetica Neue", "Liberation Sans", "DejaVu Sans"]
+
+#: The smallest type the frame sets, in points. The probe below has to clear it.
+_SMALLEST_PT = 6.2
+
+
+@functools.lru_cache(maxsize=None)
+def sans_stack(dpi: int) -> tuple[str, ...]:
+    """The font stack to use at ``dpi``, Helvetica first where it renders.
+
+    macOS ships Helvetica as a ``.ttc`` whose glyphs FreeType cannot load below
+    roughly six pixels, so a small-dpi render — a thumbnail, a test — raises
+    ``RuntimeError: failed to load glyph`` rather than falling back. Arial has
+    no such limit and is the fallback the house style names anyway, so drop any
+    leading font that cannot measure the smallest type in the frame.
+    """
+
+    from matplotlib.backends.backend_agg import FigureCanvasAgg
+
+    probe = Figure(figsize=(1, 1), dpi=dpi)
+    FigureCanvasAgg(probe)
+    renderer = probe.canvas.get_renderer()
+    stack = list(SANS_STACK)
+    while len(stack) > 1:
+        artist = probe.text(0, 0, "Hxg", fontsize=_SMALLEST_PT, family=[stack[0]])
+        try:
+            artist.get_window_extent(renderer)
+            break
+        except Exception:                     # this font cannot draw that small
+            stack.pop(0)
+        finally:
+            artist.remove()
+    return tuple(stack)
+
+
 matplotlib.rcParams.update(
     {
-        "font.family": "DejaVu Sans",
+        "font.family": "sans-serif",
+        "font.sans-serif": SANS_STACK,
         "figure.facecolor": palette.INK,
         "savefig.facecolor": palette.INK,
         "axes.facecolor": palette.INK,
@@ -92,6 +132,8 @@ class SceneFigure:
         width_in = config.width_px / config.dpi
         height_in = config.height_px / config.dpi
         self.fig = Figure(figsize=(width_in, height_in), dpi=config.dpi, facecolor=palette.INK)
+        # rcParams is global, but the usable stack depends on this figure's dpi
+        matplotlib.rcParams["font.sans-serif"] = list(sans_stack(int(config.dpi)))
 
         # --- geometry -----------------------------------------------------
         top, bottom, left = 0.836, 0.112, 0.028
@@ -175,22 +217,37 @@ class SceneFigure:
         return fontsize * factor * self.config.dpi / 72.0 / max(height_px, 1e-6)
 
     # ------------------------------------------------------------------
-    def draw(self, index: int) -> None:
-        """Redraw every panel for one scene frame."""
+    def draw(
+        self,
+        index: int,
+        story_time: float | None = None,
+        viewport: tuple[float, float, float, float] | None = None,
+    ) -> None:
+        """Redraw every panel for one scene frame.
 
-        t = float(self.scene.times[index])
+        ``story_time`` decouples the storyboard's clock from the scene's own, so
+        a caller can hold on one frame while a separate narration runs over it —
+        that is how the role introduction at the head of the demo videos works.
+        The chart, the timeline and the stat always follow the *scene* time, so
+        nothing measured is ever drawn at the wrong moment.
+
+        ``viewport`` overrides the camera for this frame, in view coordinates.
+        """
+
+        scene_t = float(self.scene.times[index])
+        t = scene_t if story_time is None else float(story_time)
         state = self.storyboard.state(t)
         for name in self.config.disabled_layers:
             state[name] = 0.0
         beat = self.storyboard.beat_at(t)
 
-        unit, viewport = self._draw_pitch_layer(index, state)
+        unit, shown = self._draw_pitch_layer(index, state, viewport=viewport)
         self._draw_chain(t)
         self._draw_panel(beat, state, index, unit)
-        self._draw_footer(index, t)
+        self._draw_footer(index, scene_t)
         if self.ax_chart is not None:
-            self._draw_chart(t)
-        self._draw_minimap(index, state, viewport)
+            self._draw_chart(scene_t)
+        self._draw_minimap(index, state, shown)
 
     def _draw_minimap(self, index: int, state: dict[str, float], viewport) -> None:
         if getattr(self, "_minimap_axes", None) is not None:
@@ -207,16 +264,17 @@ class SceneFigure:
         self._minimap_axes = self.fig.axes[-1]
 
     # ------------------------------------------------------------------
-    def _draw_pitch_layer(self, index: int, state: dict[str, float]):
+    def _draw_pitch_layer(self, index: int, state: dict[str, float],
+                          viewport: tuple[float, float, float, float] | None = None):
         scene, ax, config = self.scene, self.ax_pitch, self.config
         ax.clear()
         draw_pitch(ax, scene.pitch_length, scene.pitch_width, config.pitch_style)
 
         unit = 1.0
-        viewport = None
-        if self.camera is not None:
-            x0, x1, y0, y1 = self.camera.viewport(index, state.get("zoom", 1.0))
-            viewport = (x0, x1, y0, y1)
+        if viewport is None and self.camera is not None:
+            viewport = self.camera.viewport(index, state.get("zoom", 1.0))
+        if viewport is not None:
+            x0, x1, y0, y1 = viewport
             ax.set_xlim(x0, x1)
             ax.set_ylim(y0, y1)
             unit = (x1 - x0) / scene.pitch_length
@@ -390,8 +448,11 @@ class SceneFigure:
                 color=_mix(palette.TEXT_MUTED, palette.TEXT_PRIMARY, lit),
             )
             if index < n - 1:
-                ax.text(x0 + width + gap / 2, 0.50, "❯", ha="center", va="center",
-                        fontsize=7.5, color=palette.TEXT_MUTED, alpha=0.55)
+                # U+203A, not the heavier U+276F: Helvetica has no glyph for
+                # that one and matplotlib does not fall back per character.
+                ax.text(x0 + width + gap / 2, 0.50, "\u203a", ha="center", va="center",
+                        fontsize=10.0, weight="bold",
+                        color=palette.TEXT_MUTED, alpha=0.55)
 
     # ------------------------------------------------------------------
     def _draw_panel(self, beat, state: dict[str, float], index: int, unit: float) -> None:
@@ -678,8 +739,18 @@ class SceneFigure:
             colour = _beat_colour(beat.key)
             ax.add_patch(Rectangle((x - 0.0016, bar_y - 0.10), 0.0032, bar_h + 0.20,
                                    facecolor=colour, edgecolor="none"))
-        ax.text(0.0, bar_y - 0.30, f"t = {t:+.2f} s", fontsize=8.0, family="monospace",
+        readout = f"t = {t:+.2f} s"
+        ax.text(0.0, bar_y - 0.30, readout, fontsize=8.0, family="monospace",
                 color=palette.TEXT_SECONDARY, ha="left", va="top")
+        # The marks above are caption times. Say so when they were laid out for
+        # reading rather than taken from a detector, so nobody reads them as
+        # measurements.
+        if scene.provenance.get("beat_pacing") == "presentation":
+            # fixed offset: the readout is monospace, so measuring it with the
+            # body font would under-run and the two would collide
+            ax.text(0.088, bar_y - 0.305,
+                    "caption marks are presentation-paced, not detector times",
+                    fontsize=6.8, color=palette.TEXT_MUTED, ha="left", va="top")
         self._draw_grounding_strip(ax, bar_y - 0.30)
 
     def _draw_grounding_strip(self, ax, y: float) -> None:
