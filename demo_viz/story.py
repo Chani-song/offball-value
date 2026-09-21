@@ -125,6 +125,7 @@ def build_storyboard(
     scene: Scene,
     wake_is_illustrative: bool = False,
     hold_seconds: float = 0.0,
+    space_view: str = "created",
 ) -> Storyboard:
     """Lay the beats onto the scene's own clock.
 
@@ -222,6 +223,8 @@ def build_storyboard(
             key="space",
             title="SPACE OPENS",
             caption=(
+                f"Shaded: the space {beneficiary} can use" + wake_note + "."
+                if space_view == "available" else
                 ("Space the defenders are" if many_defenders else "Space the defender is")
                 + " no longer covering" + wake_note + ". Shaded against the same "
                 + ("defenders held at their" if many_defenders else "defender held at their")

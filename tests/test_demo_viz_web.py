@@ -9,6 +9,8 @@ behave, and that the exported payload is complete and free of anything local.
 from __future__ import annotations
 
 import json
+import re
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -84,12 +86,24 @@ class RoleDockTests(unittest.TestCase):
         selection.apply_click(self.scene, self.other)
         self.assertEqual(selection.beneficiaries, [self.other])
         self.assertEqual(selection.runners, [self.runner])
-        self.assertFalse(selection.armed)
 
-    def test_arming_replaces_rather_than_appending(self):
+    def test_arming_appends_rather_than_replacing(self):
+        """A role is a list: a second compatible click adds, it does not evict."""
+
         selection = Selection(beneficiaries=[self.beneficiary])
         selection.arm("beneficiary")
         selection.apply_click(self.scene, self.other)
+        self.assertEqual(selection.beneficiaries, [self.beneficiary, self.other])
+
+    def test_an_armed_slot_stays_armed_for_several_picks(self):
+        selection = Selection().arm("beneficiary")
+        selection.apply_click(self.scene, self.beneficiary)
+        selection.apply_click(self.scene, self.other)
+        self.assertEqual(selection.beneficiaries, [self.beneficiary, self.other])
+
+    def test_an_armed_click_on_a_member_removes_only_that_player(self):
+        selection = Selection(beneficiaries=[self.beneficiary, self.other]).arm("beneficiary")
+        selection.apply_click(self.scene, self.beneficiary)
         self.assertEqual(selection.beneficiaries, [self.other])
 
     def test_an_armed_slot_ignores_the_wrong_team(self):
@@ -98,6 +112,48 @@ class RoleDockTests(unittest.TestCase):
         selection.apply_click(self.scene, self.defender)
         self.assertEqual(selection.runners, [])
         self.assertEqual(selection.defenders, [self.defender])
+
+    def test_move_relocates_one_player_and_leaves_the_rest(self):
+        """Dragging one runner chip to Beneficiary must move only that player."""
+
+        selection = Selection(runners=[self.runner, self.other],
+                              beneficiaries=[self.beneficiary])
+        selection.move(self.scene, "beneficiary", self.other)
+        self.assertEqual(selection.runners, [self.runner])
+        self.assertEqual(selection.beneficiaries, [self.beneficiary, self.other])
+
+    def test_move_back_again_returns_only_that_player(self):
+        selection = Selection(runners=[self.runner],
+                              beneficiaries=[self.beneficiary, self.other])
+        selection.move(self.scene, "runner", self.other)
+        self.assertEqual(selection.runners, [self.runner, self.other])
+        self.assertEqual(selection.beneficiaries, [self.beneficiary])
+
+    def test_move_onto_the_role_a_player_already_holds_is_a_no_op(self):
+        selection = Selection(runners=[self.runner, self.other])
+        selection.move(self.scene, "runner", self.other)
+        self.assertEqual(selection.runners, [self.runner, self.other])
+
+    def test_move_refuses_the_wrong_side(self):
+        selection = Selection(defenders=[self.defender])
+        selection.move(self.scene, "runner", self.defender)
+        self.assertEqual(selection.runners, [])
+        self.assertEqual(selection.defenders, [self.defender])
+
+    def test_a_player_cannot_hold_both_attacking_roles(self):
+        selection = Selection(runners=[self.runner])
+        selection.move(self.scene, "beneficiary", self.runner)
+        self.assertEqual(selection.runners, [])
+        self.assertEqual(selection.beneficiaries, [self.runner])
+
+    def test_clearing_a_role_empties_only_that_role(self):
+        selection = Selection(runners=[self.runner, self.other],
+                              defenders=[self.defender],
+                              beneficiaries=[self.beneficiary])
+        selection.clear("runner")
+        self.assertEqual(selection.runners, [])
+        self.assertEqual(selection.defenders, [self.defender])
+        self.assertEqual(selection.beneficiaries, [self.beneficiary])
 
     def test_swap_exchanges_the_two_attacking_roles(self):
         selection = Selection(runners=[self.runner], defenders=[self.defender],
@@ -121,14 +177,24 @@ class RoleDockTests(unittest.TestCase):
         self.assertEqual(selection.runners, [])
         self.assertEqual(selection.beneficiaries, [self.runner])
 
-    def test_multiple_defenders_are_kept(self):
+    def test_every_role_accepts_several_players(self):
         selection = Selection()
-        selection.apply_click(self.scene, self.runner)
+        selection.arm("runner")
+        for shirt in ("7", "9"):
+            selection.apply_click(self.scene, self.scene.by_shirt(shirt, "attack").player_id)
+        selection.arm("defender")
         for shirt in ("11", "20", "21"):
             player = self.scene.by_shirt(shirt, "defend")
             if player:
                 selection.apply_click(self.scene, player.player_id)
+        selection.arm("beneficiary")
+        for shirt in ("34", "20"):
+            player = self.scene.by_shirt(shirt, "attack")
+            if player:
+                selection.apply_click(self.scene, player.player_id)
+        self.assertEqual(len(selection.runners), 2)
         self.assertGreaterEqual(len(selection.defenders), 2)
+        self.assertGreaterEqual(len(selection.beneficiaries), 1)
 
     def test_armed_state_survives_a_json_round_trip(self):
         selection = Selection().arm("defender")
@@ -224,5 +290,195 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn("pages: write", text)
 
 
+class StrongVideoSelectionTests(unittest.TestCase):
+    """The rendered demo videos use exactly the five human-confirmed strong scenes."""
+
+    @unittest.skipIf(demo_paths().annotations_xlsx is None, "no shot_annotations.xlsx")
+    def test_exactly_the_five_strong_scenes_are_rendered(self):
+        from demo_viz.export_strong import strong_scenes
+
+        chosen = strong_scenes()
+        self.assertEqual(5, len(chosen))
+        self.assertEqual({c.clip_id for c in select_clips("strong")},
+                         {entry.clip_id for entry in chosen})
+
+    @unittest.skipIf(demo_paths().annotations_xlsx is None, "no shot_annotations.xlsx")
+    def test_no_medium_or_low_scene_reaches_the_montage(self):
+        from demo_viz.export_strong import strong_scenes
+
+        chosen = {entry.clip_id for entry in strong_scenes()}
+        for effect in ("medium", "low"):
+            for clip in select_clips(effect):
+                self.assertNotIn(clip.clip_id, chosen)
+
+    @unittest.skipIf(demo_paths().annotations_xlsx is None, "no shot_annotations.xlsx")
+    def test_scenes_are_numbered_simplest_first(self):
+        from demo_viz.export_strong import strong_scenes
+
+        chosen = strong_scenes()
+        self.assertEqual([1, 2, 3, 4, 5], [entry.position for entry in chosen])
+        self.assertEqual("1R-1D-1B", chosen[0].shape)
+        complexities = [entry.complexity for entry in chosen]
+        self.assertEqual(sorted(complexities), complexities)
+
+    def test_the_passing_lane_is_off_in_the_videos(self):
+        from demo_viz.export_strong import DISABLED_LAYERS
+
+        self.assertIn("lane", DISABLED_LAYERS)
+
+
+class BrowserRoleStateTests(unittest.TestCase):
+    """`js/selection.js` is a hand-written mirror of `core/selection.py`.
+
+    The two can drift, so run the dock's own cases through the browser copy.
+    """
+
+    def test_the_browser_selection_behaves_like_the_python_one(self):
+        import shutil
+        import tempfile
+
+        from demo_viz.web.validate import find_chrome, serve
+
+        chrome = find_chrome()
+        if chrome is None:
+            self.skipTest("no Chrome/Chromium available")
+        harness = REPO_ROOT / "demo_viz" / "web" / "selection_harness.html"
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            shutil.copytree(SITE, root, dirs_exist_ok=True)
+            shutil.copy(harness, root / "selection_harness.html")
+            with serve(root) as port:
+                result = subprocess.run(
+                    [chrome, "--headless", "--disable-gpu", "--no-sandbox",
+                     "--virtual-time-budget=20000", "--dump-dom",
+                     f"http://127.0.0.1:{port}/selection_harness.html"],
+                    capture_output=True, text=True, timeout=120,
+                )
+        dom = result.stdout
+        start = dom.find('<pre id="out">')
+        self.assertGreaterEqual(start, 0, "harness did not render")
+        start = dom.index(">", start) + 1
+        payload = dom[start:dom.index("</pre>", start)].strip()
+        payload = payload.replace("&quot;", '"').replace("&amp;", "&").replace("&lt;", "<")
+        self.assertNotEqual("running", payload, "harness timed out")
+        report = json.loads(payload)
+        self.assertEqual([], report["failures"])
+        self.assertGreaterEqual(report["checks"], 15)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class DefaultViewTests(unittest.TestCase):
+    """The defaults a first-time visitor lands on, in both front ends."""
+
+    SITE = REPO_ROOT / "demo_viz" / "web" / "site"
+
+    #: user-facing label -> internal layer key
+    LAYER_NAMES = {
+        "Runner movement": "trail",
+        "Defender response": "tether",
+        "Space map": "wake",
+        "Passing lane": "lane",
+        "Defender if stayed": "ghost",
+        "Player numbers": "labels",
+        "Suggested players": "candidates",
+        "Player movements": "paths",
+    }
+    ON_BY_DEFAULT = {"trail", "tether", "wake", "ghost", "labels", "candidates"}
+    OFF_BY_DEFAULT = {"lane", "paths"}
+
+    # -- Dash ----------------------------------------------------------
+    def test_dash_layer_labels_are_human_readable(self):
+        from demo_viz.app.components import LAYER_OPTIONS
+
+        labels = {o["label"]: o["value"] for o in LAYER_OPTIONS}
+        expected = dict(self.LAYER_NAMES)
+        expected["Suggested players"] = "candidates"
+        self.assertEqual(labels, expected)
+
+    def test_dash_default_layers(self):
+        from demo_viz.app.components import DEFAULT_LAYER_VALUES
+
+        self.assertEqual(set(DEFAULT_LAYER_VALUES), self.ON_BY_DEFAULT)
+        for key in self.OFF_BY_DEFAULT:
+            self.assertNotIn(key, DEFAULT_LAYER_VALUES)
+
+    def test_dash_space_view_defaults_to_available_space(self):
+        from dash import dcc
+
+        from demo_viz.app.components import layout
+
+        found = [c for c in _walk(layout()) if getattr(c, "id", None) == "wake-mode"]
+        self.assertEqual(len(found), 1)
+        control = found[0]
+        self.assertIsInstance(control, dcc.RadioItems)
+        self.assertEqual(control.value, "space")
+        labels = [o["label"] for o in control.options]
+        self.assertEqual(labels, ["Available space", "Space created"])
+        self.assertEqual(control.options[0]["value"], "space")
+
+    def test_dash_layer_checklist_starts_with_the_intended_boxes(self):
+        from demo_viz.app.components import layout
+
+        found = [c for c in _walk(layout()) if getattr(c, "id", None) == "layers"]
+        self.assertEqual(set(found[0].value), self.ON_BY_DEFAULT)
+
+    def test_dash_dock_has_no_global_swap_button(self):
+        from demo_viz.app.components import layout
+
+        ids = {getattr(c, "id", None) for c in _walk(layout())}
+        self.assertNotIn("btn-swap", ids)
+
+    # -- browser -------------------------------------------------------
+    def _html(self):
+        return (self.SITE / "index.html").read_text()
+
+    def test_browser_layer_labels_are_human_readable(self):
+        html = self._html()
+        for label, key in self.LAYER_NAMES.items():
+            self.assertRegex(html, rf'data-layer="{key}"[^>]*>\s*{label}<')
+
+    def test_browser_default_layers(self):
+        html = self._html()
+        for key in self.ON_BY_DEFAULT:
+            self.assertRegex(html, rf'data-layer="{key}" checked>',
+                             f"{key} should start on")
+        for key in self.OFF_BY_DEFAULT:
+            self.assertNotRegex(html, rf'data-layer="{key}" checked>',
+                                f"{key} should start off")
+
+    def test_browser_space_view_defaults_to_available_space(self):
+        html = self._html()
+        select = html[html.index('id="wake-mode"'):]
+        select = select[: select.index("</select>")]
+        self.assertLess(select.index('value="space"'), select.index('value="gain"'),
+                        "the first option is the default, and it must be Available space")
+        self.assertIn("Available space", select)
+        self.assertIn("Space created", select)
+        self.assertNotIn("Total space", html)
+        self.assertNotIn("Opened space", html)
+
+    def test_browser_initial_layer_state_matches_the_markup(self):
+        app = (self.SITE / "js" / "app.js").read_text()
+        line = next(l for l in app.splitlines() if "layers: new Set(" in l)
+        keys = set(re.findall(r'"(\w+)"', line))
+        self.assertEqual(keys, self.ON_BY_DEFAULT)
+
+    def test_browser_dock_has_no_global_swap_button(self):
+        self.assertNotIn("btn-swap", self._html())
+
+
+def _walk(component):
+    """Every component in a Dash layout tree."""
+
+    yield component
+    children = getattr(component, "children", None)
+    if children is None:
+        return
+    if not isinstance(children, (list, tuple)):
+        children = [children]
+    for child in children:
+        if hasattr(child, "children") or hasattr(child, "id"):
+            yield from _walk(child)

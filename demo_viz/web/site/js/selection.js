@@ -57,19 +57,22 @@ export class Selection {
   /**
    * Assign a clicked player to a role.
    *
-   * 1. an armed slot takes a compatible player, replacing whoever was there;
+   * Every role holds a list, because the annotations contain scenes with
+   * several runners, several defenders and several beneficiaries. A click
+   * toggles membership; it never replaces the whole role.
+   *
+   * 1. an armed slot toggles the clicked player in or out of it, if the
+   *    player is on the right side;
    * 2. otherwise a player who already holds a role loses it;
-   * 3. otherwise the clicked side decides;
-   * 4. an attacker fills Runner when empty, else Beneficiary.
+   * 3. otherwise the clicked side decides, and an attacker joins Runner while
+   *    it is empty, else Beneficiary.
    */
   applyClick(scene, playerId) {
     const player = scene.byId.get(playerId);
     if (!player) return this;
 
     if (this.armed && SIDE[this.pick] === player.side) {
-      if (this.ids(this.pick).includes(playerId)) this.toggle(this.pick, playerId);
-      else this.toggle(this.pick, playerId, true);
-      this.armed = false;
+      this.toggle(this.pick, playerId);
       this.source = "manual";
       return this;
     }
@@ -81,7 +84,7 @@ export class Selection {
     else if (this.pick === "runner" || !this.runners.length) role = "runner";
     else role = "beneficiary";
 
-    this.toggle(role, playerId, role === "runner");
+    this.toggle(role, playerId);
     this.armed = false;
     this.source = "manual";
     this.pick = role;
@@ -89,18 +92,22 @@ export class Selection {
     return this;
   }
 
-  /** Drop a player straight into one slot, which is what a drag means. */
-  assign(scene, role, playerId) {
+  /**
+   * Put one player in one role, leaving the rest of that role alone.
+   * This is what a drag means: dragging one runner chip onto Beneficiary
+   * moves that player and nobody else.
+   */
+  move(scene, role, playerId) {
     const player = scene.byId.get(playerId);
     if (!player || SIDE[role] !== player.side) return this;
-    this.toggle(role, playerId, role !== "defender" ? true : false);
-    if (!this.ids(role).includes(playerId)) this.ids(role).push(playerId);
+    if (!this.ids(role).includes(playerId)) this.toggle(role, playerId);
     this.armed = false;
     this.source = "manual";
     this.pick = role;
     return this;
   }
 
+  /** Exchange the whole Runner and Beneficiary lists (deliberate "move all"). */
   swapAttackRoles() {
     const runners = this.runners;
     this.runners = this.beneficiaries;

@@ -1,0 +1,77 @@
+<!doctype html>
+<!-- Role-state harness: not part of the published site. Loaded by tests/test_demo_viz_web.py.
+     selection.js is a hand-written mirror of demo_viz/core/selection.py, so the two
+     can drift; these are the same cases the Python RoleDockTests run. -->
+<html><head><meta charset="utf-8"><title>selection</title></head>
+<body><pre id="out">running</pre>
+<script type="module">
+import { Selection } from "./js/selection.js";
+
+// A stand-in for a loaded scene: only `byId` and each player's side matter here.
+const scene = { byId: new Map() };
+for (const shirt of ["1", "2", "3", "4"]) scene.byId.set(`a${shirt}`, { id: `a${shirt}`, side: "attack" });
+for (const shirt of ["1", "2", "3", "4"]) scene.byId.set(`d${shirt}`, { id: `d${shirt}`, side: "defend" });
+
+const failures = [];
+let checks = 0;
+function eq(name, got, want) {
+  checks += 1;
+  const a = JSON.stringify(got), b = JSON.stringify(want);
+  if (a !== b) failures.push(`${name}: got ${a}, want ${b}`);
+}
+
+// arming a slot appends rather than replacing
+let s = new Selection({ runners: ["a1"] }).arm("runner");
+s.applyClick(scene, "a2");
+eq("arm appends", s.runners, ["a1", "a2"]);
+
+// the slot stays armed, so a second click appends too
+s.applyClick(scene, "a3");
+eq("arm stays armed", s.runners, ["a1", "a2", "a3"]);
+
+// clicking a player already in the armed role removes only that one
+s.applyClick(scene, "a2");
+eq("armed click removes one", s.runners, ["a1", "a3"]);
+
+// a drag moves one player and leaves the rest of the role alone
+s = new Selection({ runners: ["a1", "a2"], beneficiaries: ["a3"] });
+s.move(scene, "beneficiary", "a1");
+eq("move one runner", s.runners, ["a2"]);
+eq("move one beneficiary", s.beneficiaries, ["a3", "a1"]);
+
+// moving it back
+s.move(scene, "runner", "a1");
+eq("move back runners", s.runners, ["a2", "a1"]);
+eq("move back beneficiaries", s.beneficiaries, ["a3"]);
+
+// moving a player into a role it already holds is a no-op
+const before = [...s.runners];
+s.move(scene, "runner", "a1");
+eq("move no-op", s.runners, before);
+
+// a defender cannot be dropped into an attack role
+s = new Selection({ defenders: ["d1"] });
+s.move(scene, "runner", "d1");
+eq("wrong side refused runners", s.runners, []);
+eq("wrong side refused defenders", s.defenders, ["d1"]);
+
+// nobody holds two attack roles at once
+s = new Selection({ runners: ["a1"] });
+s.move(scene, "beneficiary", "a1");
+eq("no dual attack role runners", s.runners, []);
+eq("no dual attack role beneficiaries", s.beneficiaries, ["a1"]);
+
+// clearing one role leaves the others
+s = new Selection({ runners: ["a1", "a2"], defenders: ["d1"], beneficiaries: ["a3"] });
+s.clear("runner");
+eq("clear one role", [s.runners, s.defenders, s.beneficiaries], [[], ["d1"], ["a3"]]);
+
+// every role holds several players
+s = new Selection({ runners: ["a1", "a2"], defenders: ["d1", "d2", "d3"], beneficiaries: ["a3", "a4"] });
+eq("several runners", s.runners.length, 2);
+eq("several defenders", s.defenders.length, 3);
+eq("several beneficiaries", s.beneficiaries.length, 2);
+
+document.getElementById("out").textContent = JSON.stringify({ checks, failures });
+</script>
+</body></html>

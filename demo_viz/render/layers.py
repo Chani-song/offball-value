@@ -734,8 +734,9 @@ def draw_gain_badge(
     strength: float = 1.0,
     unit: float = 1.0,
     placer: LabelPlacer | None = None,
+    caption: str | None = None,
 ) -> None:
-    """A ring plus a signed badge on the beneficiary at the payoff beat."""
+    """A ring plus a value badge on the beneficiary at the payoff beat."""
 
     if strength <= 0.01 or not scene.beneficiary_ids:
         return
@@ -753,7 +754,7 @@ def draw_gain_badge(
             )
         if placer is not None and strength > 0.45:
             placer.place(
-                view, f"{value:+.1f} space vs held defender", palette.BENEFICIARY,
+                view, caption or f"{value:+.1f} space vs held defender", palette.BENEFICIARY,
                 fontsize=6.6, alpha=strength, chip=True,
                 chip_face=palette.BENEFICIARY, text_color=palette.INK,
                 prefer=("down-left", "down", "left", "down-right"),

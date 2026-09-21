@@ -19,7 +19,7 @@ const state = {
   frame: 0,
   playing: false,
   timer: null,
-  layers: new Set(["trail", "tether", "wake", "lane", "ghost", "labels", "hints"]),
+  layers: new Set(["trail", "tether", "wake", "ghost", "labels", "candidates"]),
   view: "full",              // "full" | "focus"
   hintsOpen: null,           // null = follow the mode, true/false = user's choice
   drag: null,
@@ -230,7 +230,7 @@ function render() {
   pitch.drawPlayers(scene, index, selection, {
     labels: state.layers.has("labels"),
     activeSide,
-    hints: state.layers.has("hints") ? hints : [],
+    hints: state.layers.has("candidates") ? hints : [],
     dragging: state.drag ? state.drag.playerId : null,
   });
 
@@ -284,22 +284,23 @@ function fitBox(margin = 12, minimumWidth = 46, ballAttach = 18) {
 function renderStat(slot, swap) {
   const { cache, selection } = state;
   const node = $("stat-value");
+  const created = $("wake-mode").value === "gain";
   if (!selection.beneficiaries.length) {
-    $("stat-label").textContent = "Opened space";
+    $("stat-label").textContent = created ? "Space created" : "Available space";
     node.textContent = "—";
     node.style.color = P.muted;
     return;
   }
   const factual = cache.combined(selection.beneficiaries, slot).value;
-  if (!swap.length) {
-    $("stat-label").textContent = "Space held";
+  if (!created || !swap.length) {
+    $("stat-label").textContent = "Available space";
     node.textContent = factual.toFixed(1);
     node.style.color = P.beneficiary;
     return;
   }
   const counter = cache.combined(selection.beneficiaries, slot, swap).value;
   const gain = factual - counter;
-  $("stat-label").textContent = "Opened space";
+  $("stat-label").textContent = "Space created";
   node.textContent = `${gain >= 0 ? "+" : ""}${gain.toFixed(1)}`;
   node.style.color = gain >= 0 ? P.beneficiary : P.runner;
 }
@@ -478,17 +479,15 @@ function beginDrag(event, player, fromRole = null) {
     const slot = slotUnder(moveEvent.clientX, moveEvent.clientY);
     const role = slot ? slot.dataset.role : null;
     const droppable = role && ROLE_SIDE[role] === state.drag.side;
-    // dropping one attack role on the other swaps them; say so before the drop
-    const swapping = droppable && fromRole && fromRole !== role
-      && ROLE_SIDE[fromRole] === ROLE_SIDE[role];
+    // dragging a chip from one role to the other moves that player only
+    const moving = droppable && fromRole && fromRole !== role;
     for (const node of document.querySelectorAll(".slot")) {
       node.classList.toggle("is-over", droppable && node === slot);
-      node.classList.toggle("is-swap", Boolean(swapping)
-        && (node === slot || node.dataset.role === fromRole));
+      node.classList.toggle("is-swap", Boolean(moving) && node === slot);
     }
-    ghost.classList.toggle("is-swap", Boolean(swapping));
-    ghost.textContent = swapping
-      ? `⇅ Swap ${ROLE_LABEL[fromRole]} and ${ROLE_LABEL[role]}`
+    ghost.classList.toggle("is-swap", Boolean(moving));
+    ghost.textContent = droppable
+      ? `#${player.shirt} \u2192 ${ROLE_LABEL[role]}`
       : `#${player.shirt} ${player.name}`;
     if (first) render();             // bring the compatible side forward
   };
@@ -508,12 +507,8 @@ function beginDrag(event, player, fromRole = null) {
     if (slot) {
       const role = slot.dataset.role;
       if (ROLE_SIDE[role] === dragged.side) {
-        if (dragged.fromRole && dragged.fromRole !== role
-            && ROLE_SIDE[dragged.fromRole] === ROLE_SIDE[role]) {
-          state.selection.swapAttackRoles();
-        } else {
-          state.selection.assign(state.scene, role, dragged.playerId);
-        }
+        // one chip, one player: the rest of both roles is left alone
+        state.selection.move(state.scene, role, dragged.playerId);
       }
     } else if (!dragged.moved) {
       if (dragged.fromRole) state.selection.arm(dragged.fromRole);
@@ -601,10 +596,6 @@ function bindControls() {
   $("jump-peak").addEventListener("click", () => {
     const frame = peakGainFrame();
     if (frame != null) { state.frame = frame; render(); }
-  });
-  $("btn-swap").addEventListener("click", () => {
-    state.selection.swapAttackRoles();
-    render();
   });
   $("btn-reset").addEventListener("click", () => {
     state.selection = new Selection();

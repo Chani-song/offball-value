@@ -94,17 +94,17 @@ class SelectionTests(unittest.TestCase):
                        for role in ("runner", "defender", "beneficiary"))
             self.assertLessEqual(held, 1)
 
-    def test_only_one_runner_but_several_defenders(self):
+    def test_roles_hold_lists_not_single_players(self):
         selection = Selection()
         selection.apply_click(self.scene, self.runner)
         other = self.scene.by_shirt("9", "attack").player_id
-        selection.pick = "runner"
+        selection.arm("runner")
         selection.apply_click(self.scene, other)
-        self.assertEqual(selection.runners, [other])
+        self.assertEqual(selection.runners, [self.runner, other])
         for shirt in ("20", "21"):
             player = self.scene.by_shirt(shirt, "defend")
             if player is not None:
-                selection.pick = "defender"
+                selection.arm("defender")
                 selection.apply_click(self.scene, player.player_id)
         self.assertGreaterEqual(len(selection.defenders), 1)
 

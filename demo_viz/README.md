@@ -46,34 +46,37 @@ Options: `--port`, `--host`, `--scene <clip id>`, `--mode {manual,annotation,pip
 Beside the pitch:
 
 ```
-ATTACK                    DEFENCE
-  Runner  [ #7 … × ]        Defender [ #11 … × ]
-      ⇅ Swap
-  Beneficiary [ #34 … × ]
+ATTACK                              DEFENCE
+  Runner  [ #10 … × ] [ #7 … × ]      Defender [ #23 … × ] [ #11 … × ]
+  Beneficiary [ #9 … × ]
 ```
 
-Runner and Beneficiary share the **Attack** box with the swap control between
-them, because the same attacker can hold either. Defender is separate.
+Runner and Beneficiary share the **Attack** box, because the same attacker can
+hold either — but never both at once. Defender is separate. **Every role holds
+as many players as the scene needs**; the annotations contain scenes with two
+runners and two defenders.
 
 Click a player on the pitch and they take a role. Four rules, in this order:
 
-1. an **armed slot** (click the slot first) takes a compatible player, replacing
-   whoever was there;
+1. an **armed slot** (click the slot first) **toggles** a compatible player in
+   or out of it, and stays armed for the next click;
 2. otherwise a player who already holds a role **loses it** — a second click is
    always undo;
 3. otherwise the clicked **side** decides: a defender fills Defender;
 4. an attacker fills **Runner** when empty, else **Beneficiary**.
 
 So the quick path is three clicks, and clicking a slot first always wins when
-you want to be explicit. The × on a chip clears that player; `⇅ Swap` exchanges
-the two attacking roles. Rows in the hint list do the same thing as clicking
-that player, which is the fastest way to compare two defenders.
+you want to be explicit. Clicking another compatible player **adds** them; only
+`Reset` or an explicit clear empties a whole role. The × on a chip removes just
+that player. Rows in the hint list do the same thing as clicking that player,
+which is the fastest way to compare two defenders.
 
 While a slot is armed the side that can fill it comes forward and the other
 side drops back, so the pitch itself shows what is clickable.
 
 The browser build additionally supports **drag and drop**: drag a player or a
-chip onto a slot, and dragging the Runner chip onto Beneficiary swaps them. It
+chip onto a slot. Each chip is dragged on its own, so dragging one Runner chip
+onto Beneficiary moves **that player only** and leaves the other runners. It
 uses pointer events rather than the HTML5 drag API, which does not work on SVG.
 The Dash build is click-to-arm only, on purpose — Dash has no drag primitive
 and reliability matters more than the gesture.
@@ -104,8 +107,10 @@ it takes priority.
 
 `Scene` · `Mode` · `Pick` · `Auto triplet` · `Reset` · play/pause ·
 `Run` / `Reaction` / `Peak` jump buttons · time scrubber ·
-layer toggles (`Trail`, `Tether`, `Wake`, `Lane`, `Ghost`, `Labels`, `Paths`,
-`Hints`) · `Full pitch` / `Focus` · `Opened space` vs `Total space` ·
+layer toggles (`Runner movement`, `Defender response`, `Space map`,
+`Defender if stayed`, `Player numbers`, `Suggested players`, and — off by
+default — `Passing lane`, `Player movements`) ·
+`Full pitch` / `Focus` · `Available space` vs `Space created` ·
 `PNG` · `JSON` · `Source`.
 
 `Focus` crops to the picked players; `Full pitch` is the default and is what you
@@ -120,16 +125,19 @@ and the method that found it.
 
 ### What the numbers mean
 
-* **Opened space** — the beneficiary's goal-weighted residual space minus the
-  same quantity with the selected defenders replaced by a no-reaction baseline.
-  Both terms come from `offball_value.goal_weighted_influence`; the app computes
-  them through a factored cache that reproduces
-  `target_residual_influence` exactly (asserted in `tests/test_demo_viz_app.py`).
+* **Available space** (the default) — the beneficiary's goal-weighted residual
+  space, as measured. From `offball_value.goal_weighted_influence`, computed
+  through a factored cache that reproduces `target_residual_influence` exactly
+  (asserted in `tests/test_demo_viz_app.py`).
+* **Space created** — that same quantity minus itself with the selected
+  defenders replaced by a no-reaction baseline. It is a difference against a
+  what-if, so it is the interpretation; Available space is the measurement, and
+  that is why it leads.
 * **Reacts most** — a geometric response score built on
   `offball_value.dynamic_marking`: how much of a defender's motion points at the
   moving goal-side point in front of the runner, plus how close they stay. A
   transparent heuristic, **not** a model of defensive intent.
-* **Gains most** — teammates ranked by that same Opened space difference. This is
+* **Gains most** — teammates ranked by that same Space created difference. This is
   the quantity the demo is about, so the ranking is the real answer rather than a
   proxy.
 * **run starts** — `offball_value.run_onset.detect_kinematic_run_onsets` where it
@@ -154,7 +162,7 @@ is 0.8 ms.
 The page takes URL state, so a pick is linkable:
 `?scene=<clip id>&r=7&d=11&b=34&t=240&fit=1&about=1`.
 
-Screenshots: `exports/web_annotation.png`, `web_manual.png`, `web_swapped.png`,
+Screenshots: `exports/web_annotation.png`, `web_manual.png`, `web_multirole.png`,
 `web_multidefender.png`, `web_medium.png`, `app_dock.png`.
 Reports: [`INTERACTIVE_REPORT.md`](INTERACTIVE_REPORT.md) (explorer and browser
 build), [`APP_REPORT.md`](APP_REPORT.md) (the first Dash pass).
@@ -174,6 +182,11 @@ build), [`APP_REPORT.md`](APP_REPORT.md) (the first Dash pass).
 
 # all five 'strong' scenes, into demo_viz/exports/
 .venv/bin/python -m demo_viz.export_preview --all-strong
+
+# the demo reel: the five 'strong' scenes with their full human annotation
+# (every annotated runner, defender and beneficiary), plus a montage,
+# into demo_viz/exports/strong/
+.venv/bin/python -m demo_viz.export_strong
 
 # interactive viewer in a browser
 .venv/bin/python -m demo_viz.view_scene --scene strong:0

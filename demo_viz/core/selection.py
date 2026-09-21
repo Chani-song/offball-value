@@ -87,14 +87,19 @@ class Selection:
     def apply_click(self, scene, player_id: str) -> "Selection":
         """Assign a clicked player to a role.
 
-        Four rules, in order:
+        Every role holds a list, because the annotations contain scenes with
+        several runners, several defenders and several beneficiaries. A click
+        therefore *toggles membership*; it never replaces the whole role. Only
+        an explicit clear or reset empties one.
 
-        1. if a slot was explicitly armed and the clicked player can fill it,
-           that slot takes the player, replacing whoever was there;
+        Three rules, in order:
+
+        1. an armed slot toggles the clicked player in or out of that slot,
+           provided the player is on the right side;
         2. otherwise a player who already holds a role loses it, so a second
            click is always "undo";
-        3. otherwise the clicked side decides: a defender fills Defender;
-        4. an attacker fills Runner when it is empty, else Beneficiary.
+        3. otherwise the clicked side decides: a defender joins Defender, and
+           an attacker joins Runner while it is empty, else Beneficiary.
         """
 
         player = scene.players.get(player_id)
@@ -102,11 +107,7 @@ class Selection:
             return self
 
         if self.armed and _SIDE.get(self.pick) == player.side:
-            if player_id in self.ids(self.pick):
-                self.toggle(self.pick, player_id)
-            else:
-                self.toggle(self.pick, player_id, single=True)
-            self.armed = False
+            self.toggle(self.pick, player_id)
             self.source = "manual"
             return self
 
@@ -120,11 +121,28 @@ class Selection:
         else:
             role = "beneficiary"                  # runner is taken, so this is a gainer
 
-        self.toggle(role, player_id, single=(role == "runner"))
+        self.toggle(role, player_id)
         self.armed = False
         self.source = "manual"
         self.pick = role
         self.advance()
+        return self
+
+    def move(self, scene, role: str, player_id: str) -> "Selection":
+        """Put one player in one role, leaving the rest of that role alone.
+
+        This is what a drag means: dragging a runner chip onto Beneficiary
+        moves *that* player and nobody else.
+        """
+
+        player = scene.players.get(player_id)
+        if player is None or _SIDE.get(role) != player.side:
+            return self
+        if player_id not in self.ids(role):
+            self.toggle(role, player_id)          # removes it from any other role
+        self.armed = False
+        self.source = "manual"
+        self.pick = role
         return self
 
     def arm(self, role: str) -> "Selection":
@@ -136,7 +154,11 @@ class Selection:
         return self
 
     def swap_attack_roles(self) -> "Selection":
-        """Runner <-> Beneficiary. Both are attackers, so the swap is total."""
+        """Exchange the whole Runner and Beneficiary lists.
+
+        Not part of the primary interaction any more -- per-chip dragging
+        covers the common case -- but kept as a deliberate "move all" action.
+        """
 
         self.runners, self.beneficiaries = self.beneficiaries, self.runners
         self.armed = False

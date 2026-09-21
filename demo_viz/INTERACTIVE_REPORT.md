@@ -313,7 +313,7 @@ In `demo_viz/exports/`:
 | --- | --- |
 | `web_annotation.png` | browser, annotated triplet, Focus view (README hero) |
 | `web_manual.png` | browser, manual pick (#10 / #23 / #34) |
-| `web_swapped.png` | browser, Runner ↔ Beneficiary swapped |
+| `web_multirole.png` | browser, two runners and two defenders at once |
 | `web_multidefender.png` | browser, two pulled defenders, two ghosts |
 | `web_medium.png` | browser, a `medium` scene |
 | `web_source.png` | browser, the Source & method panel |
@@ -338,10 +338,109 @@ A final pass moved implementation detail out of the default view:
   the pitch, where a view control belongs.
 * drag feedback: compatible slots light up in their own role colour, the
   incompatible side visibly dims, the hovered slot gets an inset ring, and
-  dragging one attack role onto the other previews **⇅ Swap** on the cursor
-  before you drop.
+  dragging a chip onto a compatible slot previews `#7 → Beneficiary` on the
+  cursor before you drop.
 * layout: the app is capped at 1840 px wide and 1090 px tall and centred, so a
   1440p screen no longer stretches an aspect-locked pitch into a letterbox.
+
+## 10c. Terminology, layer names, multi-role and the strong-five videos
+
+A later pass changed what things are called and how roles are edited. No
+scientific quantity changed: the same `goal_weighted_influence` residual is
+computed by the same code, and the parity harness still agrees with Python to
+8.5e-14 over 60 random cases.
+
+### The two numbers now say what they are
+
+| was | is | what it actually is |
+| --- | --- | --- |
+| Opened space | **Space created** | factual minus the held-defender baseline — a signed difference against a what-if |
+| Total space | **Available space** | the factual goal-weighted residual space the beneficiary holds |
+
+**Available space is now the default** in the Dash app, in the browser and in
+the rendered videos. It is the measured quantity; the difference against a
+counterfactual is the interpretation, so the measurement leads. "Total space"
+is gone from the interface — it suggested a whole-pitch total, which it never
+was. The video panel reads `AVAILABLE SPACE`, and the beneficiary badge reads
+`29.2 available space` rather than a signed gain.
+
+### Layers are named for what you see
+
+| internal | label |
+| --- | --- |
+| `trail` | Runner movement |
+| `tether` | Defender response |
+| `wake` | Space map |
+| `lane` | Passing lane |
+| `ghost` | Defender if stayed |
+| `labels` | Player numbers |
+| `candidates` | Suggested players |
+| `paths` | Player movements |
+
+On by default: Runner movement, Defender response, Space map, Defender if
+stayed, Player numbers, Suggested players. Off by default: **Passing lane** and
+Player movements, in both front ends. The variable names did not change; only
+the labels did, and `DEFAULT_LAYER_VALUES` in `app/components.py` and the
+initial `state.layers` in `js/app.js` are now the single statements of the
+default set. The browser had been spelling one layer `hints` where Dash spelled
+it `candidates`; they are both `candidates` now.
+
+### Every role holds several players
+
+`Selection.runners` / `.defenders` / `.beneficiaries` were already lists, but
+the interaction treated the first two as single-valued. Now:
+
+* each chip is dragged on its own, and dropping it on another role **moves that
+  player and nobody else** — the rest of the role stays;
+* a click on the pitch with a slot armed **toggles that one player** in or out;
+* `×` removes one player;
+* nobody can hold two attack roles at once, so dragging a runner onto
+  Beneficiary takes it out of Runner;
+* **only an explicit clear or Reset empties a whole role.** Clicking another
+  compatible player never replaces the list.
+
+The global **Runner ↔ Beneficiary swap** button is gone from both front ends —
+it was a whole-list operation in an interface that is now per-player.
+`swap_attack_roles()` survives as a library method (and the `?swap=1` deep link)
+because it is still the honest way to express "exchange the two roles".
+
+### Five strong scenes, rendered from the human annotation
+
+`python -m demo_viz.export_strong` renders only the five `effect == strong`
+clips, with **all** of their annotated runners, defenders and beneficiaries —
+no heuristic auto-triplet. Ordered simplest interaction first:
+
+| # | scene | shape |
+| --- | --- | --- |
+| 1 | `J03WOH:shot_006_P1_1054` | 1R-1D-1B |
+| 2 | `J03WOY:shot_002_P1_0580` | 1R-2D-1B |
+| 3 | `J03WOY:shot_011_P2_0903` | 1R-2D-1B |
+| 4 | `J03WOH:shot_010_P1_1759` | 2R-2D-1B |
+| 5 | `J03WPY:shot_018_P2_1375` | 2R-2D-1B |
+
+Into `demo_viz/exports/strong/`: `strong_01..05.mp4`, `strong_01..05.png`,
+`strong_five_montage.mp4` (74.2 s: a minimal `OFF-BALL SPACE` card, then
+`STRONG n / 5` before each clip), and `manifest.json` recording which scene each
+number is and which roles it used. 1920x1080, 25 fps, the same role colours.
+
+`FigureConfig.disabled_layers` is how the video turns the passing lane off, and
+`build_storyboard(space_view="available")` is how the beat captions stop
+claiming a gain the panel is not showing.
+
+### Tests
+
+`tests/test_demo_viz_web.py` gained three classes and 166 tests pass:
+
+* `DefaultViewTests` — Available space is the default in both front ends, the
+  layer labels are the human-readable ones, Passing lane and Player movements
+  start unchecked, the other six start checked, no `btn-swap` survives, and the
+  strings `Total space` / `Opened space` appear nowhere in the markup.
+* `StrongVideoSelectionTests` — exactly the five strong scenes are rendered, no
+  medium or low scene reaches the montage, they are numbered simplest first.
+* `BrowserRoleStateTests` — `js/selection.js` is a hand-written mirror of
+  `core/selection.py`, so `web/selection_harness.html` runs the dock's own
+  cases through the browser copy in headless Chrome. Breaking `move()` in the
+  JS copy fails this test, which is the point of it.
 
 ## 11. Known limitations
 

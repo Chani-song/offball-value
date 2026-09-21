@@ -58,18 +58,18 @@
       <span id="readout" class="readout">0.00 s</span>
     </div>
     <div class="layers">
-      <label class="check"><input type="checkbox" data-layer="trail" checked> Trail</label>
-      <label class="check"><input type="checkbox" data-layer="tether" checked> Tether</label>
-      <label class="check"><input type="checkbox" data-layer="wake" checked> Wake</label>
-      <label class="check"><input type="checkbox" data-layer="lane" checked> Lane</label>
-      <label class="check"><input type="checkbox" data-layer="ghost" checked> Ghost</label>
-      <label class="check"><input type="checkbox" data-layer="labels" checked> Labels</label>
-      <label class="check"><input type="checkbox" data-layer="hints" checked> Hints</label>
-      <label class="check"><input type="checkbox" data-layer="paths"> Paths</label>
+      <label class="check"><input type="checkbox" data-layer="trail" checked> Runner movement</label>
+      <label class="check"><input type="checkbox" data-layer="tether" checked> Defender response</label>
+      <label class="check"><input type="checkbox" data-layer="wake" checked> Space map</label>
+      <label class="check"><input type="checkbox" data-layer="ghost" checked> Defender if stayed</label>
+      <label class="check"><input type="checkbox" data-layer="labels" checked> Player numbers</label>
+      <label class="check"><input type="checkbox" data-layer="candidates" checked> Suggested players</label>
+      <label class="check"><input type="checkbox" data-layer="lane"> Passing lane</label>
+      <label class="check"><input type="checkbox" data-layer="paths"> Player movements</label>
       <span class="spacer"></span>
       <select id="wake-mode" class="mini">
-        <option value="gain">Opened space</option>
-        <option value="space">Total space</option>
+        <option value="space">Available space</option>
+        <option value="gain">Space created</option>
       </select>
     </div>
   </section>
@@ -82,7 +82,6 @@
           <div class="slot-title" style="color:#FF2D87">Runner</div>
           <div class="slot-body" id="body-runner"></div>
         </div>
-        <div class="swap-row"><button id="btn-swap" class="btn pill">⇅ Swap</button></div>
         <div class="slot" id="slot-beneficiary" data-role="beneficiary">
           <div class="slot-title" style="color:#5CE8F5">Beneficiary</div>
           <div class="slot-body" id="body-beneficiary"></div>
@@ -103,7 +102,7 @@
     </div>
 
     <div class="card stat">
-      <div class="label" id="stat-label">Opened space</div>
+      <div class="label" id="stat-label">Available space</div>
       <div class="stat-value" id="stat-value">—</div>
       <div id="chart" class="chart"></div>
     </div>
@@ -134,11 +133,12 @@
     <dl class="facts">
       <dt class="tag-measured">Measured</dt>
       <dd>Player and ball positions from IDSSE Bundesliga tracking at 25 Hz.
-          <b>Opened space</b> is the beneficiary's goal-weighted residual space minus the
-          same quantity with the selected defenders replaced by a no-reaction baseline,
-          computed with <code>offball_value.goal_weighted_influence</code> on the
-          Fernández &amp; Bornn (2018) influence surface. The browser recomputes it for
-          whichever players you pick; it agrees with the Python implementation to
+          <b>Available space</b> is the beneficiary's goal-weighted residual space under
+          the observed defensive configuration. <b>Space created</b> is that quantity
+          minus the same one with the selected defenders replaced by a no-reaction
+          baseline. Both come from <code>offball_value.goal_weighted_influence</code> on
+          the Fernández &amp; Bornn (2018) influence surface. The browser recomputes them
+          for whichever players you pick; they agree with the Python implementation to
           float64 precision.</dd>
 
       <dt class="tag-human">Human</dt>

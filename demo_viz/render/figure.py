@@ -72,6 +72,8 @@ class FigureConfig:
     camera: CameraConfig = field(default_factory=CameraConfig)
     wake_mode: str = "residual"       # "residual" | "delta" | "geometric" | "off"
     delta_outline: bool = True        # outline the factual-minus-held difference
+    #: layers forced off for this render, whatever the storyboard asks for
+    disabled_layers: tuple[str, ...] = ()
     show_chart: bool = True
     show_numbers: bool = True
     use_camera: bool = True
@@ -178,6 +180,8 @@ class SceneFigure:
 
         t = float(self.scene.times[index])
         state = self.storyboard.state(t)
+        for name in self.config.disabled_layers:
+            state[name] = 0.0
         beat = self.storyboard.beat_at(t)
 
         unit, viewport = self._draw_pitch_layer(index, state)
@@ -306,8 +310,14 @@ class SceneFigure:
             L.draw_ghost(ax, scene, index, state["ghost"], unit=unit,
                          label=True, placer=placer, marker=False)
         if state["beneficiary"] > 0.45:
-            L.draw_gain_badge(ax, scene, index, self._gain_at(index),
-                              strength=state["beneficiary"], unit=unit, placer=placer)
+            if config.wake_mode == "delta":
+                value = self._gain_at(index)
+                caption = f"{value:+.1f} space created"
+            else:
+                value = self._available_at(index)
+                caption = f"{value:.1f} available space"
+            L.draw_gain_badge(ax, scene, index, value, strength=state["beneficiary"],
+                              unit=unit, placer=placer, caption=caption)
         L.draw_shot_marker(ax, scene, index, strength=1.0, unit=unit, placer=placer)
         # The gain badge already names the difference; do not say it twice.
         if delta_drawn and state["wake"] > 0.45 and state["beneficiary"] <= 0.45:
@@ -325,6 +335,14 @@ class SceneFigure:
             return 0.0
         t = float(self.scene.times[index])
         return float(gain[int(np.argmin(np.abs(times - t)))])
+
+    def _available_at(self, index: int) -> float:
+        times = self.scene.series.get("_surface_t")
+        series = self.scene.series.get("_factual_value")
+        if times is None or series is None:
+            return 0.0
+        t = float(self.scene.times[index])
+        return float(series[int(np.argmin(np.abs(times - t)))])
 
     def _marker_radius_px(self, unit: float) -> float:
         width_px = self.ax_pitch.get_window_extent().width
@@ -430,24 +448,34 @@ class SceneFigure:
             return y
         t = float(scene.times[index])
         slot = int(np.argmin(np.abs(times - t)))
-        value = float(gain[slot])
-        peak = float(np.nanmax(np.abs(gain))) or 1.0
+        # The headline number names the same quantity the pitch is shading.
+        if self.config.wake_mode == "delta":
+            series = gain
+        else:
+            series = scene.series.get("_factual_value", gain)
+        value = float(series[slot])
+        peak = float(np.nanmax(np.abs(series))) or 1.0
         colour = palette.DELTA_POS if value >= 0 else palette.DELTA_NEG
 
-        ax.text(0.0, y, tracked("SPACE GAINED VS HELD DEFENDER"), fontsize=7.2,
+        ax.text(0.0, y, tracked(self._stat_title()), fontsize=7.2,
                 weight="bold", color=palette.TEXT_MUTED, va="top", ha="left")
         y -= self._line_step(7.2) + 0.014
-        ax.text(0.0, y, f"{value:+.1f}", fontsize=26, weight="bold", color=colour,
+        text = f"{value:+.1f}" if self.config.wake_mode == "delta" else f"{value:.1f}"
+        ax.text(0.0, y, text, fontsize=26, weight="bold", color=colour,
                 va="top", ha="left")
         ax.text(0.31, y - 0.008, "goal-weighted\nspace units", fontsize=7.0,
                 color=palette.TEXT_MUTED, va="top", ha="left", linespacing=1.45)
         y -= self._line_step(26, factor=1.10)
         # a signed bar makes the sign and magnitude readable at a glance
         ax.add_patch(Rectangle((0.0, y), 1.0, 0.010, facecolor=palette.PANEL, edgecolor="none"))
-        ax.add_patch(Rectangle((0.5, y), 0.5 * value / peak, 0.010,
-                               facecolor=colour, edgecolor="none"))
-        ax.add_patch(Rectangle((0.4985, y - 0.005), 0.003, 0.020,
-                               facecolor=palette.TEXT_MUTED, edgecolor="none"))
+        if self.config.wake_mode == "delta":
+            ax.add_patch(Rectangle((0.5, y), 0.5 * value / peak, 0.010,
+                                   facecolor=colour, edgecolor="none"))
+            ax.add_patch(Rectangle((0.4985, y - 0.005), 0.003, 0.020,
+                                   facecolor=palette.TEXT_MUTED, edgecolor="none"))
+        else:
+            ax.add_patch(Rectangle((0.0, y), max(value, 0.0) / peak, 0.010,
+                                   facecolor=colour, edgecolor="none"))
         return y - 0.028
 
     def _draw_cast(self, ax, y: float, state: dict[str, float]) -> float:
@@ -542,6 +570,10 @@ class SceneFigure:
             lines.append(current)
         return "\n".join(lines)
 
+    def _stat_title(self) -> str:
+        return ("SPACE CREATED VS HELD DEFENDER" if self.config.wake_mode == "delta"
+                else "AVAILABLE SPACE")
+
     @staticmethod
     def _divider(ax, y: float) -> float:
         ax.plot([0.0, 1.0], [y, y], color=palette.GRID, lw=1.0, solid_capstyle="butt")
@@ -562,10 +594,10 @@ class SceneFigure:
         factual = scene.series.get("_factual_value")
         counter = scene.series.get("_counterfactual_value")
 
-        ax.text(0.0, 1.235, tracked("SPACE HELD BY THE BENEFICIARY"),
+        ax.text(0.0, 1.235, tracked("AVAILABLE SPACE"),
                 transform=ax.transAxes, fontsize=7.8, weight="bold",
                 color=palette.TEXT_SECONDARY, va="bottom", ha="left")
-        ax.text(0.0, 1.06, "goal-weighted residual space (repo v0.1) · higher = more usable space",
+        ax.text(0.0, 1.06, "beneficiary · goal-weighted residual space (repo v0.1)",
                 transform=ax.transAxes, fontsize=6.8, color=palette.TEXT_MUTED,
                 va="bottom", ha="left")
 

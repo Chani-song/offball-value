@@ -28,3 +28,15 @@ export const ROLE_COLOUR = {
 export const ROLE_SIDE = { runner: "attack", beneficiary: "attack", defender: "defend" };
 
 export const ROLE_LABEL = { runner: "Runner", beneficiary: "Beneficiary", defender: "Defender" };
+
+/** User-facing names for the overlay layers; the internal keys stay as they are. */
+export const LAYER_LABEL = {
+  trail: "Runner movement",
+  tether: "Defender response",
+  wake: "Space map",
+  lane: "Passing lane",
+  ghost: "Defender if stayed",
+  labels: "Player numbers",
+  candidates: "Suggested players",
+  paths: "Player movements",
+};

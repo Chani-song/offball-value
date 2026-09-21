@@ -186,7 +186,6 @@ def _selection_callback(app):
         Input("pitch", "clickData"),
         Input("btn-reset", "n_clicks"),
         Input("btn-auto", "n_clicks"),
-        Input("btn-swap", "n_clicks"),
         Input("slot-runner", "n_clicks"),
         Input("slot-beneficiary", "n_clicks"),
         Input("slot-defender", "n_clicks"),
@@ -197,7 +196,7 @@ def _selection_callback(app):
         State("store-scene", "data"),
         prevent_initial_call=True,
     )
-    def on_pick(click, _reset, _auto, _swap, _sr, _sb, _sd, _rows, _clears,
+    def on_pick(click, _reset, _auto, _sr, _sb, _sd, _rows, _clears,
                 pick, stored, scene_store):
         trigger = callback_context.triggered_id
         fired = callback_context.triggered[0].get("value") or 0
@@ -210,10 +209,6 @@ def _selection_callback(app):
 
         if trigger == "btn-reset":
             return Selection(pick="runner", source="manual").to_dict(), "runner"
-
-        if trigger == "btn-swap":
-            selection.swap_attack_roles()
-            return selection.to_dict(), selection.pick
 
         if isinstance(trigger, str) and trigger.startswith("slot-"):
             selection.arm(trigger.split("-", 1)[1])
@@ -338,7 +333,8 @@ def _render_callback(app):
             active_side=active_side,
         )
         chart = space_chart(scene, cache, selection, index, freeze_index)
-        stat_label, stat_value, stat_style = _stat(bundle, selection, freeze_index, index)
+        stat_label, stat_value, stat_style = _stat(
+            bundle, selection, freeze_index, index, wake_mode or "space")
         bodies = [_slot_body(scene, selection, role)
                   for role in ("runner", "beneficiary", "defender")]
         styles = [_slot_style(selection, role)
@@ -357,18 +353,16 @@ def _render_callback(app):
 
 def _hint(selection: Selection) -> str:
     if selection.armed:
-        return f"Now click a{'n' if selection.pick == 'attacker' else ''} " + {
-            "runner": "attacking player.",
-            "beneficiary": "attacking player.",
-            "defender": "defending player.",
-        }[selection.pick]
+        return "Click attacking players to add or remove them." \
+            if selection.pick in ("runner", "beneficiary") \
+            else "Click defending players to add or remove them."
     if not selection.runners:
         return "Click an attacker, or a slot then a player."
     if not selection.defenders:
         return "Click a defender. Ringed ones react most."
     if not selection.beneficiaries:
         return "Click a teammate. Ringed ones gain most."
-    return "Click a slot to replace it, or × to clear."
+    return "Drag a chip to another role, or × to remove one player."
 
 
 _ACTIVE_SIDE = {"runner": "attack", "beneficiary": "attack", "defender": "defend"}
@@ -465,21 +459,23 @@ def _team_key(colour, team, side):
     )
 
 
-def _stat(bundle, selection: Selection, freeze_index, index):
+def _stat(bundle, selection: Selection, freeze_index, index, wake_mode="space"):
     cache = bundle.cache
     style = {"fontSize": "30px", "fontWeight": 700, "lineHeight": "1.05"}
+    created = wake_mode == "gain"
     if not selection.beneficiaries:
-        return "Opened space", "—", {**style, "color": palette.TEXT_MUTED}
+        label = "Space created" if created else "Available space"
+        return label, "—", {**style, "color": palette.TEXT_MUTED}
     slot = cache.slot_for(index)
     factual = cache.combined(selection.beneficiaries, slot)
-    if not selection.defenders or freeze_index is None:
-        return ("Space held", f"{factual.value:.1f}",
+    if not created or not selection.defenders or freeze_index is None:
+        return ("Available space", f"{factual.value:.1f}",
                 {**style, "color": palette.BENEFICIARY})
     swap = tuple((d, int(freeze_index), "hold") for d in selection.defenders)
     counter = cache.combined(selection.beneficiaries, slot, swap)
     gain = factual.value - counter.value
     colour = palette.BENEFICIARY if gain >= 0 else palette.RUNNER
-    return "Opened space", f"{gain:+.1f}", {**style, "color": colour}
+    return "Space created", f"{gain:+.1f}", {**style, "color": colour}
 
 
 def _candidates(bundle, selection: Selection, freeze_index, index):

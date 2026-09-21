@@ -8,16 +8,21 @@ from .. import palette
 from ..core.figures import DEFAULT_LAYERS
 from .state import scene_options
 
+#: User-facing layer names. The internal keys stay as they are so the renderer
+#: and the browser build keep speaking the same language.
 LAYER_OPTIONS = [
-    {"label": "Trail", "value": "trail"},
-    {"label": "Tether", "value": "tether"},
-    {"label": "Wake", "value": "wake"},
-    {"label": "Lane", "value": "lane"},
-    {"label": "Ghost", "value": "ghost"},
-    {"label": "Labels", "value": "labels"},
-    {"label": "Paths", "value": "paths"},
-    {"label": "Hints", "value": "candidates"},
+    {"label": "Runner movement", "value": "trail"},
+    {"label": "Defender response", "value": "tether"},
+    {"label": "Space map", "value": "wake"},
+    {"label": "Defender if stayed", "value": "ghost"},
+    {"label": "Player numbers", "value": "labels"},
+    {"label": "Suggested players", "value": "candidates"},
+    {"label": "Passing lane", "value": "lane"},
+    {"label": "Player movements", "value": "paths"},
 ]
+
+#: On by default; Passing lane and Player movements stay off.
+DEFAULT_LAYER_VALUES = ["trail", "tether", "wake", "ghost", "labels", "candidates"]
 
 MODE_OPTIONS = [
     {"label": "Manual", "value": "manual"},
@@ -210,7 +215,7 @@ def _pitch_card():
                    "marginTop": "10px", "flexWrap": "wrap"},
             children=[
                 dcc.Checklist(
-                    id="layers", options=LAYER_OPTIONS, value=list(DEFAULT_LAYERS),
+                    id="layers", options=LAYER_OPTIONS, value=list(DEFAULT_LAYER_VALUES),
                     inline=True, className="chips",
                     inputStyle={"marginRight": "5px"},
                     labelStyle={"marginRight": "14px", "fontSize": "12px"},
@@ -218,9 +223,9 @@ def _pitch_card():
                 html.Div(style={"flex": "1 1 auto"}),
                 dcc.RadioItems(
                     id="wake-mode",
-                    options=[{"label": "Opened space", "value": "gain"},
-                             {"label": "Total space", "value": "space"}],
-                    value="gain", inline=True, className="chips",
+                    options=[{"label": "Available space", "value": "space"},
+                             {"label": "Space created", "value": "gain"}],
+                    value="space", inline=True, className="chips",
                     inputStyle={"marginRight": "5px"},
                     labelStyle={"marginRight": "12px", "fontSize": "12px"},
                 ),
@@ -387,15 +392,7 @@ def _role_dock():
                 html.Div("Attack", style={**LABEL, "marginBottom": "7px",
                                           "color": palette.ATTACK_NEUTRAL}),
                 _slot("runner", "Runner", palette.RUNNER),
-                html.Div(
-                    style={"display": "flex", "justifyContent": "center",
-                           "margin": "5px 0"},
-                    children=[html.Button(
-                        "⇅ Swap", id="btn-swap", n_clicks=0,
-                        style={**BUTTON, "padding": "3px 12px", "fontSize": "11px",
-                               "borderRadius": "999px"},
-                    )],
-                ),
+                html.Div(style={"height": "8px"}),
                 _slot("beneficiary", "Beneficiary", palette.BENEFICIARY),
             ],
         ),
