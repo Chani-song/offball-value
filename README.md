@@ -19,6 +19,14 @@ Research prototype for studying how an off-ball run reallocates a defender
 between the runner's direct threat and the attacking opportunities left to
 teammates.
 
+### Video examples
+
+[![Off-the-ball investigation examples](demo_viz/exports/strong/strong_01.png)](demo_viz/exports/strong/strong_five_montage.mp4)
+
+▶ **[Watch the 5-scene video montage](demo_viz/exports/strong/strong_five_montage.mp4)**
+
+Five human-annotated Bundesliga examples showing the runner, responding defender, beneficiary, and available space throughout the play.
+
 ## Research question
 
 > Can we identify off-ball movements that retain attacking threat even after a
