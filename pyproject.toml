@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "offball-value"
 version = "0.1.0"
-description = "Draft research scaffold for quantifying off-ball attacking value in soccer."
+description = "Research prototype for feasible local off-ball attacker-defender games in soccer."
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [
@@ -16,10 +16,25 @@ dependencies = [
   "numpy>=1.26",
   "scipy>=1.12",
   "matplotlib>=3.8",
+  # pandas needs this to read shot_annotations.xlsx, which the whole demo
+  # pipeline keys off; it was previously only installed by hand.
+  "openpyxl>=3.1",
   "requests>=2.31",
   "pyarrow>=15.0",
   "jupyter>=1.0",
   "statsbombpy>=1.16.0",
+]
+
+[project.optional-dependencies]
+# Only demo_viz's static HTML viewer needs this; every other part of the
+# renderer works without it.
+demo = [
+  "plotly>=5.20",
+]
+# demo_viz's interactive explorer (demo_viz/app).
+app = [
+  "plotly>=5.20",
+  "dash>=3.0",
 ]
 
 [tool.setuptools]

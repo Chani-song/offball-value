@@ -1,33 +1,46 @@
-# Open datasets for this project
+# Datasets
 
-## 1. Metrica Sports sample data
-- URL: https://github.com/metrica-sports/sample-data
-- Type: synchronized event + tracking
-- Best for: quick prototyping, parser development, visualization
-- Caveat: tiny sample
+## Primary dataset: IDSSE Bundesliga
 
-## 2. SkillCorner open data
-- URL: https://github.com/SkillCorner/opendata
-- Type: broadcast tracking + dynamic events + phases of play
-- Best for: actual off-ball movement prototypes on open tracking data
-- Caveat: only 10 matches, repository structure may evolve
+The current research pipeline uses IDSSE, an integrated dataset of seven full
+matches from the 2022/23 Bundesliga and 2. Bundesliga.
 
-## 3. StatsBomb open data
-- URL: https://github.com/statsbomb/open-data
-- Type: event data, lineups, selected 360 freeze frames
-- Best for: event-level contextual checks, option maps at decision moments
-- Caveat: not continuous full tracking
+- Tracking: every player and the ball at 25 Hz
+- Events: synchronized match events
+- Metadata: teams, players, roles, and pitch information
+- Dataset DOI: <https://doi.org/10.6084/m9.figshare.28196177>
+- Paper DOI: <https://doi.org/10.1038/s41597-025-04505-y>
+- License: CC BY 4.0
 
-## 4. Bundesliga integrated event + position dataset
-- Paper: https://www.nature.com/articles/s41597-025-04505-y
-- Dataset landing page: https://springernature.figshare.com/articles/dataset/An_integrated_dataset_of_spatiotemporal_and_event_data_in_elite_soccer/28196177
-- Type: official integrated event + position data
-- Best for: benchmark-style experiments and reproducibility
-- Caveat: download flow is less convenient than the GitHub datasets above
+IDSSE is used because the project needs continuous 22-player motion to detect
+off-ball onset, preserve the 11-v-11 background, and generate counterfactual
+defender responses.
 
-## Suggested practical order
+## Secondary datasets retained locally
 
-1. Metrica
-2. SkillCorner
-3. StatsBomb 360
-4. Bundesliga integrated dataset
+The repository also contains loader support or local copies for other open
+sources. They are not used in the current v0.1 local-game audit.
+
+### Metrica Sports sample data
+
+- Type: synchronized events and tracking
+- Use: parser and visualization prototyping
+- Limitation: very small sample
+
+### SkillCorner open data
+
+- Type: broadcast tracking, dynamic events, and phases of play
+- Use: possible external method checks
+- Limitation: provider format and visibility differ from IDSSE
+
+### StatsBomb open data and 360
+
+- Type: events and selected freeze frames
+- Use: event-level or static option-map validation
+- Limitation: not continuous full tracking for all match states
+
+## Repository policy
+
+Raw datasets are stored below `data/raw/` and ignored by Git. Small derived
+human-review payloads may be committed only when they are needed to audit the
+method, remain within the source license, and include attribution.

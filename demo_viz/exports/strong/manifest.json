@@ -1,0 +1,138 @@
+{
+  "generated_at": "2026-09-21T15:07:08-0400",
+  "space_view": "available",
+  "roles": "human annotation (shot_annotations.xlsx, effect=strong)",
+  "scenes": [
+    {
+      "position": 1,
+      "scene_id": "J03WOH:shot_006_P1_1054",
+      "shape": "1R-1D-1B",
+      "title": "Fortuna Düsseldorf vs SSV Jahn Regensburg",
+      "roles": {
+        "runner": [
+          "7"
+        ],
+        "defender": [
+          "11"
+        ],
+        "beneficiary": [
+          "34"
+        ]
+      },
+      "space_view": "available",
+      "layers_off": [
+        "lane"
+      ],
+      "files": [
+        "strong_01.png",
+        "strong_01.mp4"
+      ]
+    },
+    {
+      "position": 2,
+      "scene_id": "J03WOY:shot_002_P1_0580",
+      "shape": "1R-2D-1B",
+      "title": "Fortuna Düsseldorf vs F.C. Hansa Rostock",
+      "roles": {
+        "runner": [
+          "23"
+        ],
+        "defender": [
+          "6",
+          "34"
+        ],
+        "beneficiary": [
+          "9"
+        ]
+      },
+      "space_view": "available",
+      "layers_off": [
+        "lane"
+      ],
+      "files": [
+        "strong_02.png",
+        "strong_02.mp4"
+      ]
+    },
+    {
+      "position": 3,
+      "scene_id": "J03WOY:shot_011_P2_0903",
+      "shape": "1R-2D-1B",
+      "title": "F.C. Hansa Rostock vs Fortuna Düsseldorf",
+      "roles": {
+        "runner": [
+          "18"
+        ],
+        "defender": [
+          "25",
+          "15"
+        ],
+        "beneficiary": [
+          "34"
+        ]
+      },
+      "space_view": "available",
+      "layers_off": [
+        "lane"
+      ],
+      "files": [
+        "strong_03.png",
+        "strong_03.mp4"
+      ]
+    },
+    {
+      "position": 4,
+      "scene_id": "J03WOH:shot_010_P1_1759",
+      "shape": "2R-2D-1B",
+      "title": "Fortuna Düsseldorf vs SSV Jahn Regensburg",
+      "roles": {
+        "runner": [
+          "10",
+          "7"
+        ],
+        "defender": [
+          "23",
+          "11"
+        ],
+        "beneficiary": [
+          "9"
+        ]
+      },
+      "space_view": "available",
+      "layers_off": [
+        "lane"
+      ],
+      "files": [
+        "strong_04.png",
+        "strong_04.mp4"
+      ]
+    },
+    {
+      "position": 5,
+      "scene_id": "J03WPY:shot_018_P2_1375",
+      "shape": "2R-2D-1B",
+      "title": "Fortuna Düsseldorf vs 1. FC Nürnberg",
+      "roles": {
+        "runner": [
+          "9",
+          "25"
+        ],
+        "defender": [
+          "4",
+          "13"
+        ],
+        "beneficiary": [
+          "11"
+        ]
+      },
+      "space_view": "available",
+      "layers_off": [
+        "lane"
+      ],
+      "files": [
+        "strong_05.png",
+        "strong_05.mp4"
+      ]
+    }
+  ]
+}

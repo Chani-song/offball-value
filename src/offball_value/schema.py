@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import math
 from typing import Any, Literal
 
 
@@ -37,6 +38,8 @@ class FrameSnapshot:
     ball: BallSnapshot | None
     players: list[PlayerSnapshot]
     possession_team: str | None = None
+    possession_player_id: str | None = None
+    possession_group: str | None = None
     raw: dict[str, Any] = field(default_factory=dict)
 
 
@@ -56,11 +59,25 @@ class EventRecord:
     y_end: float | None = None
     frame_start: int | None = None
     frame_end: int | None = None
+    receiver_id: str | None = None
+    receiver_team: str | None = None
+    outcome: str | None = None
     raw: dict[str, Any] = field(default_factory=dict)
 
 
+def _is_missing(x: Any) -> bool:
+    if x is None:
+        return True
+    if isinstance(x, str) and x.strip() == "":
+        return True
+    try:
+        return math.isnan(float(x))
+    except (TypeError, ValueError):
+        return False
+
+
 def _to_float(x: Any) -> float | None:
-    if x in [None, ""]:
+    if _is_missing(x):
         return None
     try:
         return float(x)
@@ -69,12 +86,20 @@ def _to_float(x: Any) -> float | None:
 
 
 def _to_int(x: Any) -> int | None:
-    if x in [None, ""]:
+    if _is_missing(x):
         return None
     try:
         return int(float(x))
     except (TypeError, ValueError):
         return None
+
+
+def _to_str(x: Any) -> str | None:
+    if _is_missing(x):
+        return None
+    if isinstance(x, float) and x.is_integer():
+        return str(int(x))
+    return str(x)
 
 
 def _parse_time_to_seconds(x: Any) -> float | None:
@@ -85,7 +110,7 @@ def _parse_time_to_seconds(x: Any) -> float | None:
       - "00:12.3"
       - "01:02:03.4"
     """
-    if x in [None, ""]:
+    if _is_missing(x):
         return None
 
     if isinstance(x, (int, float)):
@@ -131,8 +156,8 @@ def metrica_row_to_frame(
             continue
 
         y_key = key[:-2] + "_y"
-        x = row.get(key)
-        y = row.get(y_key)
+        x = _to_float(row.get(key))
+        y = _to_float(row.get(y_key))
         if x is None or y is None:
             continue
 
@@ -142,17 +167,19 @@ def metrica_row_to_frame(
             PlayerSnapshot(
                 player_id=player_id,
                 team=team,
-                x=float(x),
-                y=float(y),
+                x=x,
+                y=y,
                 raw={},
             )
         )
 
     ball = None
-    if row.get("ball_x") is not None and row.get("ball_y") is not None:
+    ball_x = _to_float(row.get("ball_x"))
+    ball_y = _to_float(row.get("ball_y"))
+    if ball_x is not None and ball_y is not None:
         ball = BallSnapshot(
-            x=float(row["ball_x"]),
-            y=float(row["ball_y"]),
+            x=ball_x,
+            y=ball_y,
             raw={},
         )
 
@@ -169,8 +196,16 @@ def metrica_row_to_frame(
     )
 
 
-def skillcorner_frame_to_snapshot(frame: dict[str, Any], match_id: str) -> FrameSnapshot:
+def skillcorner_frame_to_snapshot(
+    frame: dict[str, Any],
+    match_id: str,
+    player_team_by_id: dict[str, str] | None = None,
+    player_role_by_id: dict[str, str] | None = None,
+    possession_group_to_team: dict[str, str] | None = None,
+) -> FrameSnapshot:
     players: list[PlayerSnapshot] = []
+    player_team_by_id = player_team_by_id or {}
+    player_role_by_id = player_role_by_id or {}
 
     for p in frame.get("player_data", []):
         x = p.get("x")
@@ -191,12 +226,14 @@ def skillcorner_frame_to_snapshot(frame: dict[str, Any], match_id: str) -> Frame
             or "unknown"
         )
         team = str(
-            p.get("team_id")
+            player_team_by_id.get(player_id)
+            or p.get("team_id")
             or p.get("team")
             or p.get("team_shortname")
             or "unknown"
         )
         z = p.get("z")
+        role = p.get("player_role") or player_role_by_id.get(player_id)
 
         players.append(
             PlayerSnapshot(
@@ -205,7 +242,7 @@ def skillcorner_frame_to_snapshot(frame: dict[str, Any], match_id: str) -> Frame
                 x=float(x),
                 y=float(y),
                 z=float(z) if z is not None else None,
-                role=str(p.get("player_role")) if p.get("player_role") is not None else None,
+                role=str(role) if role is not None else None,
                 raw=p,
             )
         )
@@ -223,11 +260,21 @@ def skillcorner_frame_to_snapshot(frame: dict[str, Any], match_id: str) -> Frame
 
     possession = frame.get("possession")
     possession_team = None
+    possession_player_id = None
+    possession_group = None
     if isinstance(possession, dict):
+        possession_player_id = _to_str(possession.get("player_id"))
+        possession_group = _to_str(possession.get("group"))
         for key in ["team_id", "team", "team_in_possession_id"]:
             if possession.get(key) is not None:
                 possession_team = str(possession[key])
                 break
+        if possession_team is None and possession_group is not None:
+            normalized_group = possession_group.strip().lower()
+            if possession_group_to_team and normalized_group in possession_group_to_team:
+                possession_team = possession_group_to_team[normalized_group]
+            else:
+                possession_team = possession_group
 
     return FrameSnapshot(
         source="skillcorner",
@@ -238,26 +285,34 @@ def skillcorner_frame_to_snapshot(frame: dict[str, Any], match_id: str) -> Frame
         ball=ball_obj,
         players=players,
         possession_team=possession_team,
+        possession_player_id=possession_player_id,
+        possession_group=possession_group,
         raw=frame,
     )
 
 
 def skillcorner_event_to_record(row: dict[str, Any], match_id: str) -> EventRecord:
+    receiver_id = _to_str(row.get("player_targeted_id"))
+    outcome = _to_str(row.get("pass_outcome")) or _to_str(row.get("end_type"))
+
     return EventRecord(
         source="skillcorner",
         match_id=match_id,
-        event_id=str(row.get("event_id")) if row.get("event_id") not in [None, ""] else None,
+        event_id=_to_str(row.get("event_id")),
         period=_to_int(row.get("period")),
         time_s=_parse_time_to_seconds(row.get("time_start")),
-        event_type=str(row.get("event_type")) if row.get("event_type") not in [None, ""] else None,
-        player_id=str(row.get("player_id")) if row.get("player_id") not in [None, ""] else None,
-        team=str(row.get("team_id")) if row.get("team_id") not in [None, ""] else None,
+        event_type=_to_str(row.get("event_type")),
+        player_id=_to_str(row.get("player_id")),
+        team=_to_str(row.get("team_id")),
         x_start=_to_float(row.get("x_start")),
         y_start=_to_float(row.get("y_start")),
         x_end=_to_float(row.get("x_end")),
         y_end=_to_float(row.get("y_end")),
         frame_start=_to_int(row.get("frame_start")),
         frame_end=_to_int(row.get("frame_end")),
+        receiver_id=receiver_id,
+        receiver_team=_to_str(row.get("team_id")) if receiver_id is not None else None,
+        outcome=outcome,
         raw=row,
     )
 
@@ -268,10 +323,17 @@ def statsbomb_event_to_record(event: dict[str, Any], match_id: str) -> EventReco
     y_start = float(loc[1]) if len(loc) > 1 and loc[1] is not None else None
 
     x_end = y_end = None
+    receiver_id = receiver_team = outcome = None
     if isinstance(event.get("pass"), dict):
-        end_loc = event["pass"].get("end_location") or [None, None]
+        pass_payload = event["pass"]
+        end_loc = pass_payload.get("end_location") or [None, None]
         x_end = float(end_loc[0]) if len(end_loc) > 0 and end_loc[0] is not None else None
         y_end = float(end_loc[1]) if len(end_loc) > 1 and end_loc[1] is not None else None
+        if isinstance(pass_payload.get("recipient"), dict):
+            receiver_id = _to_str(pass_payload["recipient"].get("id"))
+            receiver_team = _to_str(event["team"].get("id")) if isinstance(event.get("team"), dict) else None
+        if isinstance(pass_payload.get("outcome"), dict):
+            outcome = _to_str(pass_payload["outcome"].get("name"))
     elif isinstance(event.get("carry"), dict):
         end_loc = event["carry"].get("end_location") or [None, None]
         x_end = float(end_loc[0]) if len(end_loc) > 0 and end_loc[0] is not None else None
@@ -286,15 +348,18 @@ def statsbomb_event_to_record(event: dict[str, Any], match_id: str) -> EventReco
         match_id=match_id,
         event_id=str(event.get("id")) if event.get("id") is not None else None,
         period=_to_int(event.get("period")),
-        time_s=None,
-        event_type=str(event["type"]["name"]) if isinstance(event.get("type"), dict) else None,
-        player_id=str(event["player"]["id"]) if isinstance(event.get("player"), dict) else None,
-        team=str(event["team"]["id"]) if isinstance(event.get("team"), dict) else None,
+        time_s=_parse_time_to_seconds(event.get("timestamp")),
+        event_type=_to_str(event["type"].get("name")) if isinstance(event.get("type"), dict) else None,
+        player_id=_to_str(event["player"].get("id")) if isinstance(event.get("player"), dict) else None,
+        team=_to_str(event["team"].get("id")) if isinstance(event.get("team"), dict) else None,
         x_start=x_start,
         y_start=y_start,
         x_end=x_end,
         y_end=y_end,
         frame_start=None,
         frame_end=None,
+        receiver_id=receiver_id,
+        receiver_team=receiver_team,
+        outcome=outcome,
         raw=event,
     )

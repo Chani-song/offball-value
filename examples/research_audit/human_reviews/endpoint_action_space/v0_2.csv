@@ -1,0 +1,13 @@
+report_kind,match_id,frame_id,player_id,review,note
+endpoint,DFL-MAT-J03WMX,14663,DFL-OBJ-0000IA,bad_direction,Opposite-direction endpoints are missing after a plausible stop-and-turn movement.
+endpoint,DFL-MAT-J03WMX,11863,DFL-OBJ-0002AU,too_narrow,"The player could decelerate, reverse, and accelerate in the opposite direction for longer; the backward endpoint range is too narrow."
+endpoint,DFL-MAT-J03WMX,13513,DFL-OBJ-0002AU,too_narrow,"Cutback action is missing: the player could continue/feint in the initial direction, then turn and accelerate back. Only 3–4 reverse endpoints are represented."
+endpoint,DFL-MAT-J03WMX,10963,DFL-OBJ-0000IA,too_narrow,"Fernández influence area better represents the plausible movement range; the kinematic endpoints miss feint-and-cutback options."
+endpoint,DFL-MAT-J03WMX,12263,DFL-OBJ-J01B8N,valid,
+endpoint,DFL-MAT-J03WMX,13363,DFL-OBJ-J01APO,bad_direction,반대 방향이 전혀 고려되지않음. 들어가는척 하다가 반대로 뛰어버리면? 그건반영안되어있어. influence area에는 반영되어있는데.
+endpoint,DFL-MAT-J03WMX,11713,DFL-OBJ-0002AU,valid,
+endpoint,DFL-MAT-J03WMX,14313,DFL-OBJ-0002AU,valid,
+endpoint,DFL-MAT-J03WMX,20363,DFL-OBJ-002GKO,valid,
+endpoint,DFL-MAT-J03WMX,19713,DFL-OBJ-J017RE,too_narrow,"반대방향으로 속도를 바꿀 경우에, 그게 초록색 점들로 고려되어있긴하나 턱없이 부족함."
+endpoint,DFL-MAT-J03WMX,14513,DFL-OBJ-0000IA,too_narrow,"반대방향으로 속도를 바꿀 경우에, 그게 초록색 점들로 고려되어있긴하나 턱없이 부족함."
+endpoint,DFL-MAT-J03WMX,14913,DFL-OBJ-002G4A,bad_direction,"t=0에서 속도의 방향을 유지하면서 방향이 조금 바뀌는건 오케이. 근데 influence area를 보면 알겠지만, 기존 속도를 갑자기 90도로 틀어버릴 수도 있고, 갑자기 반대로 뛸 수도 있는거잖아. 그런게 반영안되어있어."

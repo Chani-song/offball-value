@@ -1,228 +1,126 @@
-# Literature Review
+# Related-work map
 
 ## Scope
-This document summarizes prior work most relevant to an early project on **off-ball attacking value** in soccer. The main question is not simply whether space exists, but whether an attacking player's off-ball movement changes the quality of teammates' options and increases the downstream value of the possession.
 
-A useful decomposition for the project is:
+The project sits between off-ball opportunity valuation, pass availability,
+space generation, trajectory counterfactuals, and multi-agent tactical
+response. The specific target is narrower: value an off-ball runner while
+allowing a local defender to respond feasibly and exposing the trade-off
+between the runner and the attacking options released by that response.
 
-1. off-ball movement,
-2. defensive reaction or defensive displacement,
-3. change in available attacking options,
-4. change in option success probability or option value,
-5. change in possession value.
+## OBSO and possession-value models
 
-The papers below cover different parts of this chain.
+OBSO-style work decomposes a dangerous opportunity into transition,
+pitch-control, and scoring-location components. EPV and action-value models
+similarly provide a value for a state or a possible on-ball action.
 
----
+These models are useful evaluators, but they do not by themselves identify
+which off-ball run created an option or how a defender would relocate after a
+counterfactual run. The project therefore treats a state-value model as a
+component inside a response game rather than as the primary contribution.
 
-## 1. Spearman, Beyond Expected Goals / OBSO
+## Pass availability and reception probability
 
-### Main idea
-This line of work introduced an off-ball scoring-opportunity view of soccer, modeling how likely it is that a dangerous attacking event will occur at a given location. It is foundational because it moves beyond on-ball outcomes and tries to quantify whether a player is threatening even without the ball.
+Pass-probability and availability models estimate whether the ball can reach a
+receiver before interception and whether the receiver can secure possession.
+This is a necessary component of direct and derived option threat.
 
-### Modeling idea
-A representative formulation decomposes scoring opportunity into terms such as:
-- probability that play reaches location $r$,
-- probability that the attacking team controls the ball there,
-- probability that the state leads to a goal.
+The remaining attribution problem is causal and strategic: which runner action
+changed the delivery probability, which defender response produced that
+change, and what alternative option was released?
 
-This makes OBSO a product-like decomposition of "reachability", "control", and "danger".
+## Fernandez-style influence and space generation
 
-### Why it matters
-- Important conceptual starting point for off-ball evaluation.
-- Gives a state-value view that later work can extend.
-- Influenced later studies such as C-OBSO and OBPV.
+Continuous influence models distinguish occupying useful space from generating
+space for a teammate. They provide a natural representation for decoy runs and
+for goal-side accessibility after reception.
 
-### Limitation for our project
-- Strongly goal-oriented.
-- Better at evaluating dangerous receiving locations than attributing credit to the **non-receiving runner** who created the opportunity.
-- Does not directly quantify how one player's run improved a teammate's pass or shot option.
+Influence alone is not a pass-success or goal-value model. In this project it
+is used as an interpretable geometric ingredient and audit layer, not as a
+standalone final threat score.
 
----
+## Counterfactual trajectory approaches
 
-## 2. Fernandez and Bornn, Wide Open Spaces
+C-OBSO and related trajectory-prediction work compare actual player movement
+with a predicted reference trajectory to attribute opportunity creation. This
+is an important precedent for non-receiving runner value.
 
-### Main idea
-This paper separates:
-- **space occupation**, meaning a player finds valuable space for themselves, and
-- **space generation**, meaning a player creates space for teammates.
+The current project differs by making the defensive response itself explicit:
+candidate defenders and their feasible response paths are compared, and the
+benefiting attacking option is allowed to depend on which defender reallocates.
+The current v0.1 audit still uses observed attacker futures retrospectively;
+online trajectory prediction remains a later extension.
 
-This is one of the closest conceptual precursors to dummy runs, decoy runs, and gravity-like attacking effects.
+## Reachable-region and self-propelled-particle models
 
-### Modeling idea
-The paper builds a continuous-space model using player influence and pitch control. Space quality is expressed as a combination of:
-- who controls a location, and
-- how valuable that location is.
+Physics-based reachable regions and self-propelled-particle models provide a
+way to restrict counterfactual actions by current velocity, acceleration,
+deceleration, and direction-change limits. They motivate the project's bounded
+steering and plant-and-cut action spaces.
 
-In practice, this becomes a framework for measuring whether a player's movement opens useful space for others.
+Reachability defines what a player can do, but it does not decide which action
+is tactically valuable. That decision requires the local threat and response
+game.
 
-### Why it matters
-- Probably the clearest early framing of off-ball movement as a team-serving action.
-- Gives language and structure for concepts like decoy movement and defender attraction.
-- Very relevant if the project wants to talk about space creation without requiring an immediate pass or shot.
+## Defensive reaction optimization
 
-### Limitation for our project
-- Strong on **space geometry**, weaker on **option value**.
-- Does not fully connect space creation to pass success, receiver value, or possession-value change.
-- Good as an upstream ingredient, but not sufficient as the final metric.
+DRSO-style defensive search compares a small number of alternative defender
+locations around an identified threat point. It provides an interpretable
+baseline for asking where a defender could reduce an off-ball opportunity.
 
----
+The current direction replaces a static endpoint-only response with a bounded,
+target-updating path and compares multiple candidate defenders. A faithful
+baseline reproduction and a controlled search-method comparison remain future
+experiments.
 
-## 3. Fernandez, Bornn, Cervone, Instantaneous EPV Framework
+## TacticAI and graph-based tactical generation
 
-### Main idea
-This work formalizes **expected possession value (EPV)** as the value of a possession state at a given moment. It decomposes possession value into submodels so that both observed and hypothetical actions can be evaluated.
+TacticAI represents player relations as a graph and adjusts team positions in
+set-piece contexts. It demonstrates that generated tactical states can be
+compared with empirical movement distributions.
 
-### Modeling idea
-EPV is treated as a state-value problem and decomposed into components such as:
-- action selection,
-- action success,
-- action outcome value.
+Its set-piece and team-adjustment scope differs from the current open-play,
+runner-centered local allocation game.
 
-This is especially useful because it turns a possession into a structured set of probabilities and values instead of a single end result like goal or no goal.
+## Multi-agent reinforcement learning
 
-### Why it matters
-- Strong downstream target for our project.
-- Suggests that the right response variable is often **possession value change**, not only xG.
-- Makes it possible to say that an off-ball movement was useful even if no shot immediately followed.
+Multi-agent RL can model coordination among attacking agents and assign value
+to on- and off-ball actions. It is attractive for long-term joint optimization
+but requires more data, validation, and interpretability work.
 
-### Limitation for our project
-- EPV tells us **how valuable a state or action is**.
-- It does not directly solve **who should get credit** for increasing that value.
-- A separate attribution layer is still needed for off-ball runners.
+The present framework intentionally starts with one focal runner and one
+counterfactual defender so that response paths, released options, and failure
+modes remain inspectable.
 
----
+## Research gap
 
-## 4. Dick, Link, Brefeld, Availability
+Existing work covers spatial value, pass availability, trajectory prediction,
+reachable actions, and learned tactical coordination. The combination that
+remains underdeveloped is:
 
-### Main idea
-This paper defines **availability** as the probability that a target player can receive a pass without interception. It is a direct option-quality model rather than a pure spatial model.
+1. an off-ball runner as the focal attacking intervention;
+2. several plausible responding defenders rather than a preselected nearest
+   defender;
+3. physically feasible, dynamically updated defender trajectories;
+4. direct runner threat separated from defender-dependent derived threat;
+5. a best-response and max-min interpretation with an explicit two-sided
+   defensive allocation cost.
 
-### Modeling idea
-Availability aggregates:
-- ball dynamics,
-- player movement constraints,
-- opponent interception risk,
-- execution uncertainty.
+This combination defines the intended contribution of the project. The current
+repository implements the scene, motion, and structural-audit layers; it does
+not yet validate the final threat or optimization layers.
 
-The result is a pass-receiving probability for a candidate target.
+## Core references to formalize before submission
 
-### Why it matters
-- Very relevant for a project about how off-ball runs change teammates' options.
-- Can serve as an intermediate model for "which receiver became more open because of a run".
-- More actionable than generic space value when the research question is pass-option creation.
-
-### Limitation for our project
-- Measures whether a player can receive a pass.
-- Does not tell us **which off-ball player created that availability improvement**.
-- Excellent module, but not a complete off-ball attribution framework.
-
----
-
-## 5. Teranishi et al., C-OBSO
-
-### Main idea
-This is one of the closest prior studies to our idea. It evaluates players who create scoring opportunities for teammates by comparing actual movement with a predicted reference trajectory.
-
-### Modeling idea
-The method combines:
-- a modified OBSO-like value,
-- trajectory prediction using a graph-based recurrent model,
-- a counterfactual comparison between actual and reference movement.
-
-The key idea is that if actual movement creates more teammate scoring opportunity than the predicted baseline movement, the difference can be credited to the player.
-
-### Why it matters
-- Strong direct precedent for evaluating a player who does **not** receive the ball.
-- Introduces a counterfactual logic that is highly relevant for decoy-run valuation.
-- Shows that comparing actual movement against a reference movement is a plausible route.
-
-### Limitation for our project
-- Very focused on **scoring opportunity**.
-- Less explicit about how the run changes the whole menu of pass options.
-- Still leaves room for a more interpretable option-level decomposition.
-
----
-
-## 6. Multi-agent RL-based on/off-ball valuation
-
-### Main idea
-This line of work treats soccer as a multi-agent sequential decision problem and tries to value both on-ball and off-ball actions through learned action-value estimates.
-
-### Modeling idea
-The framework uses reinforcement learning and state-action value estimation. In principle, it can evaluate many simultaneous off-ball behaviors at once.
-
-### Why it matters
-- Shows that off-ball movement can be embedded in a unified action-value framework.
-- Suggests one possible long-term direction if we want a more ambitious multi-agent model.
-
-### Limitation for our project
-- Harder to interpret.
-- May require more data and engineering than an early-stage open-data project can realistically support.
-- Less attractive as a first prototype if our goal is a clear, explainable research scaffold.
-
----
-
-## 7. Ogawa et al., OBPV
-
-### Main idea
-OBPV extends the off-ball valuation idea so that areas far from goal, especially transition-starting areas, are evaluated more meaningfully.
-
-### Modeling idea
-The method modifies the standard OBSO style by introducing broader field value and transition-aware components rather than relying too heavily on immediate goal proximity.
-
-### Why it matters
-- Important warning against making the metric too shot-centric.
-- Relevant if we want to value off-ball movement earlier in the attack, not only near the box.
-- Helps motivate a project that captures option creation before the final action.
-
-### Limitation for our project
-- Still primarily a **space valuation** method.
-- Does not fully solve player-level attribution for off-ball option creation.
-
----
-
-## Summary of the gap
-The literature already covers several important building blocks:
-- spatial value,
-- pitch control,
-- pass availability,
-- possession value,
-- counterfactual off-ball evaluation.
-
-What remains relatively underdeveloped is a framework that explicitly measures:
-
-> how a non-receiving attacker's off-ball movement changes the quality of teammates' options, and how much of the subsequent possession-value increase should be attributed to that runner.
-
-That is the main gap this project should target.
-
----
-
-## Working research direction
-A practical first research framing is:
-
-> Quantify off-ball attacking value by measuring how an attacker's movement changes teammates' option quality relative to a counterfactual reference state.
-
-A stronger version is:
-
-> For each attacking state, estimate candidate teammate options, their success likelihood, and their downstream possession value; then attribute improvements in those quantities to specific off-ball movements using a counterfactual comparison.
-
----
-
-## Notes for this repository
-The current repository does **not** implement the full research metric yet. At this stage, it provides:
-- open-data loaders,
-- a Metrica-based toy baseline,
-- a problem framing for future work.
-
-So the repo should be presented as an **early research scaffold**, not a finished evaluation system.
-
----
-
-## Selected references
-- Spearman, Beyond Expected Goals / off-ball scoring opportunity line.
+- Spearman, OBSO / *Beyond Expected Goals* line of work.
 - Fernandez and Bornn, *Wide Open Spaces*.
-- Fernandez, Bornn, Cervone, *A framework for the fine-grained evaluation of the instantaneous expected value of soccer possessions*.
-- Dick, Link, Brefeld, *Who can receive the pass?*.
-- Teranishi et al., *Evaluation of creating scoring opportunities for teammates in soccer via trajectory prediction*.
-- Ogawa et al., *Space evaluation at the starting point of soccer transitions*.
+- Fernandez, Bornn, and Cervone, instantaneous EPV framework.
+- Dick, Link, and Brefeld, pass availability.
+- Teranishi et al., C-OBSO / trajectory-based opportunity creation.
+- Reachable-region and self-propelled-particle validation work.
+- TacticAI.
+- Multi-agent on/off-ball action-value research.
+
+Exact bibliographic records should be maintained in a `.bib` file before a
+paper submission. Copyrighted article PDFs are intentionally excluded from the
+repository.

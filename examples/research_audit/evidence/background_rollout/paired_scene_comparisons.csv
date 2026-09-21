@@ -1,0 +1,13 @@
+horizon_seconds,reference_model,comparator_model,scene_count,player_observation_count,mean_comparator_minus_empirical_m,ci95_lower_m,ci95_upper_m,fraction_scenes_empirical_lower_error,interpretation
+0.5,empirical_reference,hold,96,1920,1.0689761331308867,0.9718712994423291,1.1660809668194443,1.0,positive favors empirical_reference; scene-clustered paired CI
+0.5,empirical_reference,constant_velocity,96,1920,0.014617820480463036,0.00964364456976143,0.019591996391164643,0.7916666666666666,positive favors empirical_reference; scene-clustered paired CI
+0.5,empirical_reference,damped_constant_velocity,96,1920,0.01789705633444876,0.01411747856880257,0.021676634100094946,0.875,positive favors empirical_reference; scene-clustered paired CI
+1.0,empirical_reference,hold,96,1920,1.8304954737630341,1.639148826420542,2.021842121105526,1.0,positive favors empirical_reference; scene-clustered paired CI
+1.0,empirical_reference,constant_velocity,96,1920,0.05305203789265663,0.033876140018560805,0.07222793576675246,0.78125,positive favors empirical_reference; scene-clustered paired CI
+1.0,empirical_reference,damped_constant_velocity,96,1920,0.05372244661102687,0.04034887658358927,0.06709601663846446,0.7916666666666666,positive favors empirical_reference; scene-clustered paired CI
+1.5,empirical_reference,hold,96,1920,2.308086273412387,2.019218265924298,2.5969542809004755,1.0,positive favors empirical_reference; scene-clustered paired CI
+1.5,empirical_reference,constant_velocity,96,1920,0.11932074809868921,0.07640090832790791,0.16224058786947052,0.7708333333333334,positive favors empirical_reference; scene-clustered paired CI
+1.5,empirical_reference,damped_constant_velocity,96,1920,0.08761170044181897,0.06274882467113592,0.11247457621250202,0.78125,positive favors empirical_reference; scene-clustered paired CI
+2.0,empirical_reference,hold,96,1920,2.556980857868585,2.1657032769437308,2.948258438793439,0.9583333333333334,positive favors empirical_reference; scene-clustered paired CI
+2.0,empirical_reference,constant_velocity,96,1920,0.21418649648032506,0.1382732198473273,0.2900997731133228,0.8020833333333334,positive favors empirical_reference; scene-clustered paired CI
+2.0,empirical_reference,damped_constant_velocity,96,1920,0.11598565674316579,0.07914920056585042,0.15282211292048115,0.71875,positive favors empirical_reference; scene-clustered paired CI

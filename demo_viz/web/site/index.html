@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Off-ball value · explorer</title>
+<meta name="description" content="Interactive explorer for off-ball value in soccer: pick a runner, a reacting defender and a beneficiary, and see the space that opens.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='13' fill='%23132019'/><circle cx='16' cy='16' r='5' fill='%23FF2D87'/></svg>">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <span class="brand-name">Off-ball value</span>
+    <span class="brand-sub">explorer</span>
+  </div>
+  <div class="control">
+    <label for="scene">Scene</label>
+    <select id="scene"></select>
+  </div>
+  <div class="control">
+    <label>Effect</label>
+    <div class="row">
+      <label class="check"><input type="checkbox" id="effect-strong" checked> Strong</label>
+      <label class="check"><input type="checkbox" id="effect-medium" checked> Medium</label>
+      <span class="muted" id="scene-count"></span>
+    </div>
+  </div>
+  <div class="control grow">
+    <label>Roles</label>
+    <div class="row">
+      <button id="btn-annotation" class="btn">Annotation</button>
+      <button id="btn-auto" class="btn accent">Auto triplet</button>
+      <button id="btn-reset" class="btn">Reset</button>
+      <span class="muted" id="status" role="status"></span>
+    </div>
+  </div>
+  <button id="btn-source" class="btn ghost repo">Source</button>
+</header>
+
+<main>
+  <section class="pitch-card">
+    <div class="scene-head">
+      <h1 id="title">—</h1>
+      <p id="subtitle"></p>
+      <span class="spacer"></span>
+      <div class="segmented" id="view-toggle" role="group" aria-label="Pitch view">
+        <button class="seg is-on" data-view="full">Full pitch</button>
+        <button class="seg" data-view="focus">Focus</button>
+      </div>
+    </div>
+    <div id="pitch" class="pitch-wrap"></div>
+    <div class="timeline">
+      <button id="play" class="btn square">▶</button>
+      <button id="jump-run" class="btn small">Run</button>
+      <button id="jump-peak" class="btn small">Peak</button>
+      <input type="range" id="time" min="0" max="1" value="0" step="1">
+      <span id="readout" class="readout">0.00 s</span>
+    </div>
+    <div class="layers">
+      <label class="check"><input type="checkbox" data-layer="trail" checked> Runner movement</label>
+      <label class="check"><input type="checkbox" data-layer="tether" checked> Defender response</label>
+      <label class="check"><input type="checkbox" data-layer="wake" checked> Space map</label>
+      <label class="check"><input type="checkbox" data-layer="ghost" checked> Defender if stayed</label>
+      <label class="check"><input type="checkbox" data-layer="labels" checked> Player numbers</label>
+      <label class="check"><input type="checkbox" data-layer="candidates" checked> Suggested players</label>
+      <label class="check"><input type="checkbox" data-layer="lane"> Passing lane</label>
+      <label class="check"><input type="checkbox" data-layer="paths"> Player movements</label>
+      <span class="spacer"></span>
+      <select id="wake-mode" class="mini">
+        <option value="space">Available space</option>
+        <option value="gain">Space created</option>
+      </select>
+    </div>
+  </section>
+
+  <aside class="dock">
+    <div class="card">
+      <div class="group attack">
+        <div class="group-label">Attack</div>
+        <div class="slot" id="slot-runner" data-role="runner">
+          <div class="slot-title" style="color:#FF2D87">Runner</div>
+          <div class="slot-body" id="body-runner"></div>
+        </div>
+        <div class="slot" id="slot-beneficiary" data-role="beneficiary">
+          <div class="slot-title" style="color:#5CE8F5">Beneficiary</div>
+          <div class="slot-body" id="body-beneficiary"></div>
+        </div>
+      </div>
+      <div class="group defence">
+        <div class="group-label">Defence</div>
+        <div class="slot" id="slot-defender" data-role="defender">
+          <div class="slot-title" style="color:#FFA62B">Defender</div>
+          <div class="slot-body" id="body-defender"></div>
+        </div>
+      </div>
+      <div class="dock-meta" id="dock-meta"></div>
+      <div class="teams">
+        <span class="key"><i style="background:#D9CFB8"></i><span id="team-attack"></span></span>
+        <span class="key"><i style="background:#5F7392"></i><span id="team-defend"></span></span>
+      </div>
+    </div>
+
+    <div class="card stat">
+      <div class="label" id="stat-label">Available space</div>
+      <div class="stat-value" id="stat-value">—</div>
+      <div id="chart" class="chart"></div>
+    </div>
+
+    <div class="card list" id="hints-card">
+      <button class="disclosure" id="hints-toggle" aria-expanded="true">
+        <span class="chev" id="hints-chev">▾</span>
+        <span class="label" id="candidates-label">Hints</span>
+        <span class="muted" id="hints-count"></span>
+      </button>
+      <div id="candidates"></div>
+    </div>
+
+    <div class="card notes">
+      <div class="label">Notes</div>
+      <div id="notes" class="muted"></div>
+    </div>
+  </aside>
+</main>
+
+<div class="sheet" id="source-sheet" hidden>
+  <div class="sheet-card" role="dialog" aria-modal="true" aria-label="Source and method">
+    <div class="sheet-head">
+      <h2>Source &amp; method</h2>
+      <button class="btn small" id="source-close">Close</button>
+    </div>
+
+    <dl class="facts">
+      <dt class="tag-measured">Measured</dt>
+      <dd>Player and ball positions from IDSSE Bundesliga tracking at 25 Hz.
+          <b>Available space</b> is the beneficiary's goal-weighted residual space under
+          the observed defensive configuration. <b>Space created</b> is that quantity
+          minus the same one with the selected defenders replaced by a no-reaction
+          baseline. Both come from <code>offball_value.goal_weighted_influence</code> on
+          the Fernández &amp; Bornn (2018) influence surface. The browser recomputes them
+          for whichever players you pick; they agree with the Python implementation to
+          float64 precision.</dd>
+
+      <dt class="tag-human">Human</dt>
+      <dd>Which players are runner, defender and beneficiary comes from manual
+          annotation of 45 scenes (<code>shot_annotations.xlsx</code>, effect
+          <i>strong</i> and <i>medium</i>). The notes are a reviewer's qualitative
+          comment, not a metric.</dd>
+
+      <dt class="tag-explanatory">Explanatory</dt>
+      <dd>The held defender is a what-if device, not a learned or optimised defensive
+          response — this repository has none. <b>Reacts most</b> is an exploratory
+          geometric heuristic on the goal-side marking target, not a research-pipeline
+          output. Run starts come from the repository's kinematic onset detector where
+          it fires, otherwise from a labelled acceleration cue.</dd>
+
+      <dt class="tag-muted">Not shown</dt>
+      <dd>No calibrated xT, pass probability, dribble probability or learned threat
+          surface is drawn, because this repository does not produce one.</dd>
+    </dl>
+
+    <p class="sheet-links">
+      <a href="https://github.com/Chani-song/offball-value">Repository</a>
+      <a href="https://github.com/Chani-song/offball-value/blob/main/demo_viz/INTERACTIVE_REPORT.md">Explorer notes</a>
+      <a href="https://github.com/Chani-song/offball-value/blob/main/demo_viz/OVERNIGHT_REPORT.md">What the counterfactual measures</a>
+    </p>
+    <p class="sheet-foot">Research prototype. Not a validated off-ball value metric,
+       player ranking or coaching recommendation.</p>
+  </div>
+</div>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

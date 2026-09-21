@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <title>IDSSE Shot Annotation</title>
+  <link rel="stylesheet" href="/static/style.css?v=4" />
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>IDSSE Shot Annotation</h1>
+      <div id="progress" class="muted">Loading…</div>
+    </div>
+    <div class="header-actions">
+      <label class="toggle"><input id="unreviewedOnly" type="checkbox" /> Unreviewed only</label>
+      <a class="button secondary" href="/download/excel">Excel</a>
+      <a class="button secondary" href="/download/csv">CSV</a>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="video-card">
+      <div class="shot-meta">
+        <div id="shotTitle" class="shot-title">—</div>
+        <div id="shotSub" class="muted">—</div>
+      </div>
+
+      <div class="video-wrap">
+        <video id="video" playsinline preload="metadata"></video>
+        <svg id="trackingOverlay" class="tracking-overlay" viewBox="0 0 1200 800" preserveAspectRatio="none" aria-hidden="true"></svg>
+        <div id="trackingStatus" class="tracking-status">Tracking rings: loading…</div>
+        <div id="overlay" class="video-overlay"></div>
+        <div class="tracking-legend" aria-label="Tracking role legend">
+          <span class="legend-item"><i class="legend-ring legend-offball"></i>Off-ball</span>
+          <span class="legend-item"><i class="legend-ring legend-defender"></i>Pulled defender</span>
+          <span class="legend-item"><i class="legend-ring legend-benefit"></i>Space beneficiary</span>
+        </div>
+      </div>
+
+      <div class="transport">
+        <div class="transport-row">
+          <button data-jump="-10">−10s</button>
+          <button data-jump="-5">−5s</button>
+          <button data-jump="-1">−1s</button>
+          <button id="playPause" class="primary">Play</button>
+          <button data-jump="1">+1s</button>
+          <button data-jump="5">+5s</button>
+          <button data-jump="10">+10s</button>
+        </div>
+        <div class="timeline-row">
+          <span id="currentTime">0.0</span>
+          <input id="timeline" type="range" min="0" max="1000" value="0" />
+          <span id="duration">0.0</span>
+        </div>
+        <div class="transport-row small">
+          <button data-jump="-0.2">−0.2s</button>
+          <button data-jump="0.2">+0.2s</button>
+          <span class="muted">Speed</span>
+          <button data-speed="0.25">0.25×</button>
+          <button data-speed="0.5">0.5×</button>
+          <button data-speed="1" class="active-speed">1×</button>
+          <button data-speed="2">2×</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="form-card">
+      <div class="field-group">
+        <div class="label-row"><label>Off-ball attacker(s)</label><span class="hint">type 1 jersey · +Add for extras</span></div>
+        <div id="offballInput" class="number-editor"></div>
+      </div>
+
+      <div class="field-group">
+        <div class="label-row"><label>Defender(s) pulled</label><span class="hint">type 1 jersey · +Add for extras</span></div>
+        <div id="defenderInput" class="number-editor"></div>
+      </div>
+
+      <div class="field-group">
+        <div class="label-row"><label>Player(s) benefiting from space</label><span class="hint">type 1 jersey · +Add for extras</span></div>
+        <div id="beneficiaryInput" class="number-editor"></div>
+      </div>
+
+      <div class="field-group">
+        <label>Effect of off-ball movement</label>
+        <div class="effect-grid" id="effectGrid">
+          <button data-effect="strong">Strong</button>
+          <button data-effect="medium">Medium</button>
+          <button data-effect="low">Low</button>
+          <button data-effect="ignore">Ignore / no meaningful movement</button>
+        </div>
+      </div>
+
+      <div class="field-group">
+        <label for="notes">Notes</label>
+        <textarea id="notes" rows="4" placeholder="Optional: describe run, defender reaction, created space, ambiguity…"></textarea>
+      </div>
+
+      <div id="saveStatus" class="save-status"></div>
+
+      <div class="nav-grid">
+        <button id="prevShot">← Previous</button>
+        <button id="saveOnly" class="secondary">Save</button>
+        <button id="saveNext" class="primary">Save & Next →</button>
+        <button id="nextShot">Next →</button>
+      </div>
+
+      <div class="shortcut-box">
+        <strong>Shortcuts</strong>: Space play/pause · ←/→ ±1s · Shift+←/→ ±5s · 1/2/3/4 = effect · Ctrl/⌘+Enter = Save & Next
+      </div>
+    </section>
+  </main>
+
+  <script src="/static/app.js?v=4"></script>
+</body>
+</html>

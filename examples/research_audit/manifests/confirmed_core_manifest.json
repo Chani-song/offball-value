@@ -1,0 +1,19 @@
+{
+  "schema_version": "confirmed-clear-core-local-game-v0.1",
+  "status": "human-confirmed-development-scenes",
+  "reviewed_scene_count": 10,
+  "confirmed_scene_count": 8,
+  "shared_demo_scene_count": 8,
+  "held_scene_count": 2,
+  "held_scenes_in_shared_demos": false,
+  "rejected_scene_count": 0,
+  "anchor_scene": {
+    "match_id": "DFL-MAT-J03WOH",
+    "onset_frame_id": 53844,
+    "runner_id": "DFL-OBJ-0000F8",
+    "runner_name": "F. Klaus",
+    "present": true
+  },
+  "generalization_scene_count": 7,
+  "source_reviews": "examples/research_audit/human_reviews/clear_core/clear_core_scene_reviews_human.csv"
+}

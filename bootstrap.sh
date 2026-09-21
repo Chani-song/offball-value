@@ -1,16 +1,13 @@
 #!/usr/bin/env bash
-set -e
+set -euo pipefail
 
-python -m venv .venv
-source .venv/bin/activate
-pip install --upgrade pip
-pip install -r requirements.txt
+PYTHON_BIN="${PYTHON_BIN:-python3.11}"
 
-echo "\n[1/3] Downloading Metrica sample data"
-python scripts/download_metrica.py
+"$PYTHON_BIN" -m venv .venv
+.venv/bin/python -m pip install --upgrade pip
+.venv/bin/python -m pip install -e .
 
-echo "\n[2/3] Downloading SkillCorner open data"
-python scripts/download_skillcorner.py
-
-echo "\n[3/3] Running toy baseline on Metrica"
-python scripts/run_metrica_baseline.py
+printf '%s\n' \
+  "Environment ready." \
+  "Download IDSSE separately and place it in data/raw/bundesliga-integrated/." \
+  "See docs/data_and_reproduction.md for extraction and audit commands."
