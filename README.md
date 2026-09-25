@@ -1,5 +1,8 @@
 # Local Off-Ball Game in Soccer
 
+> **현재 상황 (2026-09-25):** [docs/notes/current_status_2026-09-25.md](docs/notes/current_status_2026-09-25.md) —
+> 파이프라인 단계별 수, 준현님 솔버 연결(2대1·3대1, 배경 수비, agile 이동), 패스 모델 후보, 찬의 장면 추적.
+
 Research prototype for studying how an off-ball run reallocates a defender
 between the runner's direct threat and the attacking opportunities left to
 teammates.

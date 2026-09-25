@@ -24,6 +24,7 @@ from .dynamic_marking import (
     summarize_dynamic_marking,
 )
 from .steering_reachable import SteeringReachabilityConfig, steering_step
+from .pair_plausibility import PairGateConfig, gate_pairs, nearest_to_ball
 
 
 TimedPoint = tuple[float, float, float]
@@ -44,15 +45,70 @@ class LocalGameStructureConfig:
     maximum_acceleration_mps2: float = 4.5
     maximum_deceleration_mps2: float = 6.0
     maximum_normal_acceleration_mps2: float = 6.0
-    desired_velocity_time_constant_seconds: float = 0.35
+    desired_velocity_time_constant_seconds: float = 0.45
+    heading_time_constant_seconds: float = 0.25
+    target_velocity_sample_seconds: float = 0.2
     candidate_defender_count: int = 3
+    # Defenders kept by pursuit cost on top of the goal-side ordering. Being
+    # responsible for a runner (goal-side and close) and being able to reach
+    # him are two different routes to facing the choice, and ranking by the
+    # first alone drops a defender who stands further out but closes fast -
+    # 151867's Bormuth is fourth on goal-side distance and second on pursuit
+    # cost, and the reviewer had marked him as facing the dilemma. 0 disables.
+    pursuit_union_count: int = 2
+    # Plausibility gate on (runner, defender) pairs. Ranking by goal-side
+    # marking distance answers "who is nearest the runner at onset", which
+    # is not the same question as "who has to deal with this run": the run
+    # itself decides that. A candidate survives if he is the first choice,
+    # if the run passes within pair_gate_neighbour_delta_m of him of the
+    # closest candidate's own closest approach, or if the run comes to him;
+    # the latter two also require him to have stood within pair_gate_near_m
+    # of the runner at onset, since a man further out is the covering line.
+    # Nothing here reads the defender's own movement -- that is his response,
+    # and the dilemmas worth finding include the ones where he froze.
+    #
+    # Scored against 188 candidate verdicts over 58 scenes: 93% agreement,
+    # 84 of the 85 candidates the reviewer called responsible kept, and
+    # 1,931 -> 1,060 candidates on the v7 build. See pair_plausibility.
+    pair_gate: bool = True
+    pair_gate_neighbour_delta_m: float = 3.0
+    pair_gate_catch_margin_m: float = 3.0
+    pair_gate_catch_end_m: float = 11.0
+    pair_gate_near_m: float = 15.0
+    # The defender nearest the ball is refused (unless ranked first) when the
+    # run stays in front of him: his job is the carrier, and a run that does
+    # not go past him never makes him choose. See pair_plausibility.
+    pair_gate_drop_ball_nearest_in_front: bool = True
     displayed_option_count: int = 5
+    # What the pursuing defender is allowed to know about where the actor is
+    # going.  "kinematic" extrapolates the speed observed up to now and
+    # re-plans every step; "clairvoyant" reads the actor's real future, which
+    # is what this module did before and is kept only as an upper reference.
+    pursuit_information: str = "kinematic"
+    actor_velocity_history_seconds: float = 0.2
+    # Human labels are EVALUATION DATA, not model input. Feeding a scene's
+    # confirmed_defender_ids / confirmed_derived_ids back into the pipeline
+    # makes the reviewer's own answer part of the answer, so the artifact can
+    # no longer show whether the model stands on its own. Default False: the
+    # pipeline ignores those manifest fields and the labels are carried
+    # through untouched for side-by-side comparison only. Set True solely to
+    # reproduce a historical pinned artifact.
+    honor_human_pins: bool = False
 
     def validate(self) -> None:
         positive = {
             name: value
             for name, value in asdict(self).items()
-            if name not in {"candidate_defender_count", "displayed_option_count"}
+            if name
+            not in {
+                "candidate_defender_count",
+                "pursuit_union_count",
+                "displayed_option_count",
+                "honor_human_pins",
+                "pursuit_information",
+                "pair_gate",
+                "pair_gate_drop_ball_nearest_in_front",
+            }
         }
         if any(float(value) <= 0.0 for value in positive.values()):
             raise ValueError("local-game structure parameters must be positive")
@@ -60,6 +116,10 @@ class LocalGameStructureConfig:
             raise ValueError("candidate counts must be positive")
         if self.minimum_horizon_seconds > self.maximum_horizon_seconds:
             raise ValueError("minimum horizon cannot exceed maximum horizon")
+        if self.pursuit_information not in {"kinematic", "clairvoyant"}:
+            raise ValueError(
+                "pursuit_information must be 'kinematic' or 'clairvoyant'"
+            )
 
 
 def _frame_time(frame: Mapping[str, object]) -> float:
@@ -131,15 +191,27 @@ def _wrap_angle(angle: float) -> float:
     return float((angle + math.pi) % (2.0 * math.pi) - math.pi)
 
 
-def simulate_goal_side_response(
+def simulate_goal_side_response_trace(
     start_xy: tuple[float, float],
     initial_velocity_xy: tuple[float, float],
     actor_path_txy: Sequence[TimedPoint],
     goal_xy: tuple[float, float],
     horizon_seconds: float,
     config: LocalGameStructureConfig = LocalGameStructureConfig(),
-) -> tuple[TimedPoint, ...]:
-    """Generate a bounded pursuit path toward a moving goal-side target."""
+    actor_initial_velocity_xy: tuple[float, float] | None = None,
+) -> tuple[tuple[TimedPoint, ...], tuple[TimedPoint, ...]]:
+    """Track a moving goal-side target with bounded, arrival-aware steering.
+
+    The target at response time ``t`` is the goal-side point of the actor's
+    anticipated position at ``t + lookahead``.  Unlike a pure point-pursuit
+    controller, the desired defender velocity also contains the target's own
+    velocity.  This prevents the defender from accelerating into the target,
+    stopping there, and then curling past it while the target keeps moving.
+
+    The returned target trace is deliberately part of the audit contract: a
+    reviewer must be able to distinguish a bad tactical target from a bad
+    physical tracking controller.
+    """
 
     config.validate()
     dt = config.integration_step_seconds
@@ -157,6 +229,7 @@ def simulate_goal_side_response(
     )
     x, y = map(float, start_xy)
     path: list[TimedPoint] = []
+    target_path: list[TimedPoint] = []
     steering_config = SteeringReachabilityConfig(
         horizon_seconds=max(dt, horizon_seconds),
         integration_step_seconds=dt,
@@ -166,9 +239,51 @@ def simulate_goal_side_response(
         max_normal_acceleration_mps2=config.maximum_normal_acceleration_mps2,
         path_sample_seconds=(max(dt, horizon_seconds),),
     )
+    def believe(now_s: float, ahead_s: float) -> tuple[float, float]:
+        """Where the defender BELIEVES the actor will be ``lead_s`` from now.
+
+        Reading the actor's real future makes the defender clairvoyant, and
+        86% of the runs in this project are direction changes — precisely the
+        event a real defender cannot see coming.  A marking cost computed that
+        way answers "what could a defender who knew the future do", not "what
+        could a defender do", so it is not the quantity the name claims.
+
+        Under ``kinematic`` the defender extrapolates at the speed he has
+        observed up to ``now_s`` and re-plans every integration step, so the
+        prediction is wrong exactly when the runner cuts, and is corrected
+        only after the cut becomes visible.  Marking error is still scored
+        against the actor's REAL position: he acts on belief and is judged on
+        reality.
+
+        ``clairvoyant`` restores the previous behaviour as an upper reference.
+        """
+        if config.pursuit_information == "clairvoyant":
+            return interpolate_timed_point(
+                actor_path_txy, min(horizon_seconds, now_s + ahead_s)
+            )
+        here = interpolate_timed_point(actor_path_txy, now_s)
+        window = min(config.actor_velocity_history_seconds, now_s)
+        if window <= 1e-9:
+            actor_vx, actor_vy = actor_initial_velocity_xy or (0.0, 0.0)
+        else:
+            earlier = interpolate_timed_point(actor_path_txy, now_s - window)
+            actor_vx = (here[0] - earlier[0]) / window
+            actor_vy = (here[1] - earlier[1]) / window
+        actor_speed = math.hypot(actor_vx, actor_vy)
+        if actor_speed > config.maximum_speed_mps:
+            scale = config.maximum_speed_mps / actor_speed
+            actor_vx *= scale
+            actor_vy *= scale
+        return (here[0] + actor_vx * ahead_s, here[1] + actor_vy * ahead_s)
+
     times = _sample_times(horizon_seconds, dt)
     for index, time_s in enumerate(times):
         path.append((float(time_s), float(x), float(y)))
+        anticipated_actor = believe(time_s, config.lookahead_seconds)
+        target_x, target_y = moving_goal_side_target(
+            anticipated_actor, goal_xy, config.goal_side_offset_m
+        )
+        target_path.append((float(time_s), float(target_x), float(target_y)))
         if index == len(times) - 1:
             break
         step_duration = times[index + 1] - time_s
@@ -176,21 +291,46 @@ def simulate_goal_side_response(
             tangential = 0.0
             normal = 0.0
         else:
-            anticipated_time = min(
-                horizon_seconds, time_s + config.lookahead_seconds
+            velocity_sample_time = min(
+                horizon_seconds,
+                time_s + config.target_velocity_sample_seconds,
             )
-            anticipated_actor = interpolate_timed_point(
-                actor_path_txy, anticipated_time
+            velocity_sample_duration = velocity_sample_time - time_s
+            # The target's own velocity, as the defender believes it: the same
+            # prediction advanced one sample, so the steering term cannot see
+            # further ahead than the target point it is chasing.
+            future_actor = believe(
+                time_s, velocity_sample_duration + config.lookahead_seconds
             )
-            target_x, target_y = moving_goal_side_target(
-                anticipated_actor, goal_xy, config.goal_side_offset_m
+            future_target_x, future_target_y = moving_goal_side_target(
+                future_actor, goal_xy, config.goal_side_offset_m
             )
             dx, dy = target_x - x, target_y - y
-            distance = math.hypot(dx, dy)
-            desired_heading = math.atan2(dy, dx) if distance > 1e-9 else heading
+            if velocity_sample_duration > 1e-9:
+                target_vx = (
+                    future_target_x - target_x
+                ) / velocity_sample_duration
+                target_vy = (
+                    future_target_y - target_y
+                ) / velocity_sample_duration
+            else:
+                target_vx = 0.0
+                target_vy = 0.0
+            desired_vx = target_vx + (
+                dx / config.desired_velocity_time_constant_seconds
+            )
+            desired_vy = target_vy + (
+                dy / config.desired_velocity_time_constant_seconds
+            )
+            desired_speed_unclipped = math.hypot(desired_vx, desired_vy)
             desired_speed = min(
                 config.maximum_speed_mps,
-                distance / max(config.desired_velocity_time_constant_seconds, dt),
+                desired_speed_unclipped,
+            )
+            desired_heading = (
+                math.atan2(desired_vy, desired_vx)
+                if desired_speed_unclipped > 1e-9
+                else heading
             )
             if speed <= 0.1:
                 heading = desired_heading
@@ -206,7 +346,11 @@ def simulate_goal_side_response(
                     )
                 )
                 angle_error = _wrap_angle(desired_heading - heading)
-                requested_normal = angle_error * speed / max(dt, 1e-9)
+                requested_normal = (
+                    angle_error
+                    * speed
+                    / config.heading_time_constant_seconds
+                )
                 normal = float(
                     np.clip(
                         requested_normal,
@@ -229,7 +373,28 @@ def simulate_goal_side_response(
         step = steering_step(x, y, speed, heading, tangential, normal, local_config)
         x, y = step.x, step.y
         speed, heading = step.speed_mps, step.heading_radians
-    return tuple(path)
+    return tuple(path), tuple(target_path)
+
+
+def simulate_goal_side_response(
+    start_xy: tuple[float, float],
+    initial_velocity_xy: tuple[float, float],
+    actor_path_txy: Sequence[TimedPoint],
+    goal_xy: tuple[float, float],
+    horizon_seconds: float,
+    config: LocalGameStructureConfig = LocalGameStructureConfig(),
+) -> tuple[TimedPoint, ...]:
+    """Generate the response path while preserving the original public API."""
+
+    response_path, _ = simulate_goal_side_response_trace(
+        start_xy,
+        initial_velocity_xy,
+        actor_path_txy,
+        goal_xy,
+        horizon_seconds,
+        config,
+    )
+    return response_path
 
 
 def _mean_marking_cost(
@@ -345,6 +510,18 @@ def build_structural_local_game(
         for player_id in option_ids
     }
 
+    # Onset velocities of the tracked actors, measured on PRE-onset frames
+    # only, so a kinematic pursuer has a causal starting estimate at t=0.
+    runner_onset_velocity = estimate_onset_velocity(
+        frames, runner_id, config.velocity_history_seconds
+    )
+    option_onset_velocities = {
+        player_id: estimate_onset_velocity(
+            frames, player_id, config.velocity_history_seconds
+        )
+        for player_id in option_ids
+    }
+
     defender_rows = []
     for defender_id in outfield_defenders:
         defender_start = players[defender_id]
@@ -355,8 +532,14 @@ def build_structural_local_game(
         actual_path = observed_future_path(
             frames, defender_id, horizon, config.integration_step_seconds
         )
-        runner_response = simulate_goal_side_response(
-            start_xy, velocity, runner_path, goal_xy, horizon, config
+        runner_response, runner_response_target = simulate_goal_side_response_trace(
+            start_xy,
+            velocity,
+            runner_path,
+            goal_xy,
+            horizon,
+            config,
+            runner_onset_velocity,
         )
         runner_actual_cost = _mean_marking_cost(
             runner_path, actual_path, goal_xy, config
@@ -366,8 +549,14 @@ def build_structural_local_game(
         )
         cells = []
         for option_id, option_path in option_paths.items():
-            option_response = simulate_goal_side_response(
-                start_xy, velocity, option_path, goal_xy, horizon, config
+            option_response, option_response_target = simulate_goal_side_response_trace(
+                start_xy,
+                velocity,
+                option_path,
+                goal_xy,
+                horizon,
+                config,
+                option_onset_velocities.get(option_id),
             )
             option_under_runner = _mean_marking_cost(
                 option_path, runner_response, goal_xy, config
@@ -398,6 +587,9 @@ def build_structural_local_game(
                     "option_response_path_txy": [
                         list(row) for row in option_response
                     ],
+                    "option_response_target_path_txy": [
+                        list(row) for row in option_response_target
+                    ],
                     "option_cost_under_runner_response_m": option_under_runner,
                     "option_best_cover_cost_m": option_under_cover,
                     "option_allocation_effect_m": option_release,
@@ -413,12 +605,35 @@ def build_structural_local_game(
         distance_to_runner = math.hypot(
             start_xy[0] - runner_path[0][1], start_xy[1] - runner_path[0][2]
         )
+        # How far this defender stands, at onset, from the position that would
+        # actually be marking the runner: goal-side of him by the offset.  In
+        # football the defender who has to decide about a run is the one who
+        # was already responsible for that player, and responsibility is
+        # proximity AND being on the goal side - a defender behind the runner
+        # has already been beaten and it is no longer his call.
+        #
+        # This replaces the pursuit cost as the candidate ordering.  Pursuit
+        # cost asks "if he chased, how well would he stick", which rewards a
+        # quick defender fifteen metres away over the man actually marking,
+        # and that is not how assignments work.  Measured on 11 scenes with
+        # every outfield defender labelled: this ranks the reactor first in
+        # 10 of 10 against 8 of 10 for pursuit cost, using only the onset
+        # instant, while the pursuit cost keeps its own meaning downstream.
+        goal_side_x, goal_side_y = moving_goal_side_target(
+            (runner_path[0][1], runner_path[0][2]),
+            goal_xy,
+            config.goal_side_offset_m,
+        )
+        goal_side_marking_distance = math.hypot(
+            start_xy[0] - goal_side_x, start_xy[1] - goal_side_y
+        )
         defender_rows.append(
             {
                 "defender_id": defender_id,
                 "defender_name": _display_name(defender_start),
                 "start_xy": list(start_xy),
                 "current_distance_to_runner_m": distance_to_runner,
+                "goal_side_marking_distance_m": goal_side_marking_distance,
                 "actual_runner_marking_cost_m": runner_actual_cost,
                 "runner_response_cost_m": runner_cover_cost,
                 "actual_to_runner_response_improvement_m": max(
@@ -426,6 +641,9 @@ def build_structural_local_game(
                 ),
                 "actual_path_txy": [list(row) for row in actual_path],
                 "runner_response_path_txy": [list(row) for row in runner_response],
+                "runner_response_target_path_txy": [
+                    list(row) for row in runner_response_target
+                ],
                 "cells": sorted(
                     cells,
                     key=lambda cell: (
@@ -438,13 +656,102 @@ def build_structural_local_game(
         )
     defender_rows.sort(
         key=lambda row: (
+            float(row["goal_side_marking_distance_m"]),
             float(row["runner_response_cost_m"]),
-            float(row["current_distance_to_runner_m"]),
             str(row["defender_name"]),
         )
     )
-    selected_defenders = defender_rows[: config.candidate_defender_count]
+    confirmed_defender_ids = (
+        [
+            str(defender_id)
+            for defender_id in scene.get("confirmed_defender_ids", [])
+        ]
+        if config.honor_human_pins
+        else []
+    )
+    if confirmed_defender_ids:
+        # Human review pinned the reacting defender(s) for this scene; the
+        # runner-control ranking stays as a diagnostic order only.
+        rows_by_id = {str(row["defender_id"]): row for row in defender_rows}
+        missing = [
+            defender_id
+            for defender_id in confirmed_defender_ids
+            if defender_id not in rows_by_id
+        ]
+        if missing:
+            raise ValueError(
+                f"confirmed defender ids not on the pitch: {missing}"
+            )
+        selected_defenders = [
+            rows_by_id[defender_id] for defender_id in confirmed_defender_ids
+        ]
+    else:
+        selected_defenders = defender_rows[: config.candidate_defender_count]
+        # Union in the defenders who could reach the runner quickest, even if
+        # they stand further from the marking position. See pursuit_union_count.
+        if config.pursuit_union_count > 0:
+            chosen = {str(row["defender_id"]) for row in selected_defenders}
+            by_pursuit = sorted(
+                defender_rows,
+                key=lambda row: (
+                    float(row["runner_response_cost_m"]),
+                    str(row["defender_name"]),
+                ),
+            )
+            for row in by_pursuit[: config.pursuit_union_count]:
+                if str(row["defender_id"]) not in chosen:
+                    selected_defenders = [*selected_defenders, row]
+                    chosen.add(str(row["defender_id"]))
 
+    gate_rows: list[dict[str, object]] = []
+    if config.pair_gate and not confirmed_defender_ids:
+        gate_config = PairGateConfig(
+            neighbour_delta_m=config.pair_gate_neighbour_delta_m,
+            catch_margin_m=config.pair_gate_catch_margin_m,
+            catch_end_m=config.pair_gate_catch_end_m,
+            near_m=config.pair_gate_near_m,
+            drop_ball_nearest_in_front=config.pair_gate_drop_ball_nearest_in_front,
+        )
+        # Over every defender, keeper included, not just the candidates: the
+        # man whose job is the ball may not be one of them.
+        ball_nearest = nearest_to_ball(
+            {
+                str(pid): (float(players[pid][2]), float(players[pid][3]))
+                for pid in defending_ids
+                if pid in players
+            },
+            (float(onset["ball"][0]), float(onset["ball"][1])),
+        )
+        gate_rows = gate_pairs(
+            runner_path,
+            [
+                (
+                    str(row["defender_id"]),
+                    (float(row["start_xy"][0]), float(row["start_xy"][1])),
+                    rank,
+                )
+                for rank, row in enumerate(selected_defenders)
+            ],
+            gate_config,
+            goal_xy=goal_xy,
+            ball_nearest_id=ball_nearest,
+        )
+        verdict = {str(row["defender_id"]): row for row in gate_rows}
+        for row in selected_defenders:
+            call = verdict.get(str(row["defender_id"]))
+            if call is None:
+                continue
+            row["pair_gate_kept"] = bool(call["kept"])
+            row["pair_gate_reason"] = str(call["reason"])
+            for name in ("path_min_m", "path_end_m", "catch_m", "delta_m",
+                         "goal_side_m"):
+                row[f"pair_gate_{name}"] = float(call[name])
+            row["pair_gate_is_ball_nearest"] = bool(call["is_ball_nearest"])
+    # The attacker's option set is a property of the attack, not of which
+    # defenders we chose to model, so it is ranked over the candidates as
+    # they stood BEFORE the gate. Keeping it fixed also means a build with
+    # the gate is the pre-gate build minus some defender games, rather than
+    # a different game with different options and different beneficiaries.
     maximum_by_option: dict[str, float] = {}
     for row in selected_defenders:
         for cell in row["cells"]:  # type: ignore[index]
@@ -465,6 +772,13 @@ def build_structural_local_game(
     if carrier_id in option_ids and carrier_id not in displayed:
         displayed = ([carrier_id] + displayed)[: config.displayed_option_count]
 
+    # Only the survivors get a payoff game built, which is where the saving
+    # is: the dropped candidates are the majority of the cost.
+    if gate_rows:
+        selected_defenders = [
+            row for row in selected_defenders if row.get("pair_gate_kept", True)
+        ]
+
     return {
         "schema_version": "structural-local-game-v0.1",
         "match_id": str(scene["match_id"]),
@@ -480,6 +794,31 @@ def build_structural_local_game(
         "goal_xy": list(goal_xy),
         "runner_path_txy": [list(row) for row in runner_path],
         "candidate_defenders": selected_defenders,
+        # Only surfaced to the payoff stage when pins are explicitly honoured;
+        # otherwise the labels travel as `human_labels` for comparison only.
+        "confirmed_derived_ids": (
+            {
+                str(key): str(value)
+                for key, value in dict(
+                    scene.get("confirmed_derived_ids", {})
+                ).items()
+            }
+            if config.honor_human_pins
+            else {}
+        ),
+        "human_labels": {
+            "derived_by_defender": {
+                str(key): str(value)
+                for key, value in dict(
+                    scene.get("confirmed_derived_ids", {})
+                ).items()
+            },
+            "defender_ids": [
+                str(defender_id)
+                for defender_id in scene.get("confirmed_defender_ids", [])
+            ],
+            "note": "evaluation labels — never an input to the model",
+        },
         "displayed_option_ids": displayed,
         "all_option_ids": ranked_options,
         "background_frames": list(frames),

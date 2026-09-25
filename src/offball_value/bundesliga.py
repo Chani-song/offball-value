@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from bisect import bisect_right
+
 from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
-from typing import Iterable
+from typing import Callable, Iterable, Sequence
 import xml.etree.ElementTree as ET
 
 import pandas as pd
@@ -236,6 +238,53 @@ def load_bundesliga_frame_clock(positions_xml: str | Path) -> BundesligaClock:
         raise ValueError(f"Could not infer first/second-half frame clocks from {positions_xml}")
 
     return BundesligaClock(section_start=section_start)
+
+
+def load_bundesliga_sendings_off(
+    events_xml: str | Path,
+    clock: BundesligaClock,
+) -> tuple[tuple[int, str, str], ...]:
+    """Dismissals as (frame_id, team_id, player_id), earliest first.
+
+    DFL writes a dismissal as ``<Caution CardColor="red">`` (or ``"yellowRed"``
+    for a second booking) inside an ``<Event>`` that carries ``EventTime`` but
+    no ``CalculatedFrame``, so the frame comes from the clock.
+
+    This exists because run-onset detection needs to know how many players
+    SHOULD be on the pitch. Requiring a constant 22 conflates a dismissal --
+    real football that the study population includes -- with missing tracking.
+    """
+
+    dismissals: list[tuple[int, str, str]] = []
+    for _event, elem in ET.iterparse(events_xml, events=("end",)):
+        if elem.tag != "Event":
+            continue
+        for caution in elem.iter("Caution"):
+            colour = str(caution.attrib.get("CardColor", "")).lower()
+            if colour not in ("red", "yellowred"):
+                continue
+            timestamp = parse_bundesliga_datetime(elem.attrib.get("EventTime"))
+            player = caution.attrib.get("Player")
+            team = caution.attrib.get("Team")
+            if timestamp is None or player is None or team is None:
+                continue
+            dismissals.append((clock.frame_for_time(timestamp), str(team), str(player)))
+        elem.clear()
+    return tuple(sorted(dismissals))
+
+
+def expected_player_count_at(
+    dismissals: Sequence[tuple[int, str, str]],
+    full_strength: int = 22,
+) -> Callable[[int], int]:
+    """How many players should be tracked at a frame, given dismissals so far."""
+
+    frames = sorted(frame_id for frame_id, _team, _player in dismissals)
+
+    def lookup(frame_id: int) -> int:
+        return full_strength - bisect_right(frames, frame_id)
+
+    return lookup
 
 
 def load_bundesliga_events(

@@ -28,19 +28,14 @@ from offball_value.obso import (  # noqa: E402
 )
 
 
-DEFAULT_RESULTS = (
-    ROOT
-    / "data"
-    / "processed"
-    / "bundesliga_obso_counterfactual_all_epv_score_passerball_offside_postspace_adjusted_no_response_suppression_roles_v8.csv"
-)
+DEFAULT_RESULTS = ROOT / "data" / "processed" / "offball_results.csv"
 DEFAULT_OUT = (
     ROOT
     / "data"
     / "processed"
     / "visualizations"
-    / "bundesliga_obso_flow_arrows_adjusted_lambda_0p5_roles_half_v8"
-    / "top_option_benefit_breakdown.csv"
+    / "offball_half"
+    / "benefits.csv"
 )
 DEFAULT_DATA_DIR = ROOT / "data" / "raw" / "bundesliga-integrated"
 

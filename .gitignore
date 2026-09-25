@@ -8,3 +8,10 @@ data/raw/
 data/processed/
 relatedworks/
 .DS_Store
+
+# offball-value on Delta
+.venv-delta/
+logs/
+out/
+# 준현님 솔버는 별도 저장소(andrewkang12345/mit_ssac2027): ./andrew 에 따로 clone
+andrew/

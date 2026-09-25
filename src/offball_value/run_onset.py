@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import math
-from typing import Mapping, Sequence
+from typing import Callable, Mapping, Sequence
 
 import numpy as np
 
@@ -554,6 +554,7 @@ def _context_candidate(
     frames: Mapping[int, BundesligaFrame],
     metadata: BundesligaMatchMeta,
     config: RunOnsetConfig,
+    expected_player_count: Callable[[int], int] | None = None,
 ) -> RunOnsetCandidate | None:
     frame = frames.get(onset.frame_id)
     if frame is None or player_id not in frame.players or frame.ball is None:
@@ -563,7 +564,16 @@ def _context_candidate(
         config.pitch_boundary_tolerance_m,
     ):
         return None
-    if config.required_player_count is not None and len(frame.players) != config.required_player_count:
+    # The gate asks "is every player who should be on the pitch tracked?", not
+    # "are there 22 players?". After a dismissal the right answer is 21, and
+    # requiring 22 discards the rest of that match: DFL-MAT-J03WN1 (red card at
+    # 7.1 min) yielded 2 run onsets where peer matches yield 52-85. A dismissal
+    # is football the population includes; missing tracking is not, and only the
+    # second should reject the frame.
+    required = config.required_player_count
+    if required is not None and expected_player_count is not None:
+        required = expected_player_count(onset.frame_id)
+    if required is not None and len(frame.players) != required:
         return None
     carrier_id, carrier_distance = _nearest_player(frame)
     if (
@@ -654,6 +664,7 @@ def detect_run_onsets(
     metadata: BundesligaMatchMeta,
     search_frame_ids: Sequence[int] | set[int] | None = None,
     config: RunOnsetConfig = RunOnsetConfig(),
+    expected_player_count: Callable[[int], int] | None = None,
 ) -> tuple[RunOnsetCandidate, ...]:
     """Detect off-ball onsets and enforce controlled-possession context."""
 
@@ -677,7 +688,7 @@ def detect_run_onsets(
             if search is not None and onset.frame_id not in search:
                 continue
             candidate = _context_candidate(
-                onset, player_id, frames, metadata, config
+                onset, player_id, frames, metadata, config, expected_player_count
             )
             if candidate is not None:
                 candidates.append(candidate)

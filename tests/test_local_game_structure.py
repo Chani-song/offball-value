@@ -76,6 +76,10 @@ class LocalGameStructureTests(unittest.TestCase):
             LocalGameStructureConfig(
                 maximum_horizon_seconds=1.6,
                 minimum_horizon_seconds=1.0,
+                # the (runner, defender) plausibility gate, added 2026-09-22, drops
+                # the synthetic far defenders here; this test checks the row
+                # structure before gating, so it switches the gate off
+                pair_gate=False,
             ),
         )
 

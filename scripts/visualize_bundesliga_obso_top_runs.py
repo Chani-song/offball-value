@@ -28,9 +28,9 @@ from offball_value.bundesliga import (
 from offball_value.obso import counterfactual_frame_for_runner
 
 
-DEFAULT_RESULTS = ROOT / "data" / "processed" / "bundesliga_obso_counterfactual_all.csv"
+DEFAULT_RESULTS = ROOT / "data" / "processed" / "offball_results.csv"
 DEFAULT_DATA_DIR = ROOT / "data" / "raw" / "bundesliga-integrated"
-DEFAULT_OUT_DIR = ROOT / "data" / "processed" / "visualizations" / "bundesliga_obso_top_runs"
+DEFAULT_OUT_DIR = ROOT / "data" / "processed" / "visualizations" / "offball_overview"
 
 
 def player_name(metadata: BundesligaMatchMeta, player_id: str | None) -> str:

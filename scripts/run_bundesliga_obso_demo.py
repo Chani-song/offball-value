@@ -6,6 +6,7 @@ import math
 from pathlib import Path
 import sys
 
+import numpy as np
 import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -34,6 +35,7 @@ from offball_value.obso import (
     receiver_option_value,
     receiver_post_reception_dangerous_space_value,
     receiver_post_reception_space_area,
+    runner_static_threat_blocker_attributions,
     score_at_points,
 )
 
@@ -64,6 +66,18 @@ def point_to_segment_distance_xy(
     proj_x = start_x + t * seg_x
     proj_y = start_y + t * seg_y
     return euclidean(px, py, proj_x, proj_y)
+
+
+def exp_distance_score(distance: float, scale: float) -> float:
+    if not math.isfinite(distance):
+        return 0.0
+    return float(math.exp(-distance / max(scale, 1e-6)))
+
+
+def gaussian_distance_score(distance: float, scale: float) -> float:
+    if not math.isfinite(distance):
+        return 0.0
+    return float(math.exp(-0.5 * (distance / max(scale, 1e-6)) ** 2))
 
 
 def player_label(metadata, player_id: str | None) -> str | None:
@@ -343,7 +357,8 @@ def format_defender_role_attributions(
             f"{float(item.get('distance_to_receiver', float('nan'))):.2f}:"
             f"{float(item.get('goal_side_score', 0.0)):.6f}:"
             f"{float(item.get('pass_lane_score', 0.0)):.6f}:"
-            f"{float(item.get('passer_pressure_score', 0.0)):.6f}"
+            f"{float(item.get('passer_pressure_score', 0.0)):.6f}:"
+            f"{item.get('runner_affected_role', '')}"
         )
         for item in attributions[:limit]
     )
@@ -352,6 +367,7 @@ def format_defender_role_attributions(
 def runner_affected_suppression_attributions(
     attributions: list[dict[str, float | str]],
     nearest_n: int,
+    pre_start_frame: BundesligaFrame | None,
     start_frame: BundesligaFrame,
     end_frame: BundesligaFrame,
     attacking_team_id: str,
@@ -359,6 +375,11 @@ def runner_affected_suppression_attributions(
     attacking_direction: int,
     target_receiver_id: str | None,
     runner_id: str,
+    blocker_map_resolution: float = 2.0,
+    blocker_map_max_ahead: float = 18.0,
+    blocker_map_lateral_sigma: float = 3.2,
+    blocker_map_goal_mix: float = 0.25,
+    filter_offside: bool = True,
 ) -> list[dict[str, float | str]]:
     runner_start = start_frame.players.get(runner_id)
     runner_end = end_frame.players.get(runner_id)
@@ -385,6 +406,35 @@ def runner_affected_suppression_attributions(
         (float(item.get("responsibility", 0.0)) for item in responsibilities),
         default=0.0,
     )
+    static_blockers = runner_static_threat_blocker_attributions(
+        start_frame,
+        end_frame,
+        runner_id,
+        attacking_team_id,
+        attacking_direction,
+        ball_xy,
+        runner_threat_point=runner_threat_point,
+        resolution=blocker_map_resolution,
+        max_ahead=blocker_map_max_ahead,
+        lateral_sigma=blocker_map_lateral_sigma,
+        goal_mix=blocker_map_goal_mix,
+        filter_offside=filter_offside,
+    )
+    static_blocker_by_id = {
+        str(item["defender_id"]): item
+        for item in static_blockers
+    }
+    defender_deltas = [
+        (player.x - start_frame.players[player.object_id].x,
+         player.y - start_frame.players[player.object_id].y)
+        for player in end_frame.players.values()
+        if player.team_id != attacking_team_id and player.object_id in start_frame.players
+    ]
+    team_shift = (
+        np.median(np.asarray(defender_deltas, dtype=float), axis=0)
+        if defender_deltas
+        else np.zeros(2, dtype=float)
+    )
 
     direct_candidates = []
     for item in attributions:
@@ -397,6 +447,22 @@ def runner_affected_suppression_attributions(
 
         distance_to_runner_end = float(copied.get("distance_to_receiver", float("nan")))
         distance_to_runner_threat = euclidean(defender.x, defender.y, threat_x, threat_y)
+        distance_to_observed_path = point_to_segment_distance_xy(
+            defender.x,
+            defender.y,
+            runner_start.x,
+            runner_start.y,
+            runner_end.x,
+            runner_end.y,
+        )
+        distance_to_future_path = point_to_segment_distance_xy(
+            defender.x,
+            defender.y,
+            runner_end.x,
+            runner_end.y,
+            threat_x,
+            threat_y,
+        )
         distance_to_projected_path = point_to_segment_distance_xy(
             defender.x,
             defender.y,
@@ -405,8 +471,6 @@ def runner_affected_suppression_attributions(
             threat_x,
             threat_y,
         )
-        if distance_to_runner_threat > 10.0 and distance_to_projected_path > 6.0:
-            continue
 
         defender_vec_x = defender.x - defender_start.x
         defender_vec_y = defender.y - defender_start.y
@@ -419,12 +483,43 @@ def runner_affected_suppression_attributions(
             follow_score = max(0.0, cosine) * min(1.0, defender_norm / max(runner_norm, 1e-6))
 
         start_threat_distance = euclidean(defender_start.x, defender_start.y, threat_x, threat_y)
+        start_threat_score = exp_distance_score(start_threat_distance, 6.0)
         closing_score = 0.0
         if runner_norm > 1e-6:
             closing_score = max(
                 0.0,
                 min(1.0, (start_threat_distance - distance_to_runner_threat) / runner_norm),
             )
+        start_runner_distance = euclidean(
+            defender_start.x,
+            defender_start.y,
+            runner_start.x,
+            runner_start.y,
+        )
+        end_runner_distance = euclidean(defender.x, defender.y, runner_end.x, runner_end.y)
+        runner_closing_score = max(
+            0.0,
+            min(
+                1.0,
+                (start_runner_distance - end_runner_distance) / max(runner_norm, 1e-6),
+            ),
+        )
+        start_projected_path_distance = point_to_segment_distance_xy(
+            defender_start.x,
+            defender_start.y,
+            runner_start.x,
+            runner_start.y,
+            threat_x,
+            threat_y,
+        )
+        projected_path_closing_score = max(
+            0.0,
+            min(
+                1.0,
+                (start_projected_path_distance - distance_to_projected_path)
+                / max(runner_norm, 1e-6),
+            ),
+        )
 
         responsibility = responsibility_by_id.get(defender_id, {})
         runner_responsibility = float(responsibility.get("responsibility", 0.0))
@@ -440,6 +535,184 @@ def runner_affected_suppression_attributions(
             responsibility.get("distance_to_pass_lane", copied.get("distance_to_pass_lane", float("nan")))
         )
 
+        threat_point_score = exp_distance_score(distance_to_runner_threat, 6.0)
+        future_path_score = gaussian_distance_score(distance_to_future_path, 5.0)
+        threat_region_score = max(threat_point_score, future_path_score)
+        observed_path_score = gaussian_distance_score(distance_to_observed_path, 5.0)
+        movement_response_score = max(
+            0.0,
+            min(
+                1.0,
+                0.35 * closing_score
+                + 0.30 * follow_score
+                + 0.20 * runner_closing_score
+                + 0.15 * projected_path_closing_score,
+            ),
+        )
+        pass_lane_relevance_score = float(pass_lane_score)
+        pass_or_pressure_score = max(
+            pass_lane_relevance_score,
+            float(copied.get("passer_pressure_score", pressure_score)),
+        )
+        direct_runner_space_score = max(threat_region_score, observed_path_score)
+        runner_space_relevance_score = max(direct_runner_space_score, 0.65 * goal_side_score)
+        runner_relevance_score = max(
+            0.0,
+            min(
+                1.0,
+                0.30 * threat_region_score
+                + 0.25 * observed_path_score
+                + 0.20 * goal_side_score
+                + 0.15 * movement_response_score
+                + 0.10 * pass_lane_relevance_score,
+            ),
+        )
+        threat_suppression = max(0.0, float(copied.get("raw_threat_contribution", 0.0)))
+        static_blocker = static_blocker_by_id.get(defender_id, {})
+        static_blocker_contribution = float(
+            static_blocker.get("static_blocker_contribution", 0.0)
+        )
+        static_blocker_score = float(static_blocker.get("static_blocker_score", 0.0))
+        static_blocker_share = float(static_blocker.get("static_blocker_share", 0.0))
+        static_control_contribution = float(
+            static_blocker.get("static_control_blocker_contribution", 0.0)
+        )
+        static_control_score = float(
+            static_blocker.get("static_control_blocker_score", 0.0)
+        )
+        static_control_share = float(
+            static_blocker.get("static_control_blocker_share", 0.0)
+        )
+        static_pass_lane_contribution = float(
+            static_blocker.get("static_pass_lane_contribution", 0.0)
+        )
+        static_pass_lane_score = float(
+            static_blocker.get("static_pass_lane_score", 0.0)
+        )
+        static_pass_lane_share = float(
+            static_blocker.get("static_pass_lane_share", 0.0)
+        )
+        response_control_contribution = float(
+            static_blocker.get("response_control_contribution", 0.0)
+        )
+        response_control_score = float(
+            static_blocker.get("response_control_score", 0.0)
+        )
+        response_pass_lane_contribution = float(
+            static_blocker.get("response_pass_lane_contribution", 0.0)
+        )
+        response_pass_lane_score = float(
+            static_blocker.get("response_pass_lane_score", 0.0)
+        )
+        static_actual_integrated_threat = float(
+            static_blocker.get("actual_integrated_threat", 0.0)
+        )
+
+        expected_x = defender.x
+        expected_y = defender.y
+        holding_response_score = 0.0
+        holding_deviation_m = 0.0
+        holding_closer_to_threat_m = 0.0
+        if pre_start_frame is not None:
+            defender_pre_start = pre_start_frame.players.get(defender_id)
+            if defender_pre_start is not None:
+                prior_delta = np.asarray(
+                    [
+                        defender_start.x - defender_pre_start.x,
+                        defender_start.y - defender_pre_start.y,
+                    ],
+                    dtype=float,
+                )
+                expected_delta = 0.65 * prior_delta + 0.35 * team_shift
+                expected_norm = float(np.linalg.norm(expected_delta))
+                if expected_norm > 8.0:
+                    expected_delta *= 8.0 / expected_norm
+                expected_x = float(defender_start.x + expected_delta[0])
+                expected_y = float(defender_start.y + expected_delta[1])
+                expected_threat_distance = euclidean(
+                    expected_x,
+                    expected_y,
+                    threat_x,
+                    threat_y,
+                )
+                expected_future_path_distance = point_to_segment_distance_xy(
+                    expected_x,
+                    expected_y,
+                    runner_end.x,
+                    runner_end.y,
+                    threat_x,
+                    threat_y,
+                )
+                actual_region_distance = min(
+                    distance_to_runner_threat,
+                    distance_to_future_path,
+                )
+                expected_region_distance = min(
+                    expected_threat_distance,
+                    expected_future_path_distance,
+                )
+                holding_closer_to_threat_m = max(
+                    0.0,
+                    expected_region_distance - actual_region_distance,
+                )
+                holding_deviation_m = euclidean(
+                    defender.x,
+                    defender.y,
+                    expected_x,
+                    expected_y,
+                )
+                closer_score = 1.0 - math.exp(-holding_closer_to_threat_m / 2.5)
+                deviation_score = 1.0 - math.exp(-holding_deviation_m / 3.0)
+                stationarity_score = math.exp(-defender_norm / 3.0)
+                holding_response_score = max(
+                    0.0,
+                    min(
+                        1.0,
+                        0.50 * closer_score
+                        + 0.30 * deviation_score
+                        + 0.20 * stationarity_score,
+                    ),
+                )
+
+        copied["runner_relevance_score"] = float(runner_relevance_score)
+        copied["runner_relevance_threat_region_score"] = float(threat_region_score)
+        copied["runner_relevance_observed_path_score"] = float(observed_path_score)
+        copied["runner_relevance_goal_side_score"] = float(goal_side_score)
+        copied["runner_relevance_movement_response_score"] = float(movement_response_score)
+        copied["runner_relevance_pass_lane_score"] = float(pass_lane_relevance_score)
+        copied["runner_relevance_start_threat_score"] = float(start_threat_score)
+        copied["runner_relevance_direct_space_score"] = float(direct_runner_space_score)
+        copied["runner_relevance_space_score"] = float(runner_space_relevance_score)
+        copied["runner_relevance_pass_or_pressure_score"] = float(pass_or_pressure_score)
+        copied["runner_threat_suppression_x_relevance"] = float(threat_suppression * runner_relevance_score)
+        copied["runner_static_blocker_contribution"] = float(static_blocker_contribution)
+        copied["runner_static_blocker_score"] = float(static_blocker_score)
+        copied["runner_static_blocker_share"] = float(static_blocker_share)
+        copied["runner_static_control_blocker_contribution"] = float(
+            static_control_contribution
+        )
+        copied["runner_static_control_blocker_score"] = float(static_control_score)
+        copied["runner_static_control_blocker_share"] = float(static_control_share)
+        copied["runner_static_pass_lane_contribution"] = float(
+            static_pass_lane_contribution
+        )
+        copied["runner_static_pass_lane_score"] = float(static_pass_lane_score)
+        copied["runner_static_pass_lane_share"] = float(static_pass_lane_share)
+        copied["runner_response_control_contribution"] = float(
+            response_control_contribution
+        )
+        copied["runner_response_control_score"] = float(response_control_score)
+        copied["runner_response_pass_lane_contribution"] = float(
+            response_pass_lane_contribution
+        )
+        copied["runner_response_pass_lane_score"] = float(response_pass_lane_score)
+        copied["actual_integrated_threat"] = float(static_actual_integrated_threat)
+        copied["runner_holding_response_score"] = float(holding_response_score)
+        copied["runner_holding_deviation_m"] = float(holding_deviation_m)
+        copied["runner_holding_closer_to_threat_m"] = float(holding_closer_to_threat_m)
+        copied["runner_holding_expected_x"] = float(expected_x)
+        copied["runner_holding_expected_y"] = float(expected_y)
+
         target_distance = float("nan")
         target_option_bias_m = 0.0
         if target_receiver_id and target_receiver_id != runner_id:
@@ -453,6 +726,8 @@ def runner_affected_suppression_attributions(
         copied["distance_to_runner_threat_point_m"] = float(distance_to_runner_threat)
         copied["distance_to_receiver"] = float(distance_to_runner_threat)
         copied["distance_to_runner_path"] = float(distance_to_projected_path)
+        copied["distance_to_runner_observed_path_m"] = float(distance_to_observed_path)
+        copied["distance_to_runner_future_path_m"] = float(distance_to_future_path)
         copied["distance_to_pass_lane"] = float(distance_to_threat_pass_lane)
         copied["pass_lane_score"] = float(pass_lane_score)
         copied["pressure_score"] = float(pressure_score)
@@ -461,6 +736,8 @@ def runner_affected_suppression_attributions(
         copied["runner_threat_point_x"] = float(threat_x)
         copied["runner_threat_point_y"] = float(threat_y)
         copied["runner_closing_score"] = float(closing_score)
+        copied["runner_end_closing_score"] = float(runner_closing_score)
+        copied["runner_projected_path_closing_score"] = float(projected_path_closing_score)
         copied["runner_responsibility"] = float(runner_responsibility)
         copied["runner_responsibility_score"] = float(runner_responsibility_score)
         copied["distance_to_target_option"] = float(target_distance)
@@ -474,7 +751,7 @@ def runner_affected_suppression_attributions(
     if not direct_candidates:
         return []
 
-    nearest = sorted(
+    proximity_ranked = sorted(
         direct_candidates,
         key=lambda item: (
             min(
@@ -483,50 +760,151 @@ def runner_affected_suppression_attributions(
             ),
             float(item.get("distance_to_runner_threat_point_m", float("inf"))),
         ),
-    )[: max(1, nearest_n)]
+    )
+    for rank, item in enumerate(proximity_ranked, start=1):
+        item["runner_proximity_rank"] = rank
 
-    max_threat = max(float(item.get("raw_threat_contribution", 0.0)) for item in nearest)
+    max_response_control = max(
+        float(item.get("runner_response_control_contribution", 0.0))
+        for item in direct_candidates
+    )
     out = []
-    for rank, copied in enumerate(nearest, start=1):
+    for copied in direct_candidates:
         threat = float(copied.get("raw_threat_contribution", 0.0))
-        threat_norm = threat / max_threat if max_threat > 1e-12 else 0.0
-        distance_to_runner_threat = float(copied.get("distance_to_runner_threat_point_m", float("inf")))
-        distance_to_projected_path = float(copied.get("distance_to_runner_path", float("inf")))
-        proximity_score = (
-            math.exp(-distance_to_runner_threat / 6.0)
-            if math.isfinite(distance_to_runner_threat)
+        response_control = float(
+            copied.get("runner_response_control_contribution", 0.0)
+        )
+        response_control_norm = (
+            response_control / max_response_control
+            if max_response_control > 1e-12
             else 0.0
         )
-        path_score = (
-            math.exp(-0.5 * (distance_to_projected_path / 5.0) ** 2)
-            if math.isfinite(distance_to_projected_path)
-            else 0.0
-        )
-        follow_score = float(copied.get("follow_score", 0.0))
-        closing_score = float(copied.get("runner_closing_score", 0.0))
-        goal_side_score = float(copied.get("goal_side_score", 0.0))
         responsibility_score = float(copied.get("runner_responsibility_score", 0.0))
-        assignment_gate = 0.65 + 0.35 * responsibility_score
-        copied["runner_proximity_rank"] = rank
+        relevance_score = float(copied.get("runner_relevance_score", 0.0))
+        direct_space_score = float(copied.get("runner_relevance_direct_space_score", 0.0))
+        threat_region_score = float(
+            copied.get("runner_relevance_threat_region_score", 0.0)
+        )
+        movement_response_score = float(
+            copied.get("runner_relevance_movement_response_score", 0.0)
+        )
+        defender_movement = float(copied.get("defender_movement_m", 0.0))
+        static_control_contribution = float(
+            copied.get("runner_static_control_blocker_contribution", 0.0)
+        )
+        static_control_score = float(
+            copied.get("runner_static_control_blocker_score", 0.0)
+        )
+        static_control_share = float(
+            copied.get("runner_static_control_blocker_share", 0.0)
+        )
+        actual_integrated_threat = float(
+            copied.get("actual_integrated_threat", 0.0)
+        )
+        holding_response_score = float(copied.get("runner_holding_response_score", 0.0))
+        holding_closer_m = float(copied.get("runner_holding_closer_to_threat_m", 0.0))
+        proximity_rank = int(copied.get("runner_proximity_rank", 999))
+        assignment_gate = 0.50 + 0.35 * responsibility_score + 0.15 * min(
+            1.0,
+            max(0.0, (max(1, nearest_n) - proximity_rank + 1) / max(1, nearest_n)),
+        )
+        runner_direct_score = response_control * relevance_score
+        reactive_score = direct_space_score * (
+            0.70 * movement_response_score + 0.30 * response_control_norm
+        )
+        is_reactive = bool(
+            response_control >= max(0.002, 0.05 * max_response_control)
+            and defender_movement >= 0.75
+            and direct_space_score >= 0.25
+            and movement_response_score >= 0.20
+            and reactive_score >= 0.12
+        )
+        is_threat_blocker = bool(
+            static_control_contribution >= max(0.01, 0.005 * actual_integrated_threat)
+            and static_control_score >= 0.12
+            and static_control_share >= 0.03
+            and threat_region_score >= 0.12
+        )
+        holding_score = (
+            threat_region_score
+            * static_control_score
+            * holding_response_score
+        )
+        is_holding = bool(
+            not is_reactive
+            and is_threat_blocker
+            and holding_response_score >= 0.25
+            and holding_closer_m >= 0.50
+            and holding_score >= 0.05
+        )
+        is_pre_existing_blocker = bool(
+            is_threat_blocker and not is_reactive and not is_holding
+        )
+        if is_reactive and is_threat_blocker:
+            runner_affected_role = "reactive_affected_and_threat_blocker"
+        elif is_reactive:
+            runner_affected_role = "reactive_affected"
+        elif is_holding:
+            runner_affected_role = "holding_affected"
+        elif is_pre_existing_blocker:
+            runner_affected_role = "pre_existing_runner_blocker"
+        elif (
+            float(copied.get("runner_relevance_pass_or_pressure_score", 0.0)) >= 0.70
+            and direct_space_score < 0.18
+        ):
+            runner_affected_role = "pass_lane_or_pressure"
+        else:
+            runner_affected_role = "no_clear_affected"
+
         copied["runner_assignment_gate"] = float(assignment_gate)
-        copied["runner_assignment_plausible"] = True
-        copied["runner_direct_score"] = assignment_gate * (
-            0.28 * proximity_score
-            + 0.22 * path_score
-            + 0.15 * follow_score
-            + 0.15 * closing_score
-            + 0.12 * goal_side_score
-            + 0.08 * threat_norm
+        copied["runner_affected_role"] = runner_affected_role
+        copied["runner_assignment_plausible"] = bool(is_reactive or is_holding)
+        copied["is_reactive_affected"] = bool(is_reactive)
+        copied["is_holding_affected"] = bool(is_holding)
+        copied["is_runner_threat_blocker"] = bool(is_threat_blocker)
+        copied["is_pre_existing_threat_blocker"] = bool(is_pre_existing_blocker)
+        copied["runner_reactive_affected_score"] = float(reactive_score)
+        copied["runner_holding_affected_score"] = float(holding_score)
+        copied["runner_threat_blocker_score"] = float(
+            static_control_score * (0.65 + 0.35 * threat_region_score)
+        )
+        copied["runner_affected_score"] = float(max(reactive_score, holding_score))
+        copied["runner_direct_score"] = float(runner_direct_score)
+        copied["runner_direct_score_norm"] = float(
+            response_control_norm * relevance_score
+        )
+        copied["target_biased_without_threat"] = bool(
+            float(copied.get("target_option_bias_m", 0.0)) > 3.0
+            and threat <= 1e-12
+            and relevance_score < 0.20
+        )
+        copied["lane_or_passer_biased"] = bool(
+            relevance_score < 0.20
+            and max(
+                float(copied.get("pass_lane_score", 0.0)),
+                float(copied.get("passer_pressure_score", 0.0)),
+            )
+            > 0.70
+        )
+        copied["far_without_meaningful_threat"] = bool(
+            relevance_score < 0.12
+            and float(copied.get("distance_to_runner_threat_point_m", float("inf"))) > 14.0
+            and float(copied.get("distance_to_runner_future_path_m", float("inf"))) > 9.0
+            and threat <= 1e-12
         )
         out.append(copied)
 
     return sorted(
         out,
         key=lambda item: (
+            int(bool(item.get("runner_assignment_plausible", False))),
+            float(item.get("runner_affected_score", 0.0)),
+            int(bool(item.get("is_runner_threat_blocker", False))),
+            float(item.get("runner_threat_blocker_score", 0.0)),
             float(item["runner_direct_score"]),
             float(item.get("raw_threat_contribution", 0.0)),
-            float(item.get("runner_responsibility_score", 0.0)),
-            float(item.get("goal_side_score", 0.0)),
+            float(item.get("runner_relevance_score", 0.0)),
+            float(item.get("runner_relevance_goal_side_score", 0.0)),
             -float(item.get("distance_to_receiver", float("inf"))),
         ),
         reverse=True,
@@ -536,18 +914,36 @@ def runner_affected_suppression_attributions(
 def pass_lane_suppression_attributions(
     attributions: list[dict[str, float | str]],
 ) -> list[dict[str, float | str]]:
-    max_threat = max((float(item.get("raw_threat_contribution", 0.0)) for item in attributions), default=0.0)
     out = []
     for item in attributions:
         copied = dict(item)
-        threat = float(copied.get("raw_threat_contribution", 0.0))
-        threat_norm = threat / max_threat if max_threat > 1e-12 else 0.0
-        lane_score = float(copied.get("pass_lane_score", 0.0))
-        copied["pass_lane_suppressor_score"] = 0.75 * lane_score + 0.25 * threat_norm
+        contribution = float(
+            copied.get("runner_static_pass_lane_contribution", 0.0)
+        )
+        static_score = float(copied.get("runner_static_pass_lane_score", 0.0))
+        static_share = float(copied.get("runner_static_pass_lane_share", 0.0))
+        response_score = float(
+            copied.get("runner_response_pass_lane_score", 0.0)
+        )
+        geometric_lane_score = float(copied.get("pass_lane_score", 0.0))
+        actual_integrated_threat = float(
+            copied.get("actual_integrated_threat", 0.0)
+        )
+        copied["pass_lane_suppressor_score"] = (
+            0.70 * static_score
+            + 0.20 * response_score
+            + 0.10 * geometric_lane_score
+        )
+        copied["is_pass_lane_suppressor"] = bool(
+            contribution >= max(0.01, 0.005 * actual_integrated_threat)
+            and static_score >= 0.12
+            and static_share >= 0.03
+        )
         out.append(copied)
     return sorted(
         out,
         key=lambda item: (
+            int(bool(item.get("is_pass_lane_suppressor", False))),
             float(item["pass_lane_suppressor_score"]),
             -float(item.get("distance_to_pass_lane", float("inf"))),
         ),
@@ -634,6 +1030,8 @@ def run_match(args) -> pd.DataFrame:
         successful_only=args.successful_only,
         open_play_only=args.open_play_only,
     )
+    if args.event_frame is not None:
+        pass_events = pass_events[pass_events["frame_id"] == args.event_frame].reset_index(drop=True)
     if args.max_events is not None:
         pass_events = pass_events.head(args.max_events)
     print(f"Selected {len(pass_events)} pass/cross events")
@@ -643,6 +1041,7 @@ def run_match(args) -> pd.DataFrame:
         event_frame = int(row.frame_id)
         target_frames.add(event_frame)
         target_frames.add(event_frame - args.horizon_frames)
+        target_frames.add(event_frame - 2 * args.horizon_frames)
 
     print(f"Reading {len(target_frames)} target frames from positions XML...")
     frames = load_bundesliga_frames(files["positions"], target_frames=target_frames)
@@ -652,6 +1051,8 @@ def run_match(args) -> pd.DataFrame:
     for event in pass_events.itertuples():
         event_frame_id = int(event.frame_id)
         start_frame_id = event_frame_id - args.horizon_frames
+        pre_start_frame_id = event_frame_id - 2 * args.horizon_frames
+        pre_start_frame = frames.get(pre_start_frame_id)
         start_frame = frames.get(start_frame_id)
         end_frame = frames.get(event_frame_id)
         if start_frame is None or end_frame is None:
@@ -767,6 +1168,7 @@ def run_match(args) -> pd.DataFrame:
             runner_affected_suppression = runner_affected_suppression_attributions(
                 all_suppression_attributions,
                 nearest_n=args.runner_affected_nearest_n,
+                pre_start_frame=pre_start_frame,
                 start_frame=start_frame,
                 end_frame=end_frame,
                 attacking_team_id=team_id,
@@ -774,24 +1176,92 @@ def run_match(args) -> pd.DataFrame:
                 attacking_direction=attacking_direction,
                 target_receiver_id=defender_target_receiver_id,
                 runner_id=runner_id,
+                blocker_map_resolution=args.runner_blocker_map_resolution,
+                blocker_map_max_ahead=args.runner_blocker_map_max_ahead,
+                blocker_map_lateral_sigma=args.runner_blocker_map_lateral_sigma,
+                blocker_map_goal_mix=args.runner_blocker_map_goal_mix,
+                filter_offside=not args.include_offside_candidates,
             )
-            pass_lane_suppression = pass_lane_suppression_attributions(all_suppression_attributions)
-            passer_pressure = passer_pressure_attributions(all_suppression_attributions)
+            pass_lane_suppression = pass_lane_suppression_attributions(
+                runner_affected_suppression
+            )
+            passer_pressure = passer_pressure_attributions(
+                runner_affected_suppression
+            )
             top_suppression_defender = suppression_attributions[0] if suppression_attributions else None
             top_suppression_defender_id = (
                 str(top_suppression_defender["defender_id"])
                 if top_suppression_defender is not None
                 else None
             )
-            top_runner_affected_defender = (
+            top_runner_affected_candidate = (
                 runner_affected_suppression[0] if runner_affected_suppression else None
+            )
+            reactive_affected_defenders = sorted(
+                [
+                    item
+                    for item in runner_affected_suppression
+                    if bool(item.get("is_reactive_affected", False))
+                ],
+                key=lambda item: float(item.get("runner_reactive_affected_score", 0.0)),
+                reverse=True,
+            )
+            holding_affected_defenders = sorted(
+                [
+                    item
+                    for item in runner_affected_suppression
+                    if bool(item.get("is_holding_affected", False))
+                ],
+                key=lambda item: float(item.get("runner_holding_affected_score", 0.0)),
+                reverse=True,
+            )
+            runner_threat_blockers = sorted(
+                [
+                    item
+                    for item in runner_affected_suppression
+                    if bool(item.get("is_runner_threat_blocker", False))
+                ],
+                key=lambda item: float(item.get("runner_threat_blocker_score", 0.0)),
+                reverse=True,
+            )
+            pre_existing_threat_blockers = [
+                item
+                for item in runner_threat_blockers
+                if bool(item.get("is_pre_existing_threat_blocker", False))
+            ]
+            affected_defenders = sorted(
+                [*reactive_affected_defenders, *holding_affected_defenders],
+                key=lambda item: float(item.get("runner_affected_score", 0.0)),
+                reverse=True,
+            )
+            top_runner_affected_defender = (
+                affected_defenders[0] if affected_defenders else None
+            )
+            top_reactive_affected_defender = (
+                reactive_affected_defenders[0] if reactive_affected_defenders else None
+            )
+            top_holding_affected_defender = (
+                holding_affected_defenders[0] if holding_affected_defenders else None
+            )
+            top_runner_threat_blocker = (
+                runner_threat_blockers[0] if runner_threat_blockers else None
+            )
+            top_pre_existing_threat_blocker = (
+                pre_existing_threat_blockers[0] if pre_existing_threat_blockers else None
             )
             top_runner_affected_defender_id = (
                 str(top_runner_affected_defender["defender_id"])
                 if top_runner_affected_defender is not None
                 else None
             )
-            pass_lane_suppressor = pass_lane_suppression[0] if pass_lane_suppression else None
+            pass_lane_suppressor = next(
+                (
+                    item
+                    for item in pass_lane_suppression
+                    if bool(item.get("is_pass_lane_suppressor", False))
+                ),
+                None,
+            )
             pass_lane_suppressor_id = (
                 str(pass_lane_suppressor["defender_id"])
                 if pass_lane_suppressor is not None
@@ -958,9 +1428,140 @@ def run_match(args) -> pd.DataFrame:
                         if top_suppression_defender is not None
                         else None
                     ),
+                    "reactive_affected_defender_count": len(reactive_affected_defenders),
+                    "reactive_affected_defender_ids": ";".join(
+                        str(item["defender_id"]) for item in reactive_affected_defenders
+                    ),
+                    "reactive_affected_defender_names": ";".join(
+                        str(player_label(metadata, str(item["defender_id"])))
+                        for item in reactive_affected_defenders
+                    ),
+                    "holding_affected_defender_count": len(holding_affected_defenders),
+                    "holding_affected_defender_ids": ";".join(
+                        str(item["defender_id"]) for item in holding_affected_defenders
+                    ),
+                    "holding_affected_defender_names": ";".join(
+                        str(player_label(metadata, str(item["defender_id"])))
+                        for item in holding_affected_defenders
+                    ),
+                    "runner_threat_blocker_count": len(runner_threat_blockers),
+                    "runner_threat_blocker_ids": ";".join(
+                        str(item["defender_id"]) for item in runner_threat_blockers
+                    ),
+                    "runner_threat_blocker_names": ";".join(
+                        str(player_label(metadata, str(item["defender_id"])))
+                        for item in runner_threat_blockers
+                    ),
+                    "pre_existing_threat_blocker_count": len(pre_existing_threat_blockers),
+                    "pre_existing_threat_blocker_ids": ";".join(
+                        str(item["defender_id"]) for item in pre_existing_threat_blockers
+                    ),
+                    "pre_existing_threat_blocker_names": ";".join(
+                        str(player_label(metadata, str(item["defender_id"])))
+                        for item in pre_existing_threat_blockers
+                    ),
+                    "top_reactive_affected_defender_id": (
+                        str(top_reactive_affected_defender["defender_id"])
+                        if top_reactive_affected_defender is not None
+                        else None
+                    ),
+                    "top_reactive_affected_defender_name": (
+                        player_label(
+                            metadata,
+                            str(top_reactive_affected_defender["defender_id"]),
+                        )
+                        if top_reactive_affected_defender is not None
+                        else None
+                    ),
+                    "top_reactive_affected_defender_score": (
+                        float(top_reactive_affected_defender["runner_reactive_affected_score"])
+                        if top_reactive_affected_defender is not None
+                        else None
+                    ),
+                    "top_reactive_affected_response_control_contribution": (
+                        float(top_reactive_affected_defender["runner_response_control_contribution"])
+                        if top_reactive_affected_defender is not None
+                        else None
+                    ),
+                    "top_holding_affected_defender_id": (
+                        str(top_holding_affected_defender["defender_id"])
+                        if top_holding_affected_defender is not None
+                        else None
+                    ),
+                    "top_holding_affected_defender_name": (
+                        player_label(
+                            metadata,
+                            str(top_holding_affected_defender["defender_id"]),
+                        )
+                        if top_holding_affected_defender is not None
+                        else None
+                    ),
+                    "top_holding_affected_defender_score": (
+                        float(top_holding_affected_defender["runner_holding_affected_score"])
+                        if top_holding_affected_defender is not None
+                        else None
+                    ),
+                    "top_holding_affected_control_contribution": (
+                        float(top_holding_affected_defender["runner_static_control_blocker_contribution"])
+                        if top_holding_affected_defender is not None
+                        else None
+                    ),
+                    "top_holding_affected_expected_x": (
+                        float(top_holding_affected_defender["runner_holding_expected_x"])
+                        if top_holding_affected_defender is not None
+                        else None
+                    ),
+                    "top_holding_affected_expected_y": (
+                        float(top_holding_affected_defender["runner_holding_expected_y"])
+                        if top_holding_affected_defender is not None
+                        else None
+                    ),
+                    "top_runner_threat_blocker_id": (
+                        str(top_runner_threat_blocker["defender_id"])
+                        if top_runner_threat_blocker is not None
+                        else None
+                    ),
+                    "top_runner_threat_blocker_name": (
+                        player_label(metadata, str(top_runner_threat_blocker["defender_id"]))
+                        if top_runner_threat_blocker is not None
+                        else None
+                    ),
+                    "top_runner_threat_blocker_score": (
+                        float(top_runner_threat_blocker["runner_threat_blocker_score"])
+                        if top_runner_threat_blocker is not None
+                        else None
+                    ),
+                    "top_runner_threat_blocker_contribution": (
+                        float(top_runner_threat_blocker["runner_static_control_blocker_contribution"])
+                        if top_runner_threat_blocker is not None
+                        else None
+                    ),
+                    "top_runner_threat_blocker_total_contribution": (
+                        float(top_runner_threat_blocker["runner_static_blocker_contribution"])
+                        if top_runner_threat_blocker is not None
+                        else None
+                    ),
+                    "top_pre_existing_threat_blocker_id": (
+                        str(top_pre_existing_threat_blocker["defender_id"])
+                        if top_pre_existing_threat_blocker is not None
+                        else None
+                    ),
+                    "top_pre_existing_threat_blocker_name": (
+                        player_label(
+                            metadata,
+                            str(top_pre_existing_threat_blocker["defender_id"]),
+                        )
+                        if top_pre_existing_threat_blocker is not None
+                        else None
+                    ),
                     "top_runner_affected_defender_id": top_runner_affected_defender_id,
                     "top_runner_affected_defender_name": (
                         player_label(metadata, top_runner_affected_defender_id)
+                    ),
+                    "top_runner_affected_defender_role": (
+                        str(top_runner_affected_defender["runner_affected_role"])
+                        if top_runner_affected_defender is not None
+                        else None
                     ),
                     "top_runner_affected_defender_raw_obso": (
                         float(top_runner_affected_defender["raw_contribution"])
@@ -972,8 +1573,63 @@ def run_match(args) -> pd.DataFrame:
                         if top_runner_affected_defender is not None
                         else None
                     ),
+                    "top_runner_affected_defender_score_norm": (
+                        float(top_runner_affected_defender["runner_direct_score_norm"])
+                        if top_runner_affected_defender is not None
+                        else None
+                    ),
+                    "top_runner_affected_defender_runner_relevance_score": (
+                        float(top_runner_affected_defender["runner_relevance_score"])
+                        if top_runner_affected_defender is not None
+                        else None
+                    ),
+                    "top_runner_affected_defender_relevance_threat_region_score": (
+                        float(top_runner_affected_defender["runner_relevance_threat_region_score"])
+                        if top_runner_affected_defender is not None
+                        else None
+                    ),
+                    "top_runner_affected_defender_relevance_observed_path_score": (
+                        float(top_runner_affected_defender["runner_relevance_observed_path_score"])
+                        if top_runner_affected_defender is not None
+                        else None
+                    ),
+                    "top_runner_affected_defender_relevance_goal_side_score": (
+                        float(top_runner_affected_defender["runner_relevance_goal_side_score"])
+                        if top_runner_affected_defender is not None
+                        else None
+                    ),
+                    "top_runner_affected_defender_relevance_movement_response_score": (
+                        float(top_runner_affected_defender["runner_relevance_movement_response_score"])
+                        if top_runner_affected_defender is not None
+                        else None
+                    ),
+                    "top_runner_affected_defender_relevance_pass_lane_score": (
+                        float(top_runner_affected_defender["runner_relevance_pass_lane_score"])
+                        if top_runner_affected_defender is not None
+                        else None
+                    ),
+                    "top_runner_affected_defender_threat_suppression_x_relevance": (
+                        float(top_runner_affected_defender["runner_threat_suppression_x_relevance"])
+                        if top_runner_affected_defender is not None
+                        else None
+                    ),
                     "top_runner_affected_defender_raw_threat": (
                         float(top_runner_affected_defender["raw_threat_contribution"])
+                        if top_runner_affected_defender is not None
+                        else None
+                    ),
+                    "top_runner_affected_defender_response_control_contribution": (
+                        float(top_runner_affected_defender["runner_response_control_contribution"])
+                        if top_runner_affected_defender is not None
+                        else None
+                    ),
+                    "top_runner_affected_defender_static_control_contribution": (
+                        float(top_runner_affected_defender["runner_static_control_blocker_contribution"])
+                        if top_runner_affected_defender is not None
+                        else None
+                    ),
+                    "top_runner_affected_defender_static_pass_lane_contribution": (
+                        float(top_runner_affected_defender["runner_static_pass_lane_contribution"])
                         if top_runner_affected_defender is not None
                         else None
                     ),
@@ -1019,6 +1675,16 @@ def run_match(args) -> pd.DataFrame:
                     ),
                     "top_runner_affected_defender_distance_to_runner_path_m": (
                         float(top_runner_affected_defender["distance_to_runner_path"])
+                        if top_runner_affected_defender is not None
+                        else None
+                    ),
+                    "top_runner_affected_defender_distance_to_runner_observed_path_m": (
+                        float(top_runner_affected_defender["distance_to_runner_observed_path_m"])
+                        if top_runner_affected_defender is not None
+                        else None
+                    ),
+                    "top_runner_affected_defender_distance_to_runner_future_path_m": (
+                        float(top_runner_affected_defender["distance_to_runner_future_path_m"])
                         if top_runner_affected_defender is not None
                         else None
                     ),
@@ -1077,10 +1743,50 @@ def run_match(args) -> pd.DataFrame:
                         if top_runner_affected_defender is not None
                         else None
                     ),
+                    "top_runner_affected_candidate_id": (
+                        str(top_runner_affected_candidate["defender_id"])
+                        if top_runner_affected_candidate is not None
+                        else None
+                    ),
+                    "top_runner_affected_candidate_name": (
+                        player_label(metadata, str(top_runner_affected_candidate["defender_id"]))
+                        if top_runner_affected_candidate is not None
+                        else None
+                    ),
+                    "top_runner_affected_candidate_role": (
+                        str(top_runner_affected_candidate["runner_affected_role"])
+                        if top_runner_affected_candidate is not None
+                        else None
+                    ),
+                    "top_runner_affected_candidate_score": (
+                        float(top_runner_affected_candidate["runner_direct_score"])
+                        if top_runner_affected_candidate is not None
+                        else None
+                    ),
+                    "top_runner_affected_candidate_raw_threat": (
+                        float(top_runner_affected_candidate["raw_threat_contribution"])
+                        if top_runner_affected_candidate is not None
+                        else None
+                    ),
+                    "top_runner_affected_candidate_runner_relevance_score": (
+                        float(top_runner_affected_candidate["runner_relevance_score"])
+                        if top_runner_affected_candidate is not None
+                        else None
+                    ),
                     "pass_lane_suppressor_id": pass_lane_suppressor_id,
                     "pass_lane_suppressor_name": player_label(metadata, pass_lane_suppressor_id),
                     "pass_lane_suppressor_score": (
                         float(pass_lane_suppressor["pass_lane_suppressor_score"])
+                        if pass_lane_suppressor is not None
+                        else None
+                    ),
+                    "pass_lane_suppressor_contribution": (
+                        float(pass_lane_suppressor["runner_static_pass_lane_contribution"])
+                        if pass_lane_suppressor is not None
+                        else None
+                    ),
+                    "pass_lane_suppressor_response_contribution": (
+                        float(pass_lane_suppressor["runner_response_pass_lane_contribution"])
                         if pass_lane_suppressor is not None
                         else None
                     ),
@@ -1125,6 +1831,30 @@ def run_match(args) -> pd.DataFrame:
                         metadata,
                         runner_affected_suppression,
                         score_key="runner_direct_score",
+                        limit=args.defensive_suppression_top_n,
+                    ),
+                    "reactive_affected_defenders_top": format_defender_role_attributions(
+                        metadata,
+                        reactive_affected_defenders,
+                        score_key="runner_reactive_affected_score",
+                        limit=args.defensive_suppression_top_n,
+                    ),
+                    "holding_affected_defenders_top": format_defender_role_attributions(
+                        metadata,
+                        holding_affected_defenders,
+                        score_key="runner_holding_affected_score",
+                        limit=args.defensive_suppression_top_n,
+                    ),
+                    "runner_threat_blockers_top": format_defender_role_attributions(
+                        metadata,
+                        runner_threat_blockers,
+                        score_key="runner_threat_blocker_score",
+                        limit=args.defensive_suppression_top_n,
+                    ),
+                    "pre_existing_threat_blockers_top": format_defender_role_attributions(
+                        metadata,
+                        pre_existing_threat_blockers,
+                        score_key="runner_threat_blocker_score",
                         limit=args.defensive_suppression_top_n,
                     ),
                     "pass_lane_suppression_top": format_defender_role_attributions(
@@ -1226,6 +1956,7 @@ def main() -> None:
     )
     parser.add_argument("--data-dir", type=Path, default=DEFAULT_DATA_DIR)
     parser.add_argument("--match-id", type=str, default="J03WMX")
+    parser.add_argument("--event-frame", type=int, default=None)
     parser.add_argument("--max-events", type=int, default=80, help="Pass/cross event cap per match. Use 0 for all.")
     parser.add_argument("--horizon-frames", type=int, default=25)
     parser.add_argument("--min-run-distance", type=float, default=4.0)
@@ -1277,8 +2008,12 @@ def main() -> None:
         "--runner-affected-nearest-n",
         type=int,
         default=3,
-        help="Choose direct runner defender from the N nearest defenders to the projected runner threat point/path.",
+        help="Number of closest runner-relevant defenders that receive a small proximity plausibility boost.",
     )
+    parser.add_argument("--runner-blocker-map-resolution", type=float, default=2.0)
+    parser.add_argument("--runner-blocker-map-max-ahead", type=float, default=18.0)
+    parser.add_argument("--runner-blocker-map-lateral-sigma", type=float, default=3.2)
+    parser.add_argument("--runner-blocker-map-goal-mix", type=float, default=0.25)
     parser.add_argument(
         "--suppression-runner-max-distance",
         type=float,
@@ -1319,11 +2054,11 @@ def main() -> None:
             if not match_out.empty:
                 outputs.append(match_out)
         out = pd.concat(outputs, ignore_index=True) if outputs else pd.DataFrame()
-        out_name = f"bundesliga_obso_counterfactual_all{suffix}.csv"
+        out_name = f"offball_results{suffix}.csv"
     else:
         args.match_id = normalize_bundesliga_match_id(args.match_id)
         out = run_match(args)
-        out_name = f"bundesliga_obso_counterfactual_{short_bundesliga_match_id(args.match_id)}{suffix}.csv"
+        out_name = f"offball_{short_bundesliga_match_id(args.match_id)}{suffix}.csv"
 
     if out.empty:
         print("No OBSO off-ball candidates found.")
@@ -1341,7 +2076,16 @@ def main() -> None:
         "recipient_name",
         "runner_name",
         "affected_defender_name",
+        "reactive_affected_defender_count",
+        "reactive_affected_defender_names",
+        "holding_affected_defender_count",
+        "holding_affected_defender_names",
+        "runner_threat_blocker_count",
+        "runner_threat_blocker_names",
         "top_runner_affected_defender_name",
+        "top_runner_affected_defender_role",
+        "top_runner_affected_candidate_name",
+        "top_runner_affected_candidate_role",
         "pass_lane_suppressor_name",
         "passer_pressure_defender_name",
         "top_suppression_defender_name",
