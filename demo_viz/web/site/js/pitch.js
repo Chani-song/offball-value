@@ -32,8 +32,8 @@ export class Pitch {
     // zoom so they keep a constant size on screen while players grow.
     this.k = 1;
     this.layers = {};
-    for (const name of ["markings", "field", "paths", "trail", "lane", "tether",
-                        "ghost", "players", "labels"]) {
+    for (const name of ["markings", "field", "paths", "passes", "trail", "lane",
+                        "tether", "ghost", "players", "labels"]) {
       const group = document.createElementNS(SVG_NS, "g");
       group.setAttribute("class", `layer-${name}`);
       this.svg.appendChild(group);
@@ -111,8 +111,8 @@ export class Pitch {
   }
 
   clearDynamic() {
-    for (const name of ["field", "paths", "trail", "lane", "tether", "ghost",
-                        "players", "labels"]) {
+    for (const name of ["field", "paths", "passes", "trail", "lane", "tether",
+                        "ghost", "players", "labels"]) {
       this.layers[name].replaceChildren();
     }
   }
@@ -313,6 +313,63 @@ export class Pitch {
         stroke: P.beneficiary, "stroke-width": 0.32, opacity: 0.85,
       });
     }
+  }
+
+  /**
+   * The five candidate pass directions from the carrier.
+   *
+   * Drawn identically: no ranking, no thickness or colour encoding a score,
+   * no arrowhead singled out. The only per-ray text is the OBSO value at the
+   * endpoint when the threat view is on, and it is deliberately small.
+   */
+  drawCandidates(scene, fan, { values = null } = {}) {
+    if (!fan) return;
+    const origin = view(scene, fan.origin[0], fan.origin[1]);
+    if (!origin) return;
+    // two rays clipped to the same stretch of touchline end in the same place;
+    // labelling both just prints one number on top of another
+    const labelled = [];
+    for (const ray of fan.rays) {
+      const end = view(scene, ray.end[0], ray.end[1]);
+      if (!end) continue;
+      this.add("passes", "line", {
+        x1: origin[0], y1: origin[1], x2: end[0], y2: end[1],
+        stroke: P.obso, "stroke-width": 1.1, opacity: 0.16,
+        "stroke-linecap": "round",
+      });
+      this.add("passes", "line", {
+        x1: origin[0], y1: origin[1], x2: end[0], y2: end[1],
+        stroke: P.obso, "stroke-width": 0.26, opacity: 0.8,
+        "stroke-dasharray": "1.6 1.1", "stroke-linecap": "round",
+      });
+      this.add("passes", "circle", {
+        cx: end[0], cy: end[1], r: 0.62,
+        fill: "none", stroke: P.obso, "stroke-width": 0.22, opacity: 0.9,
+      });
+      if (values && ray.obso != null) {
+        // flip the caption below the endpoint near the touchline, so it stays
+        // on the pitch rather than floating over the card
+        const nearTop = end[1] < -PITCH_W / 2 + 3.2;
+        const at = [end[0], end[1] + (nearTop ? 2.5 : -1.6)];
+        // crowding is judged on where the text lands, not where the ray ends:
+        // the flip above can push two captions together even when their
+        // endpoints are well apart. The box is the size of "0.000" set at 1.35.
+        const clash = labelled.some(
+          ([lx, ly]) => Math.abs(at[0] - lx) < 5.2 && Math.abs(at[1] - ly) < 2.0);
+        if (!clash) {
+          labelled.push(at);
+          this.add("passes", "text", {
+            x: at[0], y: at[1], "text-anchor": "middle",
+            fill: P.obso, "font-size": 1.35, opacity: 0.9,
+            style: "paint-order:stroke; stroke:#05090A; stroke-width:0.6px",
+          }, ray.obso.toFixed(3));
+        }
+      }
+    }
+    this.add("passes", "circle", {
+      cx: origin[0], cy: origin[1], r: 1.15,
+      fill: "none", stroke: P.obso, "stroke-width": 0.3, opacity: 0.75,
+    });
   }
 
   drawPaths(scene) {

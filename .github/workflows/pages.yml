@@ -11,6 +11,7 @@ on:
     paths:
       - "demo_viz/web/**"
       - "demo_viz/web_data/**"
+      - "src/offball_value/reference_obso.py"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
 
@@ -59,6 +60,10 @@ jobs:
                      if not pathlib.Path("_site/data", s["file"]).exists()]
           assert not missing, f"missing scene files: {missing}"
           print(f"{len(scenes)} scenes present")
+          # the OBSO threat view is lazy-loaded and degrades to no field when
+          # its data is absent, so report the count rather than failing on it
+          obso = sorted(pathlib.Path("_site/data/obso").glob("*.json"))
+          print(f"{len(obso)} OBSO files present")
           PY
 
       - uses: actions/configure-pages@v5

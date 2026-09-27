@@ -109,8 +109,8 @@ it takes priority.
 `Run` / `Reaction` / `Peak` jump buttons · time scrubber ·
 layer toggles (`Runner movement`, `Defender response`, `Space map`,
 `Defender if stayed`, `Player numbers`, `Suggested players`, and — off by
-default — `Passing lane`, `Player movements`) ·
-`Full pitch` / `Focus` · `Available space` vs `Space created` ·
+default — `Passing lane`, `Player movements`, `Candidate passes`) ·
+`Full pitch` / `Focus` · `Available space` / `Space created` / `OBSO threat` ·
 `PNG` · `JSON` · `Source`.
 
 `Focus` crops to the picked players; `Full pitch` is the default and is what you
@@ -142,11 +142,39 @@ and the method that found it.
   proxy.
 * **run starts** — `offball_value.run_onset.detect_kinematic_run_onsets` where it
   fires, otherwise a labelled peak-acceleration cue. The panel says which.
+* **OBSO threat** — `pitch control × ball transition × EPV`, from
+  `offball_value.reference_obso.evaluate_reference_obso` on the 50 × 32
+  reference grid: Spearman-style pitch control for the attacking team with
+  offside applied, times a Gaussian in distance from the ball, times the static
+  PAUSA EPV grid (`data/static/EPV_grid.csv`, Apache-2.0).
+
+  Unlike the other two views this one is **not role-sensitive**: it is a
+  property of the frame and the two teams, and picking a different runner,
+  defender or beneficiary does not change it. That is also what makes it
+  precomputable — see `web/export_obso.py`.
+
+  The EPV term is position-only and has no representation of the defensive
+  line, so space just behind the last defender is valued like space just in
+  front of it. The product is still informative, because pitch control does
+  move when a defender is beaten, but this is why the view is called **OBSO
+  threat** and never xT.
+* **Candidate passes** — five fixed directions: a 90° sector centred on the
+  attacking direction, cut into five 25 m rays and clipped to the pitch, drawn
+  from whoever is within 2.5 m of the ball and at least 0.5 m closer to it than
+  anyone else. Off by default.
+
+  They are **not** ranked, scored for completion, or optimised, and no pass
+  model is applied to them — this repository has no validated one. When the
+  threat view is also on, each endpoint carries the OBSO value there, which is
+  a reading of the field, not a score for the pass. With nobody clearly on the
+  ball the fan is hidden rather than guessed at. The rule lives once, in
+  `core/candidates.py` and `web/site/js/obso.js`.
 
 ### Browser build
 
 ```bash
 python -m demo_viz.web.export_data        # 45 scenes -> demo_viz/web_data/
+python -m demo_viz.web.export_obso        # OBSO surfaces -> web_data/obso/
 python -m demo_viz.web.build              # -> demo_viz/web_build/ + a size report
 python -m http.server -d demo_viz/web_build 8090
 ```

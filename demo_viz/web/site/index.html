@@ -66,10 +66,13 @@
       <label class="check"><input type="checkbox" data-layer="candidates" checked> Suggested players</label>
       <label class="check"><input type="checkbox" data-layer="lane"> Passing lane</label>
       <label class="check"><input type="checkbox" data-layer="paths"> Player movements</label>
-      <span class="spacer"></span>
-      <select id="wake-mode" class="mini">
+      <label class="check"><input type="checkbox" data-layer="passes"> Candidate passes</label>
+      <span id="passes-note" class="muted" hidden></span>
+      <select id="wake-mode" class="mini"
+              title="Available space and Space created follow the picked roles. OBSO threat = pitch control × ball transition × EPV, and does not.">
         <option value="space">Available space</option>
         <option value="gain">Space created</option>
+        <option value="obso">OBSO threat</option>
       </select>
     </div>
   </section>
@@ -140,6 +143,27 @@
           the Fernández &amp; Bornn (2018) influence surface. The browser recomputes them
           for whichever players you pick; they agree with the Python implementation to
           float64 precision.</dd>
+
+      <dt class="tag-measured">Measured</dt>
+      <dd><b>OBSO threat</b> is <code>pitch control × ball transition × EPV</code>, on the
+          50 × 32 reference grid: Spearman-style pitch control for the attacking team with
+          offside applied, times a Gaussian in distance from the ball, times the static
+          PAUSA EPV grid. It is a property of the frame and the two teams — picking a
+          different runner, defender or beneficiary does not change it. Pitch control is
+          precomputed and interpolated between samples 0.2 s apart; the other two terms are
+          exact at every frame. <i>The EPV component is position-based and does not
+          explicitly encode the defensive line</i>, so space just behind the last defender
+          is valued like space just in front of it. The product is still informative,
+          because pitch control does move when a defender is beaten.</dd>
+
+      <dt class="tag-explanatory">Exploratory</dt>
+      <dd><b>Candidate passes</b> are five fixed directions — a 90° sector centred on the
+          attacking direction, cut into five 25 m rays and clipped to the pitch — drawn from
+          whoever is within 2.5 m of the ball and at least 0.5 m closer to it than anyone
+          else. They are <b>not</b> ranked, scored for completion, or optimised, and no pass
+          model is applied to them. The number at an endpoint is the OBSO value there,
+          nothing more. When no one clearly holds the ball the fan is hidden rather than
+          guessed at.</dd>
 
       <dt class="tag-human">Human</dt>
       <dd>Which players are runner, defender and beneficiary comes from manual

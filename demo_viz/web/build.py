@@ -36,6 +36,11 @@ def build(out: Path, data_dir: Path = WEB_DATA, clean: bool = True) -> Path:
     if data_dir.exists():
         for path in sorted(data_dir.glob("*.json")):
             shutil.copy2(path, target / path.name)
+        # the OBSO surfaces live in their own folder and are fetched only when
+        # a visitor picks the threat view, so they never touch the first load
+        obso = data_dir / "obso"
+        if obso.exists():
+            shutil.copytree(obso, target / "obso", dirs_exist_ok=True)
     return out
 
 
@@ -49,7 +54,9 @@ def report(out: Path) -> str:
             rows.append((str(path.relative_to(out)), size))
     shell = sum(size for name, size in rows if not name.startswith("data/"))
     scenes = [(name, size) for name, size in rows if name.startswith("data/")
-              and not name.endswith("index.json")]
+              and not name.endswith("index.json")
+              and not name.startswith("data/obso/")]
+    obso = [(name, size) for name, size in rows if name.startswith("data/obso/")]
     index = sum(size for name, size in rows if name.endswith("data/index.json"))
     lines = [
         f"build       {out}",
@@ -59,6 +66,9 @@ def report(out: Path) -> str:
         f"scenes      {len(scenes)} files, {sum(s for _, s in scenes) / 1024 / 1024:.2f} MB "
         f"total, {(sum(s for _, s in scenes) / max(len(scenes), 1)) / 1024:.0f} KB each "
         f"(loaded one at a time)",
+        f"obso        {len(obso)} files, {sum(s for _, s in obso) / 1024 / 1024:.2f} MB "
+        f"total, {(sum(s for _, s in obso) / max(len(obso), 1)) / 1024:.0f} KB each "
+        f"(only when the threat view is picked)",
         f"initial     {(shell + index) / 1024:8.1f} KB   shell + index",
         f"total       {total / 1024 / 1024:8.2f} MB",
     ]

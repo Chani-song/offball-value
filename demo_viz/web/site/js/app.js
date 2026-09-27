@@ -7,6 +7,7 @@ import { autoTriplet, rankBeneficiaries, rankDefenders } from "./ranking.js";
 import { drawChart } from "./chart.js";
 import { Selection } from "./selection.js";
 import { ballAt, loadIndex, loadScene, onsetFor, playerAt } from "./scene.js";
+import { candidatePasses, loadControl, loadScoreGrid, sampleAt, surfaceAt } from "./obso.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -23,6 +24,8 @@ const state = {
   view: "full",              // "full" | "focus"
   hintsOpen: null,           // null = follow the mode, true/false = user's choice
   drag: null,
+  obso: null,                // { entry, score } once the threat view is used
+  obsoValues: null,          // scratch buffer for the current frame's surface
 };
 
 // ---------------------------------------------------------------------------
@@ -45,6 +48,8 @@ function urlState() {
     swap: params.get("swap") === "1",
     fit: params.get("fit"),
     about: params.get("about") === "1",
+    mode: params.get("mode"),          // space | gain | obso
+    passes: params.get("passes") === "1",
   };
 }
 
@@ -69,6 +74,14 @@ function applyUrlState(wanted) {
   }
   if (wanted.swap) state.selection.swapAttackRoles();
   if (wanted.fit != null) setView(wanted.fit === "1" ? "focus" : "full");
+  if (wanted.mode && ["space", "gain", "obso"].includes(wanted.mode)) {
+    $("wake-mode").value = wanted.mode;
+  }
+  if (wanted.passes) {
+    state.layers.add("passes");
+    const box = document.querySelector('[data-layer="passes"]');
+    if (box) box.checked = true;
+  }
   if (wanted.time != null && wanted.time !== "") {
     const frame = Number(wanted.time);
     if (Number.isFinite(frame)) {
@@ -202,10 +215,17 @@ function render() {
       .map((r) => r.id);
   }
 
-  if (state.layers.has("wake") && selection.beneficiaries.length) {
+  const mode = $("wake-mode").value;
+  const threat = mode === "obso" ? obsoSurface(index) : null;
+  if (state.layers.has("wake") && threat) {
+    // frame-level threat: it does not move when the roles change, so it is
+    // drawn in its own colour rather than the beneficiary's
+    pitch.drawField(threat.grid, threat.values, scene, { colour: P.obso });
+  } else if (state.layers.has("wake") && mode !== "obso"
+             && selection.beneficiaries.length) {
     const factual = cache.combined(selection.beneficiaries, slot);
     let values = factual.field;
-    if ($("wake-mode").value === "gain" && swap.length) {
+    if (mode === "gain" && swap.length) {
       const counter = cache.combined(selection.beneficiaries, slot, swap);
       values = factual.field.map((v, i) => Math.max(v - counter.field[i], 0));
     }
@@ -215,6 +235,7 @@ function render() {
   }
 
   if (state.layers.has("paths")) pitch.drawPaths(scene);
+  renderPasses(index, threat);
   if (state.layers.has("lane")) pitch.drawLane(scene, selection.beneficiaries, index);
   if (state.layers.has("trail") && selection.runner) {
     pitch.drawTrail(scene, selection.runner, index);
@@ -281,10 +302,85 @@ function fitBox(margin = 12, minimumWidth = 46, ballAttach = 18) {
   return [x0, y0, width, height];
 }
 
+/**
+ * The OBSO surface for one frame, or null when it is not loaded yet.
+ *
+ * Loading is lazy and asynchronous: the first frame drawn after the visitor
+ * picks the threat view has nothing to show, so the load schedules one more
+ * render and returns null. Every later frame is synchronous.
+ */
+function obsoSurface(index) {
+  const { scene } = state;
+  if (!scene) return null;
+  if (!state.obso || state.obso.sceneId !== scene.scene_id) {
+    if (state.obso && state.obso.pending) return null;
+    state.obso = { sceneId: scene.scene_id, pending: true, entry: null, score: null };
+    Promise.all([loadControl(scene.scene_id), loadScoreGrid()])
+      .then(([entry, score]) => {
+        if (!state.scene || state.scene.scene_id !== scene.scene_id) return;
+        state.obso = { sceneId: scene.scene_id, pending: false, entry, score };
+        state.obsoValues = null;
+        render();
+      })
+      .catch(() => { state.obso = { sceneId: scene.scene_id, pending: false,
+                                    entry: null, score: null }; render(); });
+    return null;
+  }
+  const { entry, score } = state.obso;
+  if (!entry || !score) return null;
+  if (!state.obsoValues || state.obsoValues.length !== entry.cells) {
+    state.obsoValues = new Float64Array(entry.cells);
+  }
+  surfaceAt(entry, score, scene, index, state.obsoValues);
+  return { grid: entry.grid, values: state.obsoValues };
+}
+
+/**
+ * The five candidate directions, when the layer is on and somebody is clearly
+ * on the ball. Nothing here is ranked or scored for completion; when the
+ * threat view is on, each endpoint carries the OBSO value at that point so the
+ * field behind the fan can be read.
+ */
+function renderPasses(index, threat) {
+  const { scene, pitch } = state;
+  const note = $("passes-note");
+  if (!state.layers.has("passes")) {
+    if (note) note.hidden = true;
+    return;
+  }
+  const fan = candidatePasses(scene, index);
+  if (!fan) {
+    if (note) { note.hidden = false; note.textContent = "No clear carrier this frame"; }
+    return;
+  }
+  if (note) note.hidden = true;
+  if (threat) {
+    for (const ray of fan.rays) {
+      ray.obso = sampleAt(threat.grid, threat.values, ray.end[0], ray.end[1]);
+    }
+  }
+  pitch.drawCandidates(scene, fan, { values: Boolean(threat) });
+}
+
 function renderStat(slot, swap) {
   const { cache, selection } = state;
   const node = $("stat-value");
-  const created = $("wake-mode").value === "gain";
+  const mode = $("wake-mode").value;
+  if (mode === "obso") {
+    // the panel has to name what the pitch is showing, and in this view that
+    // is a frame-level quantity with no beneficiary in it
+    const threat = obsoSurface(state.frame);
+    $("stat-label").textContent = "OBSO threat · peak";
+    if (!threat) { node.textContent = "…"; node.style.color = P.muted; return; }
+    let peak = 0;
+    for (let i = 0; i < threat.values.length; i += 1) {
+      if (threat.values[i] > peak) peak = threat.values[i];
+    }
+    node.textContent = peak.toFixed(3);
+    node.style.color = P.obso;
+    return;
+  }
+  const created = mode === "gain";
   if (!selection.beneficiaries.length) {
     $("stat-label").textContent = created ? "Space created" : "Available space";
     node.textContent = "—";

@@ -17,6 +17,7 @@ export const P = {
   attack: "#D9CFB8",
   defend: "#5F7392",
   ball: "#FFFFFF",
+  obso: "#9B8CFF",
 };
 
 export const ROLE_COLOUR = {
@@ -39,4 +40,5 @@ export const LAYER_LABEL = {
   labels: "Player numbers",
   candidates: "Suggested players",
   paths: "Player movements",
+  passes: "Candidate passes",
 };

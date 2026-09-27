@@ -1,0 +1,53 @@
+<!doctype html>
+<!-- OBSO + candidate-pass harness: not part of the published site.
+     Loaded by tests/test_demo_viz_obso.py. The browser reconstructs the OBSO
+     surface from the exported pitch-control samples and the shared EPV grid;
+     the test compares it against evaluate_reference_obso in Python. -->
+<html><head><meta charset="utf-8"><title>obso</title></head>
+<body><pre id="out">running</pre>
+<script type="module">
+import { loadScene } from "./js/scene.js";
+import {
+  CANDIDATE_ANGLES_DEG, CANDIDATE_DISTANCE_M, candidatePasses,
+  carrierAt, loadControl, loadScoreGrid, sampleAt, surfaceAt,
+} from "./js/obso.js";
+
+async function run() {
+  const plan = JSON.parse(document.getElementById("plan").textContent);
+  const scene = await loadScene(plan.file);
+  const [entry, score] = await Promise.all([
+    loadControl(scene.scene_id), loadScoreGrid(),
+  ]);
+  const out = { scene_id: scene.scene_id, frames: [], fan: [], constants: {
+    distance: CANDIDATE_DISTANCE_M, angles: CANDIDATE_ANGLES_DEG,
+  } };
+
+  const values = new Float64Array(entry.cells);
+  for (const index of plan.indices) {
+    surfaceAt(entry, score, scene, index, values);
+    out.frames.push({ index, values: Array.from(values) });
+  }
+
+  for (const index of plan.fan_indices) {
+    const fan = candidatePasses(scene, index);
+    const carrier = carrierAt(scene, index);
+    out.fan.push({
+      index,
+      carrier: carrier ? carrier.id : null,
+      origin: fan ? fan.origin : null,
+      ends: fan ? fan.rays.map((r) => r.end) : null,
+      degrees: fan ? fan.rays.map((r) => r.degrees) : null,
+      obso: fan && plan.indices.includes(index)
+        ? (surfaceAt(entry, score, scene, index, values),
+           fan.rays.map((r) => sampleAt(entry.grid, values, r.end[0], r.end[1])))
+        : null,
+    });
+  }
+  document.getElementById("out").textContent = JSON.stringify(out);
+}
+
+run().catch((error) => {
+  document.getElementById("out").textContent = JSON.stringify({ error: String(error) });
+});
+</script>
+</body></html>

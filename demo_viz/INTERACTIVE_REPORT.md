@@ -495,6 +495,112 @@ introduction, and the passing-lane and player-movement layers stay off.
 Videos are 1920×1080, 25 fps, about 16–17 s each; the montage is
 `strong_five_montage.mp4`.
 
+## 10e. OBSO threat and the candidate-pass fan
+
+Two additions, both built only from code and data already in the repository or
+on `origin/kyuhyeok-dev`. No fitted artefact was needed and no solver output is
+used.
+
+### OBSO threat, a third space view
+
+`Available space | Space created | OBSO threat`. The surface is
+
+    pitch control  x  ball transition  x  EPV score
+
+from `offball_value.reference_obso.evaluate_reference_obso`, copied from
+`origin/kyuhyeok-dev @ 3c9965b` **byte-identical** so it can still be diffed
+against that branch. It was a one-file dependency: it needs only
+`bundesliga.py`, which this tree already had, and `data/static/EPV_grid.csv`,
+which was already committed.
+
+The bare EPV grid is never exposed. It is position-only — a function of pitch
+coordinates with no representation of the defensive line, so a cell three
+metres behind the last defender scores the same as one three metres in front.
+Measured down the central lane it is essentially distance to goal: 0.021 at
+36 m, 0.041 at 24 m, 0.119 at 13 m, 0.571 at the goalmouth. The **product** is
+still worth showing, because pitch control does move when a defender is beaten,
+and that is the whole distinction the caveat in the Source panel draws.
+
+**It is not role-sensitive.** `evaluate_reference_obso` takes no runner,
+defender or beneficiary, so the field does not move when the visitor re-picks.
+Verified end to end: the same frame under three different role selections
+reports the same peak, 0.047.
+
+### Why it is precomputed, and what is not
+
+The surface costs ~260 ms a frame in numpy against 0.8 ms for a role switch, so
+it cannot be recomputed in the browser. Being role-blind is what makes
+precomputing it possible at all.
+
+Only **pitch control** is stored. The browser computes the other two terms
+itself at every frame:
+
+| term | where | why |
+| --- | --- | --- |
+| pitch control | precomputed, 0.2 s samples, interpolated | expensive, and slow-moving |
+| ball transition | in the browser, exact | the ball moves fast enough that interpolating it smears the brightest moment of a clip |
+| EPV score | shipped once for all 45 scenes | one static grid, not 45 copies of it |
+
+Sampling error against an every-frame computation, as a percentage of the
+scene's peak OBSO:
+
+| stride | max | mean |
+| --- | --- | --- |
+| 5 frames (0.20 s) | 5.8 % | 0.01 % |
+| 10 frames (0.40 s) | 8.4 % | 0.02 % |
+
+with one exception no stride fixes. `apply_offside=True` makes an attacker's
+contribution appear or vanish the instant he crosses the line — on the sample
+clip at frames 179 and 253 — and interpolating across that step reaches **73 %
+of peak**. It is a real discontinuity, not undersampling, so the exporter puts
+a sample on **both frames either side of every offside change** and the ramp is
+one frame wide. Quantising control to one byte costs a further 0.2 %.
+
+End to end, the browser's reconstruction matches `evaluate_reference_obso` to
+**0.76 % of frame peak**, which is the quantisation and nothing else.
+
+Payload: ~118 KB per scene in `web_data/obso/`, fetched only when a visitor
+first picks the threat view, plus a 14 KB score grid shared by every scene. The
+initial page load is unchanged at 110 KB.
+
+### Candidate passes
+
+Five fixed directions — a 90° sector centred on the attacking direction, cut
+into five 25 m rays, clipped to the pitch — drawn from whoever is within 2.5 m
+of the ball and at least 0.5 m closer to it than anyone else. That is looser
+than the pipeline's own 1.5 m carrier gate on purpose: tracking records the
+torso while a dribbler pushes the ball ahead of it. Over ten scenes the
+looser threshold moves coverage from 38 % to 43 % of frames — the ball really
+is in flight or loose the rest of the time — but it stops the fan vanishing on
+frames where the ball is plainly at someone's feet. Off by default.
+
+They are **not** ranked, scored for completion, or optimised. No pass model is
+applied, because this repository has no validated one: the solver's current
+estimator is described by its own author as "an experimental proxy, not a
+validated replacement", and it is position-only, which is exactly the failure
+mode a candidate fan would advertise. The endpoint numbers are OBSO values
+read off the field, not scores for the passes.
+
+The margin rule is the honest part. During a pass nobody is within 1.5 m of the
+ball, and two players converging on a loose one are contesting it rather than
+carrying it. Both cases yield no carrier, and the fan is hidden with a short
+"No clear carrier this frame" note instead of a guessed passer. The selected
+runner is never made the passer; the carrier comes from the ball.
+
+The rule is stated once and shared: `core/candidates.py` and
+`web/site/js/obso.js`, with a test asserting the constants agree.
+
+### Tests
+
+16 new tests in `tests/test_demo_viz_obso.py`: the browser-versus-Python
+surface parity, fan geometry (five rays, correct bearings either attacking
+direction, always inside the pitch), role invariance end to end, the export's
+declared range and sampling, and a guard that no completion-probability,
+best-pass, ranking or expected-value language reaches the browser. The last one
+caught its own false positive — the Source panel's existing *"No calibrated xT
+… is drawn"* disclaimer is a denial, not a claim, so the test allows the word
+only in that sentence.
+
 ## 11. Known limitations
 
 * **Pitch labels can overlap** when players are bunched — the tether and ghost
@@ -513,6 +619,15 @@ Videos are 1920×1080, 25 fps, about 16–17 s each; the montage is
 * **Pipeline mode is Dash-only.** The browser build always starts from the
   annotation and lets you edit; there is still no research-pipeline triplet
   file to read (see `APP_REPORT.md` §5).
+* **OBSO threat and Candidate passes are browser-only.** The Dash build keeps
+  the two role-sensitive views. Nothing in the Dash path changed.
+* **The EPV term does not know where the defensive line is.** See §10e. It is
+  the reason the threat view is never called xT, and it is the open modelling
+  question this demo makes visible rather than solves.
+* **The candidate fan is a geometric rule, not a shortlist.** Five directions
+  at fixed angles: no pass is claimed to be available, let alone best. A real
+  ranking needs a validated completion model, which this repository does not
+  have.
 * **The exported data is committed** (3.4 MB) so Pages can deploy without the
   raw Bundesliga files. It is derived data for the 45 annotated scenes only.
 

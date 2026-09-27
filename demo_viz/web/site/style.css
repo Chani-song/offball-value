@@ -121,8 +121,12 @@ main {
 .timeline input[type=range] { flex: 1 1 auto; accent-color: var(--beneficiary); }
 .readout { font: 12px/1 ui-monospace, Menlo, monospace; color: var(--text2);
            min-width: 72px; text-align: right; }
-.layers { display: flex; align-items: center; gap: 15px; flex-wrap: wrap;
+.layers { display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
           padding-top: 2px; }
+/* the view select sits at the end of the row, and stays right-aligned if the
+   checkboxes wrap rather than dropping to a line of its own */
+.layers #wake-mode { margin-left: auto; }
+#passes-note { font-size: 11px; white-space: nowrap; }
 
 /* -------------------------------------------------------------------- dock */
 .dock {
