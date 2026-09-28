@@ -480,7 +480,7 @@ export.
 | Scene | 78 KB, lazy |
 | Release quantities | **83 KB per scene**, lazy, only when the explorer is used |
 | Solver artifact | ~4 KB, lazy |
-| OBSO (legacy) | 122 KB per scene, still built so its parity tests run against a site; unreachable from the UI |
+| OBSO (legacy) | **not in the public build**; `--include-legacy-obso` ships it for internal debugging |
 
 Export of all 45 scenes takes 7 s. No research code runs in the browser.
 
@@ -513,6 +513,37 @@ still pass.
 * The solver's 18 real release actions have export support but no scene with
   valid stage-3 semantics, so the mode stays unavailable.
 * No genuine solver trajectory for any public scene.
-* The legacy OBSO payload (5.5 MB) is still copied into the build so its parity
-  tests can run against a site. It is unreachable from the UI; dropping it from
-  the Pages artifact is a reasonable follow-up.
+* ~~The legacy OBSO payload is still copied into the build.~~ **Resolved**: the
+  public build no longer ships it (see below).
+
+## Legacy payload removed from the public build (2026-09-28)
+
+`build()` gained `include_legacy_obso=False`, and the CLI a matching
+`--include-legacy-obso`. `python -m demo_viz.web.build` now produces the
+solver-native site with no OBSO surfaces.
+
+| | before | after |
+| --- | --- | --- |
+| Public build total | 12.82 MB | **7.34 MB** |
+| Initial load | 202 KB | **202 KB** (unchanged) |
+| Scenes / release / solver | shipped | shipped, untouched |
+| OBSO surfaces | 5.48 MB | **0** |
+
+**No numerical coverage was traded for the size.** The two OBSO browser tests
+that need a served site pass `include_legacy_obso=True`, so they exercise the
+same parity they always did. Every other OBSO test — export integrity, the
+role-invariance pair, the score-grid caveat — never needed a built site and is
+unchanged. `reference_obso.py`, `obso.js` and `export_obso.py` are all still
+here, and `web_data/obso/` is still generated and committed.
+
+Five tests were added to hold the line: the default build ships no OBSO, the
+flag puts it back, the difference is the size claimed, the solver-native
+payloads survive the change, and no reachable code path can request the missing
+payload — the URL now accepts only `space` and `gain`, and both `obsoSurface`
+call sites stay behind a mode the public control cannot produce.
+
+The Pages sanity check now **asserts** the public artifact has no
+`data/obso/`, so a future change that reintroduces it fails the build rather
+than quietly adding 5.5 MB.
+
+307 tests pass.

@@ -14,6 +14,7 @@ on:
       - "src/offball_value/reference_obso.py"
       - "src/offball_value/action_space.py"
       - "demo_viz/core/candidates.py"
+      - "demo_viz/solver_native/**"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
 
@@ -62,10 +63,13 @@ jobs:
                      if not pathlib.Path("_site/data", s["file"]).exists()]
           assert not missing, f"missing scene files: {missing}"
           print(f"{len(scenes)} scenes present")
-          # the OBSO threat view is lazy-loaded and degrades to no field when
-          # its data is absent, so report the count rather than failing on it
-          obso = sorted(pathlib.Path("_site/data/obso").glob("*.json"))
-          print(f"{len(obso)} OBSO files present")
+          # the solver-native payloads are what the public demo actually uses
+          for name in ("release", "solver"):
+              found = sorted(pathlib.Path("_site/data", name).glob("*.json"))
+              print(f"{len(found)} {name} files present")
+          # the legacy OBSO surfaces are deliberately not in the public build
+          assert not pathlib.Path("_site/data/obso").exists(), \
+              "public build should not ship the legacy OBSO payload"
           PY
 
       - uses: actions/configure-pages@v5

@@ -100,7 +100,7 @@ function applyUrlState(wanted) {
   }
   if (wanted.swap) state.selection.swapAttackRoles();
   if (wanted.fit != null) setView(wanted.fit === "1" ? "focus" : "full");
-  if (wanted.mode && ["space", "gain", "obso"].includes(wanted.mode)) {
+  if (wanted.mode && ["space", "gain"].includes(wanted.mode)) {
     $("wake-mode").value = wanted.mode;
   }
   const wantedLayers = [

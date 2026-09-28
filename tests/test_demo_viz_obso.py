@@ -111,7 +111,8 @@ class ObsoParityTests(unittest.TestCase):
                 "fan_indices": sampled}
 
         with tempfile.TemporaryDirectory() as tmp:
-            root = build(Path(tmp) / "site", data_dir=WEB_DATA)
+            root = build(Path(tmp) / "site", data_dir=WEB_DATA,
+                         include_legacy_obso=True)
             page = (HERE / "obso_harness.html").read_text().replace(
                 "<body>",
                 '<body><script type="application/json" id="plan">'
@@ -172,7 +173,8 @@ class ObsoParityTests(unittest.TestCase):
         plan = {"file": f"{slug(scene_id)}.json", "indices": [], "fan_indices": frames}
 
         with tempfile.TemporaryDirectory() as tmp:
-            root = build(Path(tmp) / "site", data_dir=WEB_DATA)
+            root = build(Path(tmp) / "site", data_dir=WEB_DATA,
+                         include_legacy_obso=True)
             page = (HERE / "obso_harness.html").read_text().replace(
                 "<body>",
                 '<body><script type="application/json" id="plan">'
@@ -350,6 +352,74 @@ class CandidateConstantTests(unittest.TestCase):
         options = re.findall(r'<option value="([a-z]+)"', markup)
         self.assertEqual(["space", "gain"], options)
         self.assertNotIn(">OBSO threat<", markup)
+
+
+class PublicBuildExcludesLegacyTests(unittest.TestCase):
+    """The public site must not ship a payload nothing can request.
+
+    OBSO was demoted when the demo went solver-native. The implementation, the
+    exporter and every numerical test stay; only the ~5.5 MB of surfaces leave
+    the public build. `--include-legacy-obso` puts them back for internal
+    debugging, and is what the parity tests above use.
+    """
+
+    def _sizes(self, root: Path) -> tuple[int, int]:
+        obso = root / "data" / "obso"
+        files = list(obso.glob("*.json")) if obso.exists() else []
+        return len(files), sum(f.stat().st_size for f in files)
+
+    def test_the_default_build_has_no_obso_payload(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = build(Path(tmp) / "site", data_dir=WEB_DATA)
+            count, _ = self._sizes(root)
+            self.assertEqual(0, count, "the public build shipped OBSO surfaces")
+            # and the rest of the site is intact
+            self.assertTrue((root / "index.html").exists())
+            self.assertTrue((root / "data" / "index.json").exists())
+
+    @unittest.skipIf(not _exported_scenes(), "no exported OBSO data")
+    def test_the_flag_puts_them_back(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = build(Path(tmp) / "site", data_dir=WEB_DATA,
+                         include_legacy_obso=True)
+            count, size = self._sizes(root)
+            self.assertGreater(count, 0)
+            self.assertGreater(size, 1_000_000)
+
+    @unittest.skipIf(not _exported_scenes(), "no exported OBSO data")
+    def test_dropping_it_saves_what_it_claims(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            public = build(Path(tmp) / "public", data_dir=WEB_DATA)
+            legacy = build(Path(tmp) / "legacy", data_dir=WEB_DATA,
+                           include_legacy_obso=True)
+            total = lambda root: sum(f.stat().st_size for f in root.rglob("*")
+                                     if f.is_file())
+            self.assertGreater(total(legacy) - total(public), 4_000_000)
+
+    def test_the_solver_native_payloads_survive(self):
+        """Dropping the legacy payload must not touch what the demo does use."""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = build(Path(tmp) / "site", data_dir=WEB_DATA)
+            for folder in ("release", "solver"):
+                source = WEB_DATA / folder
+                if not source.exists():
+                    continue
+                shipped = list((root / "data" / folder).glob("*.json"))
+                self.assertEqual(len(list(source.glob("*.json"))), len(shipped), folder)
+
+    def test_the_public_page_cannot_ask_for_the_missing_payload(self):
+        """No reachable path fetches data/obso, including via the URL."""
+
+        app = (SITE / "js" / "app.js").read_text()
+        modes = re.search(r'\["space", "gain"[^\]]*\]\.includes\(wanted\.mode\)', app)
+        self.assertIsNotNone(modes, "the URL should accept only the public views")
+        self.assertNotIn('"obso"', modes.group(0))
+        # the two fetching call sites stay behind a mode the UI cannot produce
+        for call in ("obsoSurface(index)", "obsoSurface(state.frame)"):
+            position = app.index(call)
+            window = app[max(0, position - 220):position]
+            self.assertIn('mode === "obso"', window, call)
 
 
 if __name__ == "__main__":

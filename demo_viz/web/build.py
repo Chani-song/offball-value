@@ -26,7 +26,17 @@ WEB_DATA = HERE.parent / "web_data"
 DEFAULT_OUT = HERE.parent / "web_build"
 
 
-def build(out: Path, data_dir: Path = WEB_DATA, clean: bool = True) -> Path:
+def build(out: Path, data_dir: Path = WEB_DATA, clean: bool = True,
+          include_legacy_obso: bool = False) -> Path:
+    """Assemble the site.
+
+    ``include_legacy_obso`` ships the OBSO surfaces as well. They are ~5.5 MB
+    and nothing in the public interface can request them -- OBSO was demoted to
+    a reference diagnostic when the demo went solver-native -- so the public
+    build leaves them out. The OBSO parity tests pass it to get a site they can
+    exercise the browser implementation against.
+    """
+
     if clean and out.exists():
         shutil.rmtree(out)
     out.mkdir(parents=True, exist_ok=True)
@@ -42,9 +52,10 @@ def build(out: Path, data_dir: Path = WEB_DATA, clean: bool = True) -> Path:
         showcase = HERE.parent / "data" / "submission_showcase.json"
         if showcase.exists():
             shutil.copy2(showcase, target / "submission_showcase.json")
-        # "obso" is the legacy reference stack: no longer reachable from the
-        # public UI, kept so its parity tests still run against a built site.
-        for extra in ("obso", "solver", "release"):
+        extras = ["solver", "release"]
+        if include_legacy_obso:
+            extras.append("obso")
+        for extra in extras:
             source = data_dir / extra
             if source.exists():
                 shutil.copytree(source, target / extra, dirs_exist_ok=True)
@@ -72,6 +83,10 @@ def report(out: Path) -> str:
     index = sum(size for name, size in rows
                 if name.endswith("data/index.json")
                 or name.endswith("submission_showcase.json"))
+    legacy = ([f"obso        {len(obso)} files, "
+               f"{sum(s for _, s in obso) / 1024 / 1024:.2f} MB total   "
+               f"(legacy, included only with --include-legacy-obso)"]
+              if obso else [])
     lines = [
         f"build       {out}",
         f"files       {len(rows)}",
@@ -80,14 +95,12 @@ def report(out: Path) -> str:
         f"scenes      {len(scenes)} files, {sum(s for _, s in scenes) / 1024 / 1024:.2f} MB "
         f"total, {(sum(s for _, s in scenes) / max(len(scenes), 1)) / 1024:.0f} KB each "
         f"(loaded one at a time)",
-        f"obso        {len(obso)} files, {sum(s for _, s in obso) / 1024 / 1024:.2f} MB "
-        f"total, {(sum(s for _, s in obso) / max(len(obso), 1)) / 1024:.0f} KB each "
-        f"(only when the threat view is picked)",
         f"solver      {len(solver)} files, {sum(s for _, s in solver) / 1024:.0f} KB "
         f"total (only when the solver layer is picked)",
         f"release     {len(release)} files, {sum(s for _, s in release) / 1024 / 1024:.2f} MB "
         f"total, {(sum(s for _, s in release) / max(len(release), 1)) / 1024:.0f} KB each "
         f"(only when the pass-model explorer is used)",
+        *legacy,
         f"initial     {(shell + index) / 1024:8.1f} KB   shell + index",
         f"total       {total / 1024 / 1024:8.2f} MB",
     ]
@@ -99,12 +112,17 @@ def main(argv: list[str] | None = None) -> int:
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
     parser.add_argument("--data", type=Path, default=WEB_DATA)
+    parser.add_argument("--include-legacy-obso", action="store_true",
+                        help="also ship the legacy OBSO surfaces (~5.5 MB). For "
+                             "internal debugging and the OBSO parity tests; the "
+                             "public interface cannot request them.")
     args = parser.parse_args(argv)
 
     if not (args.data / "index.json").exists():
         print(f"!! no data at {args.data}; run: python -m demo_viz.web.export_data",
               file=sys.stderr)
-    out = build(args.out, args.data)
+    out = build(args.out, args.data,
+                include_legacy_obso=args.include_legacy_obso)
     print(report(out))
     return 0
 
