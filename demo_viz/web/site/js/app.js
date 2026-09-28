@@ -287,6 +287,7 @@ function render() {
   renderChart(swap, freeze);
   renderCandidates(freeze, slot);
   renderAnalysis(index, slot, threat, fan);
+  renderTicks();
   $("readout").textContent = `${scene.times[index] >= 0 ? "+" : ""}${scene.times[index].toFixed(2)} s`;
   $("time").value = String(index);
 }
@@ -639,6 +640,48 @@ function renderSolverRows() {
   const p = info.provenance || {};
   note.textContent = `${p.repository}@${p.commit} · ${p.artifact}#${p.state_index}`;
   node.after(note);
+}
+
+/**
+ * Marks on the scrubber, from data rather than from pacing.
+ *
+ * Two things are actually defined for every scene: the run onset the detector
+ * found for each selected runner (`scene.onsets`, with its own method label),
+ * and the annotated shot, which is where the clip's own clock reads zero. No
+ * mark is drawn for anything the data does not define -- there is no
+ * "defender reacts" frame in the exported scene, so none is invented.
+ */
+function renderTicks() {
+  const node = $("time-ticks");
+  if (!node) return;
+  const { scene, selection } = state;
+  node.replaceChildren();
+  if (!scene) return;
+  const last = Math.max(1, scene.n_frames - 1);
+
+  const marks = [];
+  for (const runnerId of selection.runners) {
+    const onset = scene.onsets?.[runnerId];
+    const player = scene.byId.get(runnerId);
+    if (!onset || !player) continue;
+    marks.push({ index: onset.index, colour: P.runner,
+                 label: `run #${player.shirt}`, title: onset.method });
+  }
+  // the clip is cut around the annotated shot, so t = 0 is that shot
+  const shot = Math.round(-scene.t0 * scene.fps);
+  if (shot >= 0 && shot <= last) {
+    marks.push({ index: shot, colour: P.text, label: "shot",
+                 title: "annotated shot" });
+  }
+
+  for (const mark of marks) {
+    const tick = document.createElement("i");
+    tick.style.left = `${(mark.index / last) * 100}%`;
+    tick.style.background = mark.colour;
+    tick.dataset.label = mark.label;
+    tick.title = mark.title;
+    node.appendChild(tick);
+  }
 }
 
 function renderStat(slot, swap) {

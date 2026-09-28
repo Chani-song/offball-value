@@ -54,7 +54,10 @@
       <button id="play" class="btn square">▶</button>
       <button id="jump-run" class="btn small">Run</button>
       <button id="jump-peak" class="btn small">Peak</button>
-      <input type="range" id="time" min="0" max="1" value="0" step="1">
+      <div class="track">
+        <input type="range" id="time" min="0" max="1" value="0" step="1">
+        <div class="ticks" id="time-ticks"></div>
+      </div>
       <span id="readout" class="readout">0.00 s</span>
     </div>
     <div class="layers">

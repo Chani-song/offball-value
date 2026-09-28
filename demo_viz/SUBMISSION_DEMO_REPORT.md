@@ -204,6 +204,18 @@ for the solver's clip-rendering step; `pyproject.toml` was not changed.
   joint equilibrium policy, not a labelled "best response" trajectory, so
   presenting one would be an interpretation rather than a reading.
 
+## 6b. Timeline marks
+
+Two marks on the scrubber, both from data the scene already carries: the run
+onset per selected runner (`scene.onsets`, carrying the detector's own method
+label as a tooltip) and the annotated shot, which is where the clip's clock
+reads zero. Nothing else is marked — the exported scene defines no "defender
+reacts" frame, so none is drawn, and a test asserts that.
+
+Scrubbing updates everything together: tracks, the player inspector, available
+space, space created, OBSO, the candidate fan and the reachable area are all
+recomputed from the same frame index in one render pass.
+
 ## 7. Performance
 
 | | |

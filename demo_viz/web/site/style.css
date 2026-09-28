@@ -120,7 +120,17 @@ main {
 }
 
 .timeline { display: flex; align-items: center; gap: 9px; }
-.timeline input[type=range] { flex: 1 1 auto; accent-color: var(--beneficiary); }
+.timeline input[type=range] { width: 100%; accent-color: var(--beneficiary); }
+.track { position: relative; flex: 1 1 auto; }
+/* Marks on the scrubber are data, not pacing: a detected run start and the
+   annotated shot. They sit under the thumb and never intercept a drag. */
+.ticks { position: absolute; left: 0; right: 0; top: 50%; height: 16px;
+         margin-top: -8px; pointer-events: none; }
+.ticks i { position: absolute; top: 0; width: 2px; height: 16px; margin-left: -1px;
+           border-radius: 1px; opacity: 0.85; }
+.ticks i::after { content: attr(data-label); position: absolute; left: 4px; top: 1px;
+                  font-size: 9px; letter-spacing: 0.04em; color: var(--muted);
+                  white-space: nowrap; }
 .readout { font: 12px/1 ui-monospace, Menlo, monospace; color: var(--text2);
            min-width: 72px; text-align: right; }
 .layers { display: flex; align-items: center; gap: 12px; flex-wrap: wrap;

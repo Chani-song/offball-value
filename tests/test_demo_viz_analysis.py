@@ -353,5 +353,30 @@ class ReachParityTests(unittest.TestCase):
         self.assertLess(abs(reachable - math.pi * 7 * 7), 40, reachable)
 
 
+class TimelineMarkTests(unittest.TestCase):
+    """Marks on the scrubber come from data, not from presentation pacing."""
+
+    def test_only_defined_moments_are_marked(self):
+        source = (SITE / "js" / "app.js").read_text()
+        marks = source[source.index("function renderTicks"):]
+        marks = marks[:marks.index("\n}\n")]
+        # the run onset and the annotated shot are exported per scene
+        self.assertIn("scene.onsets", marks)
+        self.assertIn("-scene.t0 * scene.fps", marks)
+        # nothing the exported scene does not define may be marked
+        for invented in ("reacts", "defender_reacts", "space opens", "beneficiary"):
+            self.assertNotIn(invented, marks.lower())
+
+    def test_the_shot_mark_is_where_the_clip_clock_reads_zero(self):
+        index_file = WEB_DATA / "index.json"
+        if not index_file.exists():
+            self.skipTest("no exported scene data")
+        scenes = json.loads(index_file.read_text())["scenes"]
+        payload = json.loads((WEB_DATA / scenes[0]["file"]).read_text())
+        shot = round(-payload["t0"] * payload["fps"])
+        self.assertGreaterEqual(shot, 0)
+        self.assertLess(shot, payload["n_frames"])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
