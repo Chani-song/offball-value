@@ -42,7 +42,9 @@ def build(out: Path, data_dir: Path = WEB_DATA, clean: bool = True) -> Path:
         showcase = HERE.parent / "data" / "submission_showcase.json"
         if showcase.exists():
             shutil.copy2(showcase, target / "submission_showcase.json")
-        for extra in ("obso", "solver"):
+        # "obso" is the legacy reference stack: no longer reachable from the
+        # public UI, kept so its parity tests still run against a built site.
+        for extra in ("obso", "solver", "release"):
             source = data_dir / extra
             if source.exists():
                 shutil.copytree(source, target / extra, dirs_exist_ok=True)
@@ -62,9 +64,11 @@ def report(out: Path) -> str:
               and not name.endswith("index.json")
               and not name.endswith("submission_showcase.json")
               and not name.startswith("data/obso/")
-              and not name.startswith("data/solver/")]
+              and not name.startswith("data/solver/")
+              and not name.startswith("data/release/")]
     obso = [(name, size) for name, size in rows if name.startswith("data/obso/")]
     solver = [(name, size) for name, size in rows if name.startswith("data/solver/")]
+    release = [(name, size) for name, size in rows if name.startswith("data/release/")]
     index = sum(size for name, size in rows
                 if name.endswith("data/index.json")
                 or name.endswith("submission_showcase.json"))
@@ -81,6 +85,9 @@ def report(out: Path) -> str:
         f"(only when the threat view is picked)",
         f"solver      {len(solver)} files, {sum(s for _, s in solver) / 1024:.0f} KB "
         f"total (only when the solver layer is picked)",
+        f"release     {len(release)} files, {sum(s for _, s in release) / 1024 / 1024:.2f} MB "
+        f"total, {(sum(s for _, s in release) / max(len(release), 1)) / 1024:.0f} KB each "
+        f"(only when the pass-model explorer is used)",
         f"initial     {(shell + index) / 1024:8.1f} KB   shell + index",
         f"total       {total / 1024 / 1024:8.2f} MB",
     ]

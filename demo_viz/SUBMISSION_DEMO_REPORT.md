@@ -394,3 +394,125 @@ Edit `demo_viz/data/submission_showcase.json`: set `"featured": true` and
 default filter flips to Featured on its own. If a chosen scene is one of the
 five unresolved ones, it needs its scene data published first — otherwise it
 will appear in the list and stay disabled.
+
+---
+
+# Solver-native conversion (2026-09-28)
+
+## Why OBSO was demoted
+
+`PASS_MODEL_TRACE.md` established from source that the current solver's release
+payoff is
+
+    legal × completion_proxy × positional_threat
+
+and that OBSO, EPV and pitch control appear nowhere in it. They were a
+reference diagnostic, not part of the model the meeting results came from.
+Leaving them prominent next to solver-native numbers would have implied they
+were the same stack.
+
+**The implementation, its export and its tests all stay.** Only the public
+controls went. The demo built around it is preserved on
+`backup/ssac-obso-demo` @ `26c752f`, untouched.
+
+## What the public UI now shows
+
+| | |
+| --- | --- |
+| Space views | `Available space`, `Space created` — the OBSO option is gone |
+| Pass layer | `Explore pass model` (was `Candidate passes`) |
+| Analysis order | Scene → Off-ball effect → **Solver pass model** → Player → Solver |
+| Solver pass model | Receiver, Direction, Legal, Completion proxy, Positional threat, **Release payoff** |
+| Model details | seven of the 33 features, collapsed by default |
+| Source | a `Current solver` entry; OBSO appears once, under `Legacy / reference diagnostic` |
+
+## The chain, and where the numbers come from
+
+Every value is produced by the research implementation at export time and read
+by the browser. Nothing is recomputed there and nothing is ported:
+
+* **Completion proxy** — Andrew's `ExpectedPass` on `experimental_pass.json`,
+  the 33-feature positions-only logistic, reached exactly as the meeting
+  pipeline reaches it.
+* **Positional threat** — `positional_threat_all`, vendored byte-identical from
+  `origin/kyuhyeok-dev:andrew-passer2on1/passer2on1/payoff.py` so it stays
+  diffable. Room to the **nearest of the whole defending side**, bounded [0.2, 1].
+* **Legal** — `inside_pitch` and `offside_flags`; with two or more defenders the
+  multi-defender rule (second-last), never Andrew's single-defender line.
+* **Release payoff** — `legal ? proxy × threat : 0`.
+
+The model is handed the **whole defending side**, as the 2v1 wrapper does, not
+a pre-selected defender.
+
+### The gate is visible
+
+An illegal target keeps its completion proxy and takes a payoff of zero. On
+S02 frame 45: `Legal: No · offside`, proxy `0.999`, threat `0.571`, payoff
+`0.000`. That is `solver_native_legality.png`.
+
+## Exploratory targets are ours, the values are theirs
+
+The five rays are still the demo's own geometry — 90° sector, five 25 m rays
+from the carrier. They are **not** the solver's action space and are never
+called best, top or recommended. The solver's own 18 releases are built from
+the receiver (`receiver + direction × offset`) and belong to stage-3 states this
+demo does not publish; `solver_release_targets()` reads that definition from the
+imported module so the set cannot drift, and a test asserts the two
+constructions differ.
+
+## Receiver selection
+
+The receiver is the **selected beneficiary**, explicitly. With none selected the
+panel says *"Select a receiving attacker to inspect the solver pass model."* and
+computes nothing. No nearest-attacker fallback exists; a test forbids one.
+
+## Solver trajectories
+
+Unchanged and still honestly unavailable. No scene has a compatible artifact;
+the five solver-derived showcase entries remain unresolved pending their Delta
+export.
+
+## Payload and performance
+
+| | |
+| --- | --- |
+| Initial load | 201 KB (shell 158 + index 8.6 + showcase 29) |
+| Scene | 78 KB, lazy |
+| Release quantities | **83 KB per scene**, lazy, only when the explorer is used |
+| Solver artifact | ~4 KB, lazy |
+| OBSO (legacy) | 122 KB per scene, still built so its parity tests run against a site; unreachable from the UI |
+
+Export of all 45 scenes takes 7 s. No research code runs in the browser.
+
+## Optional by construction
+
+The export needs Andrew's `defensive_positioning` and the fitted
+`experimental_pass.json`, neither committed. `availability()` reports what is
+missing, `export_release.py` **exits 0** with an explanation, and the site
+builds without a pass-model payload — the explorer then says so rather than
+showing blanks. Neither the model nor the reference repo is tracked.
+
+## Tests
+
+**302 pass.** New: the trace's numbers pinned (logit `6.498830792478147`, proxy
+`0.998497064162670`, independent agreement ~1e-16); the background-defender
+sensitivity `0.992984 → 0.907020` with only the receiver block and
+`same_defender` moving; the legality gate; `payoff == legal × proxy × threat`
+across cases and both attacking directions; the vendored payoff byte-identical
+to `origin/kyuhyeok-dev`; the export payload carrying no tracking and its stored
+payoff matching the product; and the public-UI contract.
+
+Six OBSO tests asserted the *removed controls*. They were rewritten, not
+deleted, to assert the new invariants — that the public control no longer
+offers OBSO, and that OBSO appears in the page only inside the legacy
+disclaimer. The OBSO export, parity and role-blindness tests are untouched and
+still pass.
+
+## Remaining limitations
+
+* The solver's 18 real release actions have export support but no scene with
+  valid stage-3 semantics, so the mode stays unavailable.
+* No genuine solver trajectory for any public scene.
+* The legacy OBSO payload (5.5 MB) is still copied into the build so its parity
+  tests can run against a site. It is unreachable from the UI; dropping it from
+  the Pages artifact is a reasonable follow-up.

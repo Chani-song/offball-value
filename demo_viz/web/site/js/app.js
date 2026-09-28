@@ -16,6 +16,7 @@ import {
   PROVENANCE_LABEL, availableFilters, defaultFilter, filtered, loadShowcase,
   matchLabel, resolveRoles, selectorLabel,
 } from "./showcase.js";
+import { loadModelCard, loadRelease, releaseFor, releaseRow } from "./release.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -45,6 +46,8 @@ const state = {
   collection: "showcase",    // "showcase" | "explorer"
   showcaseFilter: "all",
   showcaseId: null,          // the curated entry currently open
+  release: null,             // solver release quantities, once the explorer is used
+  detailsOpen: false,        // the Model details disclosure
 };
 
 // ---------------------------------------------------------------------------
@@ -72,6 +75,7 @@ function urlState() {
     passes: params.get("passes") === "1",
     on: params.get("on"),              // comma list of layers to switch on
     inspect: params.get("inspect"),    // shirt number to open the panel on
+    target: params.get("target"),      // exploratory ray index, 0-4
   };
 }
 
@@ -107,6 +111,10 @@ function applyUrlState(wanted) {
     state.layers.add(layer);
     const box = document.querySelector(`[data-layer="${layer}"]`);
     if (box) box.checked = true;
+  }
+  if (wanted.target != null && wanted.target !== "") {
+    const ray = Number(wanted.target);
+    if (Number.isInteger(ray) && ray >= 0 && ray < 5) state.endpoint = ray;
   }
   if (wanted.inspect) {
     const found = scene.players.find((p) => p.shirt === String(wanted.inspect));
@@ -166,6 +174,7 @@ async function boot() {
     }
   }
   if (start) await openScene(start.file, wanted);
+  if (state.endpoint != null) $("an-pass")?.scrollIntoView({ block: "nearest" });
   if (wanted && wanted.about) openSheet(true);
   window.addEventListener("resize", () => render());
 }
@@ -199,11 +208,13 @@ async function openScene(file, wanted = null) {
   const onset = onsetFor(scene, state.selection.runner);
   state.frame = peakGainFrame() ?? Math.min(onset.index + Math.round(1.5 * scene.fps),
                                             scene.n_frames - 1);
-  if (wanted) applyUrlState(wanted);
-  // a new scene invalidates everything keyed to the old one
+  // a new scene invalidates everything keyed to the old one; clear before the
+  // URL state is applied, or it would wipe what the URL just asked for
   state.endpoint = null;
   state.reach = null;
   state.solver = null;
+  state.release = null;
+  if (wanted) applyUrlState(wanted);
   // the panel is more use open than empty, so start on the runner
   state.inspect = state.selection.runner
     || state.selection.defenders[0] || state.selection.beneficiaries[0] || null;
@@ -421,14 +432,19 @@ function renderPasses(index, threat) {
     return null;
   }
   if (note) note.hidden = true;
-  if (threat) {
-    for (const ray of fan.rays) {
-      ray.obso = sampleAt(threat.grid, threat.values, ray.end[0], ray.end[1]);
+  // the endpoint caption is the solver's release payoff when the research
+  // export exists, and nothing at all when it does not
+  const payload = releaseFor_scene();
+  const receiver = selectedReceiver();
+  let labelled = false;
+  if (payload && receiver) {
+    const row = releaseRow(payload, index, receiver);
+    for (let i = 0; i < fan.rays.length; i += 1) {
+      const entry = row[i];
+      if (entry.available) { fan.rays[i].obso = entry.releasePayoff; labelled = true; }
     }
   }
-  pitch.drawCandidates(scene, fan, {
-    values: Boolean(threat), selected: state.endpoint,
-  });
+  pitch.drawCandidates(scene, fan, { values: labelled, selected: state.endpoint });
   return fan;
 }
 
@@ -554,7 +570,6 @@ function renderAnalysis(index, slot, threat, fan) {
   }
 
   const player = state.inspect ? scene.byId.get(state.inspect) : null;
-  const wantsThreat = Boolean(player) || state.endpoint != null;
   const wantsPass = state.layers.has("passes") && Boolean(fan);
   const wantsSolver = state.layers.has("solver");
 
@@ -585,7 +600,9 @@ function renderAnalysis(index, slot, threat, fan) {
         delta >= 0 ? `${NUMBER(delta, 1)} s ago` : `in ${NUMBER(-delta, 1)} s`]);
     }
     if (player.side === "attack" && cache) {
-      entries.push(["Available space",
+      // the beneficiary's own figure lives in Off-ball effect; this is the
+      // residual space of whoever is being inspected, which is not the same row
+      entries.push(["Space at this player",
         `${NUMBER(cache.residual(player.id, slot).value, 1)}`]);
     }
     if (state.layers.has("reach")) {
@@ -596,39 +613,24 @@ function renderAnalysis(index, slot, threat, fan) {
     rows($("an-player-rows"), entries);
   }
 
-  // ---- space & threat ----
-  const point = state.endpoint != null && fan
-    ? fan.rays[state.endpoint].end
-    : (player ? [player.x[index], player.y[index]] : null);
-  if (section("an-threat", wantsThreat && Boolean(point))) {
-    const parts = threatComponents(index, point);
-    rows($("an-threat-rows"), parts
-      ? [
-        ["Where", state.endpoint != null ? "Selected endpoint" : `#${player.shirt}`],
-        ["Pitch control", NUMBER(parts.control, 2)],
-        ["Ball transition", NUMBER(parts.transition, 3)],
-        ["EPV", NUMBER(parts.epv, 3)],
-        ["OBSO", NUMBER(parts.obso, 4)],
-      ]
-      : [["Threat components", "Select OBSO threat to compute", true]]);
+  // ---- off-ball effect: what the run did to the beneficiary's space ----
+  if (section("an-offball", selection.beneficiaries.length > 0 && Boolean(cache))) {
+    const factual = cache.combined(selection.beneficiaries, slot).value;
+    const entries = [["Available space", NUMBER(factual, 1)]];
+    const swap = swapSpec();
+    if (swap.length) {
+      const counter = cache.combined(selection.beneficiaries, slot, swap).value;
+      const gain = factual - counter;
+      entries.push(["Space created", `${gain >= 0 ? "+" : ""}${NUMBER(gain, 1)}`]);
+    } else {
+      entries.push(["Space created", "Pick a defender to hold", true]);
+    }
+    rows($("an-offball-rows"), entries);
   }
 
-  // ---- passing ----
+  // ---- the solver's own release chain, for the selected exploratory target ----
   if (section("an-pass", wantsPass)) {
-    const node = $("an-pass-rows");
-    if (state.endpoint == null) {
-      rows(node, [["Endpoint", "Click one to inspect", true]]);
-    } else {
-      const ray = fan.rays[state.endpoint];
-      const [x0, y0] = fan.origin;
-      const distance = Math.hypot(ray.end[0] - x0, ray.end[1] - y0);
-      rows(node, [
-        ["Carrier", `#${fan.carrier.shirt} ${fan.carrier.name}`],
-        ["Direction", `${ray.degrees > 0 ? "+" : ""}${ray.degrees}° from attack`],
-        ["Distance", `${NUMBER(distance, 1)} m`],
-        ["Ball travel", `${NUMBER(distance / OBSO_BALL_SPEED, 2)} s`],
-      ]);
-    }
+    renderReleaseRows(index, fan);
   }
 
   // ---- solver ----
@@ -674,6 +676,108 @@ function threatComponents(index, point) {
   if (!entry || !score) return null;
   return componentsAt(entry, score, state.scene, index, point[0], point[1],
                       surfaceAt.lastControl);
+}
+
+/**
+ * Precomputed release quantities for this scene, fetched on first use.
+ *
+ * Absent means the export was skipped because the research stack or the fitted
+ * model was not present -- the normal state of a checkout without them, not an
+ * error, so the panel says so rather than showing nothing.
+ */
+function releaseFor_scene() {
+  const { scene } = state;
+  if (!scene) return null;
+  if (state.release && state.release.sceneId === scene.scene_id) return state.release.data;
+  if (state.release && state.release.pending) return null;
+  state.release = { sceneId: scene.scene_id, pending: true, data: null };
+  Promise.all([loadRelease(scene.scene_id), loadModelCard()]).then(([data]) => {
+    if (!state.scene || state.scene.scene_id !== scene.scene_id) return;
+    state.release = { sceneId: scene.scene_id, pending: false, data };
+    render();
+  });
+  return null;
+}
+
+/** The receiver the pass model is asked about: the selected beneficiary. */
+function selectedReceiver() {
+  return state.selection.beneficiaries[0] || null;
+}
+
+/**
+ * Legal -> completion proxy -> positional threat -> release payoff.
+ *
+ * Read, not computed: export_release.py ran the research implementation. The
+ * multiplication is shown as a chain so the gate is visible -- an illegal
+ * target keeps its completion proxy and takes a payoff of zero.
+ */
+function renderReleaseRows(index, fan) {
+  const node = $("an-pass-rows");
+  const note = $("an-pass-note");
+  const toggle = $("details-toggle");
+  const details = $("an-detail-rows");
+  const hideDetails = () => {
+    if (toggle) toggle.hidden = true;
+    if (details) details.hidden = true;
+  };
+
+  const payload = releaseFor_scene();
+  if (state.endpoint == null) {
+    rows(node, [["Target", "Click one to inspect", true]]);
+    note.hidden = true;
+    hideDetails();
+    return;
+  }
+
+  const receiver = selectedReceiver();
+  const result = releaseFor(payload, index, receiver, state.endpoint);
+  if (!result.available) {
+    rows(node, [["Solver pass model", "unavailable", true]]);
+    note.hidden = false;
+    note.className = "an-note";
+    note.textContent = result.reason;
+    hideDetails();
+    return;
+  }
+
+  const ray = fan?.rays?.[state.endpoint];
+  const receiverPlayer = state.scene.byId.get(receiver);
+  const entries = [
+    ["Receiver", receiverPlayer ? `#${receiverPlayer.shirt} ${receiverPlayer.name}` : "—"],
+    ["Direction", ray ? `${ray.degrees > 0 ? "+" : ""}${ray.degrees}° from attack` : "—"],
+    ["Legal", result.legal ? "Yes" : (result.offside ? "No · offside" : "No · off pitch")],
+    ["Completion proxy", NUMBER(result.completionProxy, 3)],
+    ["Positional threat", NUMBER(result.positionalThreat, 3)],
+    ["Release payoff", NUMBER(result.releasePayoff, 3)],
+  ];
+  rows(node, entries);
+  // make the gate legible without a paragraph about it
+  node.lastElementChild?.classList.add("strong");
+  if (!result.legal) {
+    node.querySelectorAll("dd")[2]?.classList.add("gate");
+  }
+
+  note.hidden = result.exact;
+  if (!result.exact) {
+    note.className = "an-note";
+    note.textContent = `Computed at frame ${result.sampledFrame}, the nearest exported sample.`;
+  }
+
+  if (toggle && details) {
+    toggle.hidden = false;
+    details.hidden = !state.detailsOpen;
+    $("details-chev").textContent = state.detailsOpen ? "\u25be" : "\u25b8";
+    toggle.setAttribute("aria-expanded", String(state.detailsOpen));
+    if (state.detailsOpen) {
+      const labels = result.labels || {};
+      const metres = new Set(["pass_length", "forward_distance", "receiver_target_gap"]);
+      rows(details, Object.entries(result.features).map(([name, value]) => {
+        if (name === "same_defender") return [labels[name] || name, value ? "Yes" : "No"];
+        return [labels[name] || name,
+                metres.has(name) ? `${NUMBER(value, 1)} m` : NUMBER(value, 3)];
+      }));
+    }
+  }
 }
 
 function renderSolverRows() {
@@ -1240,7 +1344,18 @@ function bindControls() {
     const index = Number(ray);
     state.endpoint = state.endpoint === index ? null : index;
     render();
+    if (state.endpoint != null) {
+      $("an-pass")?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
   });
+
+  const detailsToggle = $("details-toggle");
+  if (detailsToggle) {
+    detailsToggle.addEventListener("click", () => {
+      state.detailsOpen = !state.detailsOpen;
+      render();
+    });
+  }
 
   const analysisToggle = $("analysis-toggle");
   if (analysisToggle) {

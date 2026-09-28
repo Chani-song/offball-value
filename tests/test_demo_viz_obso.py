@@ -230,34 +230,50 @@ class NoPassModelClaimTests(unittest.TestCase):
                  SITE / "js" / "pitch.js", SITE / "js" / "palette.js"]
         return [(p, p.read_text()) for p in files if p.exists()]
 
+    #: Phrases that are allowed only inside an explicit denial.
+    DENIALS = ("never a pass success probability",
+               "not validated pass-completion labels",
+               "not generated, proposed or ranked by")
+
     def test_no_completion_or_ranking_language_in_the_browser(self):
         for path, text in self._surfaces():
             for pattern in self.FORBIDDEN:
-                match = re.search(pattern, text, re.IGNORECASE)
-                self.assertIsNone(
-                    match, f"{path.name} claims '{match.group(0)}'" if match else "")
+                for match in re.finditer(pattern, text, re.IGNORECASE):
+                    window = text[max(0, match.start() - 90):match.end() + 90].lower()
+                    self.assertTrue(
+                        any(d in window for d in self.DENIALS),
+                        f"{path.name} claims '{match.group(0)}' outside a denial")
 
-    def test_the_threat_view_is_never_labelled_xt(self):
-        """The page may say it does not show xT. It may not call this xT."""
+    def test_obso_is_only_mentioned_as_a_legacy_diagnostic(self):
+        """If the public page names OBSO at all, it must disown it."""
 
         markup = (SITE / "index.html").read_text()
-        self.assertIn('<option value="obso">OBSO threat</option>', markup)
+        for match in re.finditer(r"OBSO", markup):
+            window = markup[max(0, match.start() - 400):match.end() + 400]
+            self.assertIn("Legacy / reference diagnostic", window)
+            self.assertIn("not part of the current solver", window)
+
+    def test_nothing_public_is_labelled_xt(self):
+        markup = (SITE / "index.html").read_text()
         self.assertNotIn("xT threat", markup)
         self.assertNotIn("xT surface", markup)
-        # the existing disclaimer is the only place the letters may appear
         for match in re.finditer(r"xT", markup):
             window = markup[max(0, match.start() - 60):match.end() + 60]
             self.assertIn("No calibrated", window)
 
-    def test_the_fan_is_described_as_directions_not_options_ranked(self):
+    def test_the_fan_is_described_as_the_demo_own_geometry(self):
         markup = (SITE / "index.html").read_text()
-        self.assertIn("Candidate passes", markup)
-        self.assertIn("not</b> ranked", markup)
+        self.assertIn("Explore pass model", markup)
+        self.assertIn("not the solver", markup)
+        self.assertIn("never labelled best or recommended", markup)
 
-    def test_the_source_panel_carries_the_epv_caveat(self):
+    def test_the_source_panel_explains_the_current_solver_chain(self):
         markup = (SITE / "index.html").read_text()
-        self.assertIn("pitch control × ball transition × EPV", markup)
-        self.assertIn("does not\n          explicitly encode the defensive line", markup)
+        for phrase in ("Completion proxy", "Positional threat", "Release payoff",
+                       "experimental_proxy", "--allow-proxy-labels"):
+            self.assertIn(phrase, markup, phrase)
+        # and the legacy stack is named as legacy, with its EPV description
+        self.assertIn("pitch control × ball transition × a static EPV grid", markup)
 
 
 class ObsoIsRoleBlindTests(unittest.TestCase):
@@ -281,34 +297,28 @@ class ObsoIsRoleBlindTests(unittest.TestCase):
 
 
 class ObsoSurvivesRoleSwitchingTests(unittest.TestCase):
-    """End to end: the same frame gives the same threat whoever is picked."""
+    """OBSO is a property of the frame, not of the picked roles.
 
-    @unittest.skipIf(not _exported_scenes(), "no exported OBSO data")
-    def test_the_peak_does_not_move_when_the_roles_do(self):
-        from demo_viz.web.validate import find_chrome, serve
+    This used to be checked end to end by reading the stat panel with the OBSO
+    view selected. That control was removed when OBSO was demoted, so the
+    guarantee is checked where it now lives: the browser module takes no
+    selection, and neither does the Python it mirrors. The end-to-end version
+    still runs on backup/ssac-obso-demo.
+    """
 
-        chrome = find_chrome()
-        if chrome is None:
-            self.skipTest("no Chrome/Chromium available")
-        scene_id = json.loads(_exported_scenes()[0].read_text())["scene_id"]
+    def test_the_browser_surface_takes_no_role_argument(self):
+        source = (SITE / "js" / "obso.js").read_text()
+        signature = re.search(r"export function surfaceAt\(([^)]*)\)", source)
+        self.assertIsNotNone(signature)
+        for role in ("runner", "defender", "beneficiary", "selection", "roles"):
+            self.assertNotIn(role, signature.group(1).lower())
 
-        peaks = set()
-        with tempfile.TemporaryDirectory() as tmp:
-            root = build(Path(tmp) / "site", data_dir=WEB_DATA)
-            with serve(root) as port:
-                base = (f"http://127.0.0.1:{port}/index.html?scene={scene_id}"
-                        "&mode=obso&t=40")
-                for roles in ("r=7&d=11&b=34", "r=10&d=23&b=9", "r=18&d=33&b=25"):
-                    result = subprocess.run(
-                        [chrome, "--headless", "--disable-gpu", "--no-sandbox",
-                         "--virtual-time-budget=20000", "--dump-dom", f"{base}&{roles}"],
-                        capture_output=True, text=True, timeout=120,
-                    )
-                    found = re.search(r'id="stat-value"[^>]*>([^<]*)', result.stdout)
-                    self.assertIsNotNone(found, "stat panel did not render")
-                    peaks.add(found.group(1).strip())
-        self.assertEqual(1, len(peaks), f"OBSO moved with the roles: {peaks}")
-        self.assertNotIn("\u2014", peaks.pop())     # and it actually rendered
+    def test_the_exported_surface_is_frame_keyed_only(self):
+        if not _exported_scenes():
+            self.skipTest("no exported OBSO data")
+        payload = json.loads(_exported_scenes()[0].read_text())
+        self.assertEqual(sorted(payload["indices"]), payload["indices"])
+        self.assertNotIn("roles", payload)
 
 
 class CandidateConstantTests(unittest.TestCase):
@@ -329,10 +339,17 @@ class CandidateConstantTests(unittest.TestCase):
         self.assertIsNotNone(match, "the Candidate passes layer is missing")
         self.assertNotIn("checked", match.group(1))
 
-    def test_the_threat_view_is_offered_but_not_the_default(self):
+    def test_the_public_space_views_are_the_off_ball_pair(self):
+        """OBSO was demoted: it is not part of the current solver's payoff.
+
+        The implementation and its export stay; only the public control went.
+        The version of the demo built around it is on backup/ssac-obso-demo.
+        """
+
         markup = (SITE / "index.html").read_text()
         options = re.findall(r'<option value="([a-z]+)"', markup)
-        self.assertEqual(["space", "gain", "obso"], options)
+        self.assertEqual(["space", "gain"], options)
+        self.assertNotIn(">OBSO threat<", markup)
 
 
 if __name__ == "__main__":

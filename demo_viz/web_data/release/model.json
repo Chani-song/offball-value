@@ -1,0 +1,11 @@
+{
+  "schema": "kick_positions_target_two_defender_roles_v1",
+  "kind": "fitted_logistic",
+  "target_semantics": "annotated_receipt_proxy",
+  "validation_status": "experimental_proxy",
+  "feature_set": "positions",
+  "n_features": 33,
+  "training_rows": 7332,
+  "test_rows": 1964,
+  "note": "Experimental proxy. ExpectedPass refuses to load it without allow_proxy; the solver CLI passes --allow-proxy-labels."
+}

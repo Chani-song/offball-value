@@ -83,15 +83,14 @@
       <label class="check"><input type="checkbox" data-layer="candidates" checked> Suggested players</label>
       <label class="check"><input type="checkbox" data-layer="lane"> Passing lane</label>
       <label class="check"><input type="checkbox" data-layer="paths"> Player movements</label>
-      <label class="check"><input type="checkbox" data-layer="passes"> Candidate passes</label>
+      <label class="check"><input type="checkbox" data-layer="passes"> Explore pass model</label>
       <label class="check"><input type="checkbox" data-layer="reach"> Kinematic reachable area</label>
       <label class="check"><input type="checkbox" data-layer="solver"> Solver solution</label>
       <span id="passes-note" class="muted" hidden></span>
       <select id="wake-mode" class="mini"
-              title="Available space and Space created follow the picked roles. OBSO threat = pitch control × ball transition × EPV, and does not.">
+              title="Available space and Space created follow the picked roles and describe the off-ball effect.">
         <option value="space">Available space</option>
         <option value="gain">Space created</option>
-        <option value="obso">OBSO threat</option>
       </select>
     </div>
   </section>
@@ -141,17 +140,23 @@
           <dl id="an-scene-rows"></dl>
           <div class="an-note" id="an-scene-note" hidden></div>
         </section>
+        <section class="an-section" id="an-offball" hidden>
+          <h4>Off-ball effect</h4>
+          <dl id="an-offball-rows"></dl>
+        </section>
+        <section class="an-section" id="an-pass" hidden>
+          <h4>Solver pass model</h4>
+          <dl id="an-pass-rows"></dl>
+          <div class="an-note" id="an-pass-note" hidden></div>
+          <button class="disclosure sub" id="details-toggle" aria-expanded="false" hidden>
+            <span class="chev" id="details-chev">▸</span>
+            <span class="label">Model details</span>
+          </button>
+          <dl id="an-detail-rows" hidden></dl>
+        </section>
         <section class="an-section" id="an-player" hidden>
           <h4>Player</h4>
           <dl id="an-player-rows"></dl>
-        </section>
-        <section class="an-section" id="an-threat" hidden>
-          <h4>Space &amp; threat</h4>
-          <dl id="an-threat-rows"></dl>
-        </section>
-        <section class="an-section" id="an-pass" hidden>
-          <h4>Passing</h4>
-          <dl id="an-pass-rows"></dl>
         </section>
         <section class="an-section" id="an-solver" hidden>
           <h4>Solver</h4>
@@ -194,26 +199,37 @@
           for whichever players you pick; they agree with the Python implementation to
           float64 precision.</dd>
 
-      <dt class="tag-measured">Measured</dt>
-      <dd><b>OBSO threat</b> is <code>pitch control × ball transition × EPV</code>, on the
-          50 × 32 reference grid: Spearman-style pitch control for the attacking team with
-          offside applied, times a Gaussian in distance from the ball, times the static
-          PAUSA EPV grid. It is a property of the frame and the two teams — picking a
-          different runner, defender or beneficiary does not change it. Pitch control is
-          precomputed and interpolated between samples 0.2 s apart; the other two terms are
-          exact at every frame. <i>The EPV component is position-based and does not
-          explicitly encode the defensive line</i>, so space just behind the last defender
-          is valued like space just in front of it. The product is still informative,
-          because pitch control does move when a defender is beaten.</dd>
+      <dt class="tag-solver">Current solver</dt>
+      <dd><b>Completion proxy</b> is the pass model the solver runs: a 33-feature
+          logistic on kick-time positions, from Andrew's
+          <code>ExpectedPass</code> (<code>experimental_pass.json</code>). The artifact
+          declares <code>validation_status: experimental_proxy</code> and
+          <code>target_semantics: annotated_receipt_proxy</code>, and the loader refuses
+          it unless a caller explicitly opts in — the solver CLI passes
+          <code>--allow-proxy-labels</code>. <i>Its receiver labels are proxy annotations,
+          not validated pass-completion labels</i>, which is why it is called a proxy here
+          and never a pass success probability.<br>
+          <b>Positional threat</b> is the solver's own payoff component
+          (<code>positional_threat_all</code>), bounded to [0.2, 1]. Its own documentation
+          says the scale need not be a probability.<br>
+          <b>Release payoff</b> is what the solver uses as the terminal value of a release:
+          <code>legal × completion proxy × positional threat</code>. Legality is a gate —
+          an offside or off-pitch target keeps its completion proxy and takes a payoff of
+          zero. Offside uses the second-last defender of the whole defending side, and the
+          model is shown that whole side, as the pipeline's 2v1 wrapper does.<br>
+          All four are computed by the research implementation at export time and read
+          here; nothing is recomputed in the browser.</dd>
 
       <dt class="tag-explanatory">Exploratory</dt>
-      <dd><b>Candidate passes</b> are five fixed directions — a 90° sector centred on the
-          attacking direction, cut into five 25 m rays and clipped to the pitch — drawn from
+      <dd><b>Explore pass model</b> draws five targets — a 90° sector centred on the
+          attacking direction, cut into five 25 m rays and clipped to the pitch — from
           whoever is within 2.5 m of the ball and at least 0.5 m closer to it than anyone
-          else. They are <b>not</b> ranked, scored for completion, or optimised, and no pass
-          model is applied to them. The number at an endpoint is the OBSO value there,
-          nothing more. When no one clearly holds the ball the fan is hidden rather than
-          guessed at.</dd>
+          else. <b>These targets are the demo's own geometry, not the solver's action
+          space</b>: they were not generated, proposed or ranked by the research pipeline,
+          and they are never labelled best or recommended. The solver's own 18 releases are
+          built from the receiver instead (<code>receiver + direction × offset</code>) and
+          belong to states this demo does not publish. Pointing our rays at the real model
+          explores its response surface; the values are real, the targets are ours.</dd>
 
       <dt class="tag-derived">Derived</dt>
       <dd><b>Kinematic reachable area</b> is <code>action_space.solve_endpoint_motion</code>: one
@@ -258,6 +274,13 @@
           geometric heuristic on the goal-side marking target, not a research-pipeline
           output. Run starts come from the repository's kinematic onset detector where
           it fires, otherwise from a labelled acceleration cue.</dd>
+
+      <dt class="tag-muted">Legacy / reference diagnostic</dt>
+      <dd>An OBSO stack — pitch control × ball transition × a static EPV grid — is
+          implemented in this repository and still covered by its tests, but it is
+          <b>not part of the current solver's release payoff</b> and is no longer shown
+          in this interface. The version of the demo built around it is preserved on the
+          <code>backup/ssac-obso-demo</code> branch.</dd>
 
       <dt class="tag-muted">Not shown</dt>
       <dd>No calibrated xT, pass probability, dribble probability or learned threat
