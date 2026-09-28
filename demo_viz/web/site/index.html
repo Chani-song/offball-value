@@ -14,11 +14,25 @@
     <span class="brand-name">Off-the-ball value</span>
     <span class="brand-sub">explorer</span>
   </div>
-  <div class="control">
+  <div class="control" id="collection-control" hidden>
+    <label>Collection</label>
+    <div class="seg" id="collection">
+      <button class="seg-btn is-on" data-collection="showcase">Submission showcase</button>
+      <button class="seg-btn" data-collection="explorer">Full explorer</button>
+    </div>
+  </div>
+  <div class="control grow" id="showcase-control" hidden>
+    <label for="showcase-scene">Case study</label>
+    <div class="row">
+      <select id="showcase-scene"></select>
+      <div class="chips" id="showcase-filters"></div>
+    </div>
+  </div>
+  <div class="control" id="explorer-control">
     <label for="scene">Scene</label>
     <select id="scene"></select>
   </div>
-  <div class="control">
+  <div class="control" id="effect-control">
     <label>Effect</label>
     <div class="row">
       <label class="check"><input type="checkbox" id="effect-strong" checked> Strong</label>
@@ -70,7 +84,7 @@
       <label class="check"><input type="checkbox" data-layer="lane"> Passing lane</label>
       <label class="check"><input type="checkbox" data-layer="paths"> Player movements</label>
       <label class="check"><input type="checkbox" data-layer="passes"> Candidate passes</label>
-      <label class="check"><input type="checkbox" data-layer="reach"> Reachable area</label>
+      <label class="check"><input type="checkbox" data-layer="reach"> Kinematic reachable area</label>
       <label class="check"><input type="checkbox" data-layer="solver"> Solver solution</label>
       <span id="passes-note" class="muted" hidden></span>
       <select id="wake-mode" class="mini"
@@ -122,6 +136,11 @@
         <span class="muted" id="analysis-hint"></span>
       </button>
       <div id="analysis-body">
+        <section class="an-section" id="an-scene" hidden>
+          <h4>Scene</h4>
+          <dl id="an-scene-rows"></dl>
+          <div class="an-note" id="an-scene-note" hidden></div>
+        </section>
         <section class="an-section" id="an-player" hidden>
           <h4>Player</h4>
           <dl id="an-player-rows"></dl>
@@ -197,7 +216,7 @@
           guessed at.</dd>
 
       <dt class="tag-derived">Derived</dt>
-      <dd><b>Reachable area</b> is <code>action_space.solve_endpoint_motion</code>: one
+      <dd><b>Kinematic reachable area</b> is <code>action_space.solve_endpoint_motion</code>: one
           constant acceleration for a chosen duration, then cruise, over a <b>2.0 s</b>
           horizon at up to <b>9 m/s</b> and <b>3.5 m/s²</b>, tested on the 1 m action grid
           and required to stay inside the pitch. It is where the motion model says a
@@ -216,6 +235,16 @@
           for any scene in this demo</b>, so every scene reports <i>Not computed for this
           scene</i>. Nothing is substituted in its place: a generated trajectory is not a
           solver result.</dd>
+
+      <dt class="tag-human">Human-reviewed</dt>
+      <dd><b>Submission showcase</b> is a curated set of 21 dilemma scenes. The
+          runner, defender and beneficiary shown when a case study opens are the
+          reviewers' own labels, and the <b>5/5</b>-style badge is what two reviewers
+          each scored it out of five — <i>human reviewer ratings, not a model output,
+          not a probability</i>. Five entries are solver-derived states whose tracking
+          is not part of this published demo; they are listed with that reason rather
+          than shown. The <b>Full explorer</b> collection keeps all 45 annotated
+          scenes.</dd>
 
       <dt class="tag-human">Human</dt>
       <dd>Which players are runner, defender and beneficiary comes from manual

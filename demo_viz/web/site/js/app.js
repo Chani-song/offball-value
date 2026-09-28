@@ -12,8 +12,15 @@ import {
 } from "./obso.js";
 import { REACH, reachableMask } from "./reach.js";
 import { commandName, loadSolver, primaryTrajectory, summary as solverSummary } from "./solver.js";
+import {
+  PROVENANCE_LABEL, availableFilters, defaultFilter, filtered, loadShowcase,
+  matchLabel, resolveRoles, selectorLabel,
+} from "./showcase.js";
 
 const $ = (id) => document.getElementById(id);
+
+/** Layers whose only readout lives in the Analysis panel. */
+const ANALYSIS_LAYERS = new Set(["solver", "reach", "passes"]);
 
 const state = {
   index: [],
@@ -34,6 +41,10 @@ const state = {
   endpoint: null,            // index of the selected candidate ray
   reach: null,               // { playerId, frame, mask } memo for one frame
   solver: null,              // { sceneId, state } once the solver layer is used
+  showcase: null,            // curated scenes, or null when the build has none
+  collection: "showcase",    // "showcase" | "explorer"
+  showcaseFilter: "all",
+  showcaseId: null,          // the curated entry currently open
 };
 
 // ---------------------------------------------------------------------------
@@ -54,6 +65,7 @@ function urlState() {
     beneficiary: params.get("b"),
     time: params.get("t"),
     swap: params.get("swap") === "1",
+    showcase: params.get("showcase"),   // open a curated case study by its id
     fit: params.get("fit"),
     about: params.get("about") === "1",
     mode: params.get("mode"),          // space | gain | obso
@@ -119,15 +131,39 @@ async function boot() {
     },
   });
   state.index = await loadIndex();
+  state.showcase = await loadShowcase();
   bindControls();
   refreshSceneList();
+
   const wanted = urlState();
-  let start = visibleScenes()[0];
-  if (wanted && wanted.scene) {
-    const match = state.index.find(
-      (row) => row.file === wanted.scene || row.scene_id === wanted.scene,
-    );
-    if (match) start = match;
+  if (state.showcase) {
+    state.showcaseFilter = defaultFilter(state.showcase);
+    // a collection only makes sense when there are two of them
+    $("collection-control").hidden = false;
+    if (wanted && wanted.scene) state.collection = "explorer";
+    if (wanted && wanted.showcase) state.showcaseId = wanted.showcase;
+  } else {
+    state.collection = "explorer";
+  }
+  applyCollection();
+
+  let start = null;
+  if (state.collection === "showcase") {
+    const curated = playableShowcase();
+    const chosen = curated.find((s) => s.showcase_id === state.showcaseId) || curated[0];
+    if (chosen) {
+      state.showcaseId = chosen.showcase_id;
+      start = state.index.find((row) => row.scene_id === chosen.scene_id);
+    }
+  }
+  if (!start) {
+    start = visibleScenes()[0];
+    if (wanted && wanted.scene) {
+      const match = state.index.find(
+        (row) => row.file === wanted.scene || row.scene_id === wanted.scene,
+      );
+      if (match) start = match;
+    }
   }
   if (start) await openScene(start.file, wanted);
   if (wanted && wanted.about) openSheet(true);
@@ -158,6 +194,8 @@ async function openScene(file, wanted = null) {
   state.scene = scene;
   state.cache = new InfluenceCache(scene, { every: 5 });
   state.selection = Selection.fromRoles(scene.roles, "annotation");
+  state.showcaseRolesApplied = state.collection === "showcase"
+    ? applyShowcaseRoles(scene) : null;
   const onset = onsetFor(scene, state.selection.runner);
   state.frame = peakGainFrame() ?? Math.min(onset.index + Math.round(1.5 * scene.fps),
                                             scene.n_frames - 1);
@@ -488,6 +526,33 @@ function renderAnalysis(index, slot, threat, fan) {
   const card = $("analysis-card");
   if (!card) return;
 
+  // ---- scene ----
+  const curated = currentShowcase();
+  if (section("an-scene", Boolean(curated))) {
+    const entries = [
+      ["Case study", curated.showcase_id],
+      ["Review", `${curated.review?.agreement_label || "—"} · human reviewer ratings`],
+      ["Provenance", PROVENANCE_LABEL[curated.provenance] || curated.provenance],
+      ["Match", matchLabel(curated)],
+    ];
+    if (curated.event) entries.push(["Event", curated.event]);
+    entries.push(["Timeline zero",
+      curated.timing === "run_onset" ? "Run starts" : "Shot"]);
+    if (curated.solver?.scenario_type) {
+      entries.push(["Solver scenario", curated.solver.scenario_type]);
+    }
+    rows($("an-scene-rows"), entries);
+    const note = $("an-scene-note");
+    if (state.showcaseRolesApplied === false) {
+      note.hidden = false;
+      note.className = "an-note warn";
+      note.textContent = "The reviewer's roles could not be resolved in this scene; "
+        + "the stored annotation is shown instead.";
+    } else {
+      note.hidden = true;
+    }
+  }
+
   const player = state.inspect ? scene.byId.get(state.inspect) : null;
   const wantsThreat = Boolean(player) || state.endpoint != null;
   const wantsPass = state.layers.has("passes") && Boolean(fan);
@@ -525,7 +590,7 @@ function renderAnalysis(index, slot, threat, fan) {
     }
     if (state.layers.has("reach")) {
       const mask = reachFor(index);
-      entries.push(["Reachable in 2.0 s",
+      entries.push(["Kinematic reach, 2.0 s",
         mask ? `${Math.round(mask.areaM2)} m²` : "—", !mask]);
     }
     rows($("an-player-rows"), entries);
@@ -571,7 +636,7 @@ function renderAnalysis(index, slot, threat, fan) {
     renderSolverRows();
   }
 
-  card.hidden = !(Boolean(player) || wantsPass || wantsSolver);
+  card.hidden = !(Boolean(curated) || Boolean(player) || wantsPass || wantsSolver);
   $("analysis-hint").textContent = player ? `#${player.shirt}` : "";
 }
 
@@ -651,6 +716,94 @@ function renderSolverRows() {
  * mark is drawn for anything the data does not define -- there is no
  * "defender reacts" frame in the exported scene, so none is invented.
  */
+// ---------------------------------------------------------------------------
+// submission showcase
+// ---------------------------------------------------------------------------
+/** Curated entries that map to a scene the demo actually ships. */
+function playableShowcase() {
+  if (!state.showcase) return [];
+  return filtered(state.showcase, state.showcaseFilter).filter((s) => s.playable);
+}
+
+function currentShowcase() {
+  if (!state.showcase || !state.showcaseId) return null;
+  return state.showcase.find((s) => s.showcase_id === state.showcaseId) || null;
+}
+
+/** Show the controls the active collection needs, and hide the other's. */
+function applyCollection() {
+  const showcase = state.collection === "showcase" && Boolean(state.showcase);
+  $("showcase-control").hidden = !showcase;
+  $("explorer-control").hidden = showcase;
+  $("effect-control").hidden = showcase;
+  for (const button of document.querySelectorAll("#collection .seg-btn")) {
+    button.classList.toggle("is-on", button.dataset.collection === state.collection);
+  }
+  if (showcase) refreshShowcaseList();
+}
+
+function refreshShowcaseList() {
+  if (!state.showcase) return;
+
+  const chips = $("showcase-filters");
+  chips.replaceChildren();
+  for (const filter of availableFilters(state.showcase)) {
+    const chip = document.createElement("button");
+    chip.className = `fchip${filter.key === state.showcaseFilter ? " is-on" : ""}`;
+    chip.textContent = filter.label;
+    chip.addEventListener("click", () => {
+      state.showcaseFilter = filter.key;
+      refreshShowcaseList();
+      const first = playableShowcase()[0];
+      if (first && first.showcase_id !== state.showcaseId) openShowcase(first.showcase_id);
+    });
+    chips.appendChild(chip);
+  }
+
+  const select = $("showcase-scene");
+  select.replaceChildren();
+  for (const scene of filtered(state.showcase, state.showcaseFilter)) {
+    const option = document.createElement("option");
+    option.value = scene.showcase_id;
+    option.textContent = selectorLabel(scene);
+    // an entry with no published trajectory is listed, with the reason, but
+    // cannot be opened; hiding it would misrepresent the curated set
+    option.disabled = !scene.playable;
+    select.appendChild(option);
+  }
+  if (state.showcaseId) select.value = state.showcaseId;
+}
+
+async function openShowcase(showcaseId) {
+  const scene = (state.showcase || []).find((s) => s.showcase_id === showcaseId);
+  if (!scene || !scene.playable) return;
+  state.showcaseId = showcaseId;
+  const row = state.index.find((r) => r.scene_id === scene.scene_id);
+  if (!row) return;
+  await openScene(row.file);
+  refreshShowcaseList();
+}
+
+/**
+ * The reviewer's own roles become the scene's opening state.
+ *
+ * Only when they resolve completely: a partial resolution would silently show
+ * a different cast from the one that was reviewed, so the annotation stands
+ * instead and the Analysis panel says the roles could not be applied.
+ */
+function applyShowcaseRoles(scene) {
+  const curated = currentShowcase();
+  if (!curated || !curated.playable) return true;
+  const ids = resolveRoles(scene, curated);
+  const wanted = curated.roles || {};
+  const complete = ["runners", "defenders", "beneficiaries"].every(
+    (key) => ids[key].length === (wanted[key] || []).length,
+  );
+  if (!complete) return false;
+  state.selection = new Selection({ ...ids, source: "annotation" });
+  return true;
+}
+
 function renderTicks() {
   const node = $("time-ticks");
   if (!node) return;
@@ -1054,9 +1207,29 @@ function bindControls() {
       if (node.checked) state.layers.add(name);
       else state.layers.delete(name);
       render();
+      // a layer that opens an Analysis section is no use below the fold
+      if (node.checked && ANALYSIS_LAYERS.has(name)) {
+        $("analysis-card")?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      }
     });
   }
   $("wake-mode").addEventListener("change", render);
+
+  for (const button of document.querySelectorAll("#collection .seg-btn")) {
+    button.addEventListener("click", async () => {
+      if (state.collection === button.dataset.collection) return;
+      state.collection = button.dataset.collection;
+      applyCollection();
+      if (state.collection === "showcase") {
+        const first = playableShowcase()[0];
+        if (first) await openShowcase(first.showcase_id);
+      }
+      render();
+    });
+  }
+  $("showcase-scene").addEventListener("change", (event) => {
+    openShowcase(event.target.value);
+  });
 
   // clicking a candidate endpoint selects it for the Analysis panel; clicking
   // the pitch background clears the selection

@@ -31,3 +31,6 @@ annotations/*.csv
 *.tmp
 .pytest_cache/
 !annotations/shot_annotations.xlsx
+
+# Curated showcase source: local only, carries embedded raw tracking
+local_inputs/

@@ -38,6 +38,10 @@ def build(out: Path, data_dir: Path = WEB_DATA, clean: bool = True) -> Path:
             shutil.copy2(path, target / path.name)
         # the OBSO surfaces live in their own folder and are fetched only when
         # a visitor picks the threat view, so they never touch the first load
+        # curation metadata: small, loaded once with the scene index
+        showcase = HERE.parent / "data" / "submission_showcase.json"
+        if showcase.exists():
+            shutil.copy2(showcase, target / "submission_showcase.json")
         for extra in ("obso", "solver"):
             source = data_dir / extra
             if source.exists():
@@ -56,11 +60,14 @@ def report(out: Path) -> str:
     shell = sum(size for name, size in rows if not name.startswith("data/"))
     scenes = [(name, size) for name, size in rows if name.startswith("data/")
               and not name.endswith("index.json")
+              and not name.endswith("submission_showcase.json")
               and not name.startswith("data/obso/")
               and not name.startswith("data/solver/")]
     obso = [(name, size) for name, size in rows if name.startswith("data/obso/")]
     solver = [(name, size) for name, size in rows if name.startswith("data/solver/")]
-    index = sum(size for name, size in rows if name.endswith("data/index.json"))
+    index = sum(size for name, size in rows
+                if name.endswith("data/index.json")
+                or name.endswith("submission_showcase.json"))
     lines = [
         f"build       {out}",
         f"files       {len(rows)}",

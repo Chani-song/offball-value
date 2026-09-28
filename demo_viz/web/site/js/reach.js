@@ -1,4 +1,4 @@
-// Reachable area: a faithful port of action_space.solve_endpoint_motion.
+// Kinematic reachable area: a faithful port of action_space.solve_endpoint_motion.
 //
 // The player uses one constant two-dimensional acceleration for `tau` seconds
 // and then continues at the resulting velocity. Among feasible solutions the

@@ -313,3 +313,28 @@ main {
 .an-none { color: var(--muted); font-size: 11.5px; }
 .tag-derived { color: #9B8CFF; }
 .tag-solver { color: #7BE8A8; }
+
+/* ---------------------------------------------------------- collections */
+.seg { display: inline-flex; border: 1px solid var(--grid); border-radius: 8px;
+       overflow: hidden; }
+.seg-btn { background: transparent; color: var(--text2); border: 0; cursor: pointer;
+           font: inherit; font-size: 11.5px; padding: 6px 12px; }
+.seg-btn + .seg-btn { border-left: 1px solid var(--grid); }
+.seg-btn.is-on { background: var(--panel); color: var(--text); font-weight: 600; }
+.seg-btn:hover:not(.is-on) { color: var(--text); }
+
+/* filter pills; deliberately not .chip, which the role dock already owns */
+.chips { display: flex; gap: 5px; flex-wrap: wrap; }
+.fchip { background: transparent; border: 1px solid var(--grid); border-radius: 999px;
+         color: var(--text2); cursor: pointer; font: inherit; font-size: 10.5px;
+         padding: 3px 10px; white-space: nowrap; }
+.fchip.is-on { border-color: var(--beneficiary); color: var(--beneficiary); }
+.fchip:hover:not(.is-on) { color: var(--text); border-color: var(--text2); }
+
+/* .control is a flex box, so the plain hidden attribute would not hide it */
+[hidden] { display: none !important; }
+
+#showcase-scene { min-width: 268px; }
+#showcase-scene option:disabled { color: var(--muted); }
+.an-note { margin-top: 6px; font-size: 11px; color: var(--muted); line-height: 1.45; }
+.an-note.warn { color: var(--defender); }

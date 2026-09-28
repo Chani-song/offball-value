@@ -43,6 +43,6 @@ export const LAYER_LABEL = {
   candidates: "Suggested players",
   paths: "Player movements",
   passes: "Candidate passes",
-  reach: "Reachable area",
+  reach: "Kinematic reachable area",
   solver: "Solver solution",
 };

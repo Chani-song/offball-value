@@ -256,3 +256,141 @@ is unchanged at 8.5e-14.
 There is no solver-populated screenshot of a demo scene, because there is no
 such artifact. §18's scenario F is the one thing here that genuinely does not
 exist yet.
+
+---
+
+# Submission showcase (2026-09-28)
+
+## 1. Ingestion
+
+`local_inputs/dilemma_showcase.html` is the curated source. It is **local-only,
+gitignored and not committed**, because it embeds raw tracking.
+`python -m demo_viz.ingest_showcase` reads its curation metadata and writes
+`demo_viz/data/submission_showcase.json` (28 KB), which holds **no
+trajectories**: a showcase entry is played from the repository scene it maps
+to, or it is not played. The generator refuses to write a file containing a
+track key, and a test independently scans the committed file for long numeric
+arrays.
+
+## 2. What the curated set contains
+
+| | |
+| --- | --- |
+| Scenes | **21** |
+| Human-reviewed | **16** (source kinds: 4 strong, 12 medium) |
+| Solver-derived | **5** (3 × 2v1, 2 × 3v1) |
+| 5/5 ratings | **7** |
+| 5/4 or 4/5 | **14** |
+| Timing: shot-centred | 16 |
+| Timing: run-onset-centred | 5 (all solver-derived) |
+
+Every entry carries two reviewers, both ratings, their off-ball judgement and
+their notes. Timing is preserved per scene rather than normalised: the Analysis
+panel reports *Timeline zero — Shot* or *Run starts* accordingly.
+
+## 3. Mapping
+
+| Status | Count |
+| --- | --- |
+| verified | **16** |
+| unresolved | **5** |
+| ambiguous | 0 |
+
+A candidate has to agree on the unordered team pair (repository titles are
+"attacking vs defending" and flip between scenes of one fixture), the half, and
+containment of the hand-labelled roles in the annotation — then be confirmed by
+the shooter's name or exact role equality. Anything weaker stays unresolved.
+Every record stores its evidence string.
+
+All five unresolved entries are the solver-derived ones: they are run-onset
+states from the stage-3 pipeline, not shot annotations, so none is among the 45
+published scenes. The schema forbids a non-verified entry from naming a
+`scene_id`, so a guess cannot become a mapping.
+
+## 4. Human-reviewed roles
+
+For a verified entry the reviewers' own runner/defender/beneficiary become the
+scene's opening state, replacing the stored annotation where they differ — S05
+opens on one runner and one defender rather than the annotation's two of each.
+Roles are only applied when **all three** resolve on the expected side;
+otherwise the annotation stands and the panel says the reviewer's roles could
+not be applied. After loading, every existing interaction still works: add,
+remove, drag between roles, inspect anyone.
+
+## 5–7. Solver status
+
+**No showcase scene can show solver output, and none pretends to.** See
+`SUBMISSION_SOLVER_MAPPING.md` for the per-entry table. In short: the five
+solver-derived entries have no published scene data and no local artifact —
+their solved policies are on Delta. A bounded search of the locations the docs
+name found no stage-3, `passer2on1` or `fixedpasser` output locally.
+
+The only real artifacts present are `mit_ssac2027_ref/results/exact_100`, the
+solver's own declared 2v1 study states. They validate the adapter and are
+exported under a `solver_reference` kind that tests forbid from shadowing a
+tracked scene. They are never attached to a Bundesliga scene.
+
+Three states are distinct in the UI: *Solver solution available*, *Not computed
+for this scene*, and — for an entry with no published scene — *scene data not
+published* on the selector itself.
+
+## 8. Collections and filters
+
+`Submission showcase` (default) and `Full explorer`. Filters are offered only
+when the metadata supports them: All, 5/5, Human-reviewed, Solver-derived, 2v1,
+3v1. The selector is one line — `S05 · 5/5 · Human-reviewed` — with the fixture
+on the pitch header and in the Analysis panel; reviewer notes and annotations
+stay out of it.
+
+## 9. Top-10 readiness
+
+`featured` and `order` are the only fields to change. With nothing featured the
+default filter is `all`; the moment any entry is featured it becomes
+`featured`, in both Python and the browser, with the same rule and a test on
+each side. No code change is needed.
+
+## 10. Performance
+
+| | |
+| --- | --- |
+| Initial load | **190 KB** (shell 148 KB + scene index 8.6 KB + showcase 29 KB) |
+| Scene | 78 KB, lazy |
+| OBSO surface | ~122 KB per scene, lazy |
+| Solver artifact | ~4 KB, lazy |
+| Kinematic reachable area | computed live, memoised per player and frame |
+
+## 11. Tests
+
+**265 pass**, 35 of them new for the showcase: scene count, provenance and
+rating-group counts, role and note preservation, per-scene timing, mapping
+counts and evidence, the rule that an unresolved entry names no scene, that the
+hand-labelled shirts really exist on the right side of the mapped scene,
+trajectory-leak guards on both the file and the validator, schema rejections,
+featured/order behaviour on both sides, and that the local source is untracked.
+Browser/Python parity for Available space and Space created is unchanged at
+8.5e-14.
+
+## 12. Visual QA
+
+Screenshots in `demo_viz/exports/submission/` at 1440p and 1080p. Two defects
+found and fixed during the pass: a `.chip` class collision that made the role
+chips unreadable, and `[hidden]` losing to `.control { display: flex }` so both
+collections' controls showed at once. Toggling a layer whose readout lives in
+the Analysis panel now scrolls that panel into view.
+
+## 13. Remaining limitations
+
+* Five curated scenes cannot be shown at all, for the data reasons above.
+* No solver comparison is visible anywhere in the public demo.
+* EPV is still position-only and does not encode the defensive line.
+* The Kinematic reachable area is the endpoint-motion model, not the
+  pipeline's steering model; both are named in Source.
+* No pass completion probability or expected value — no validated local artifact.
+
+## 14. When the final Top-10 arrives
+
+Edit `demo_viz/data/submission_showcase.json`: set `"featured": true` and
+`"order": 1..10` on those entries, then `python -m demo_viz.web.build`. The
+default filter flips to Featured on its own. If a chosen scene is one of the
+five unresolved ones, it needs its scene data published first — otherwise it
+will appear in the list and stay disabled.

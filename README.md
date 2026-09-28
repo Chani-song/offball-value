@@ -5,8 +5,11 @@
 [<img src="demo_viz/exports/web_annotation.png" alt="Off-the-ball value explorer: click a runner, a defender and a beneficiary in human-annotated Bundesliga scenes" width="100%">](https://chani-song.github.io/offball-value/)
 
 **▶ [Off-the-ball value explorer](https://chani-song.github.io/offball-value/)** —
-click a runner, a defender and a beneficiary, and explore how the space changes.
-45 human-annotated Bundesliga scenes, recomputed in the browser as you click.
+opens on the **Submission showcase**: 21 curated dilemma scenes, each with its
+reviewers' own runner, defender and beneficiary. Click a player to inspect it,
+reassign roles, and explore how the space and threat change. **Full explorer**
+keeps all 45 annotated Bundesliga scenes, recomputed in the browser as you
+click.
 
 The same explorer runs locally with a Dash back end
 (`python -m demo_viz.app.interactive_app`). Off-the-ball investigation examples
