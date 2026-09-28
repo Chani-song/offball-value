@@ -67,6 +67,8 @@
       <label class="check"><input type="checkbox" data-layer="lane"> Passing lane</label>
       <label class="check"><input type="checkbox" data-layer="paths"> Player movements</label>
       <label class="check"><input type="checkbox" data-layer="passes"> Candidate passes</label>
+      <label class="check"><input type="checkbox" data-layer="reach"> Reachable area</label>
+      <label class="check"><input type="checkbox" data-layer="solver"> Solver solution</label>
       <span id="passes-note" class="muted" hidden></span>
       <select id="wake-mode" class="mini"
               title="Available space and Space created follow the picked roles. OBSO threat = pitch control × ball transition × EPV, and does not.">
@@ -108,6 +110,32 @@
       <div class="label" id="stat-label">Available space</div>
       <div class="stat-value" id="stat-value">—</div>
       <div id="chart" class="chart"></div>
+    </div>
+
+    <div class="card analysis" id="analysis-card" hidden>
+      <button class="disclosure" id="analysis-toggle" aria-expanded="true">
+        <span class="chev" id="analysis-chev">▾</span>
+        <span class="label">Analysis</span>
+        <span class="muted" id="analysis-hint"></span>
+      </button>
+      <div id="analysis-body">
+        <section class="an-section" id="an-player" hidden>
+          <h4>Player</h4>
+          <dl id="an-player-rows"></dl>
+        </section>
+        <section class="an-section" id="an-threat" hidden>
+          <h4>Space &amp; threat</h4>
+          <dl id="an-threat-rows"></dl>
+        </section>
+        <section class="an-section" id="an-pass" hidden>
+          <h4>Passing</h4>
+          <dl id="an-pass-rows"></dl>
+        </section>
+        <section class="an-section" id="an-solver" hidden>
+          <h4>Solver</h4>
+          <dl id="an-solver-rows"></dl>
+        </section>
+      </div>
     </div>
 
     <div class="card list" id="hints-card">
@@ -164,6 +192,27 @@
           model is applied to them. The number at an endpoint is the OBSO value there,
           nothing more. When no one clearly holds the ball the fan is hidden rather than
           guessed at.</dd>
+
+      <dt class="tag-derived">Derived</dt>
+      <dd><b>Reachable area</b> is <code>action_space.solve_endpoint_motion</code>: one
+          constant acceleration for a chosen duration, then cruise, over a <b>2.0 s</b>
+          horizon at up to <b>9 m/s</b> and <b>3.5 m/s²</b>, tested on the 1 m action grid
+          and required to stay inside the pitch. It is where the motion model says a
+          player could arrive — <i>model reachability, not an observed or estimated
+          probability</i>. The repository also implements a richer steering model
+          (<code>steering_reachable</code>, tangential and normal control with
+          plant-and-cut) which the defender-response pipeline uses; it costs about 9.5 s
+          for one player at one frame, so it is not what this layer draws.</dd>
+
+      <dt class="tag-solver">Solver</dt>
+      <dd><b>Solver solution</b> is output from the exact 2v1 game in
+          <code>mit_ssac2027</code> — a separate repository and a batch job, never run in
+          the browser. Trajectories, equilibrium value, certificate gap and root action
+          probabilities are read from the artifact as produced, with the run's repository,
+          commit, state index and policy fingerprint attached. <b>No solver artifact exists
+          for any scene in this demo</b>, so every scene reports <i>Not computed for this
+          scene</i>. Nothing is substituted in its place: a generated trajectory is not a
+          solver result.</dd>
 
       <dt class="tag-human">Human</dt>
       <dd>Which players are runner, defender and beneficiary comes from manual

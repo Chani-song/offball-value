@@ -32,8 +32,8 @@ export class Pitch {
     // zoom so they keep a constant size on screen while players grow.
     this.k = 1;
     this.layers = {};
-    for (const name of ["markings", "field", "paths", "passes", "trail", "lane",
-                        "tether", "ghost", "players", "labels"]) {
+    for (const name of ["markings", "field", "reach", "paths", "passes", "trail",
+                        "lane", "tether", "ghost", "players", "labels"]) {
       const group = document.createElementNS(SVG_NS, "g");
       group.setAttribute("class", `layer-${name}`);
       this.svg.appendChild(group);
@@ -111,8 +111,8 @@ export class Pitch {
   }
 
   clearDynamic() {
-    for (const name of ["field", "paths", "passes", "trail", "lane", "tether",
-                        "ghost", "players", "labels"]) {
+    for (const name of ["field", "reach", "paths", "passes", "trail", "lane",
+                        "tether", "ghost", "players", "labels"]) {
       this.layers[name].replaceChildren();
     }
   }
@@ -158,6 +158,77 @@ export class Pitch {
       x: -PITCH_L / 2, y: -PITCH_W / 2, width: PITCH_L, height: PITCH_W,
       preserveAspectRatio: "none", style: "image-rendering:auto",
     });
+  }
+
+  /**
+   * The reachable set, as a flat wash with an edge.
+   *
+   * Deliberately not a heat map: the model answers yes or no per cell, so a
+   * gradient would imply a confidence the computation does not produce.
+   */
+  drawReach(grid, values, scene) {
+    if (!values) return;
+    this.canvas.width = grid.nx;
+    this.canvas.height = grid.ny;
+    const context = this.canvas.getContext("2d");
+    const image = context.createImageData(grid.nx, grid.ny);
+    const rgb = hexToRgb(P.reach);
+    for (let iy = 0; iy < grid.ny; iy += 1) {
+      const sourceRow = scene.flip ? iy : grid.ny - 1 - iy;
+      for (let ix = 0; ix < grid.nx; ix += 1) {
+        const sourceCol = scene.flip ? grid.nx - 1 - ix : ix;
+        const on = values[sourceRow * grid.nx + sourceCol] > 0.5;
+        const offset = (iy * grid.nx + ix) * 4;
+        image.data[offset] = rgb[0];
+        image.data[offset + 1] = rgb[1];
+        image.data[offset + 2] = rgb[2];
+        image.data[offset + 3] = on ? 46 : 0;
+      }
+    }
+    context.putImageData(image, 0, 0);
+    this.add("reach", "image", {
+      href: this.canvas.toDataURL(),
+      x: -PITCH_L / 2, y: -PITCH_W / 2, width: PITCH_L, height: PITCH_W,
+      preserveAspectRatio: "none", style: "image-rendering:pixelated",
+    });
+  }
+
+  /**
+   * A solver rollout: one dashed path per body, with the decision instants
+   * marked. Dashed and in the solver colour so it cannot be read as tracking,
+   * which is always solid.
+   */
+  drawSolverTrajectory(scene, trajectory) {
+    for (const [body, points] of Object.entries(trajectory.paths || {})) {
+      const viewed = points.map(([x, y]) => view(scene, x, y)).filter(Boolean);
+      if (viewed.length < 2) continue;
+      this.add("passes", "path", {
+        d: viewed.map((p, i) => `${i ? "L" : "M"}${p[0]} ${p[1]}`).join(" "),
+        fill: "none", stroke: P.solver, "stroke-width": 0.42,
+        "stroke-dasharray": "2.2 1.4", "stroke-linecap": "round", opacity: 0.95,
+      });
+      for (const point of viewed) {
+        this.add("passes", "circle", {
+          cx: point[0], cy: point[1], r: 0.42,
+          fill: P.ink, stroke: P.solver, "stroke-width": 0.2, opacity: 0.95,
+        });
+      }
+      const last = viewed[viewed.length - 1];
+      this.add("passes", "text", {
+        x: last[0], y: last[1] - 1.4, "text-anchor": "middle",
+        fill: P.solver, "font-size": 1.25, opacity: 0.9,
+        style: "paint-order:stroke; stroke:#05090A; stroke-width:0.6px",
+      }, body);
+    }
+    if (trajectory.release_target) {
+      const target = view(scene, trajectory.release_target[0], trajectory.release_target[1]);
+      if (target) {
+        this.add("passes", "circle", {
+          cx: target[0], cy: target[1], r: 0.9,
+          fill: "none", stroke: P.solver, "stroke-width": 0.28, opacity: 0.95,
+        });
+      }
+    }
   }
 
   /** Players, with the side that can be clicked brought forward. */
@@ -322,7 +393,7 @@ export class Pitch {
    * no arrowhead singled out. The only per-ray text is the OBSO value at the
    * endpoint when the threat view is on, and it is deliberately small.
    */
-  drawCandidates(scene, fan, { values = null } = {}) {
+  drawCandidates(scene, fan, { values = null, selected = null } = {}) {
     if (!fan) return;
     const origin = view(scene, fan.origin[0], fan.origin[1]);
     if (!origin) return;
@@ -342,9 +413,13 @@ export class Pitch {
         stroke: P.obso, "stroke-width": 0.26, opacity: 0.8,
         "stroke-dasharray": "1.6 1.1", "stroke-linecap": "round",
       });
+      const chosen = selected === fan.rays.indexOf(ray);
       this.add("passes", "circle", {
-        cx: end[0], cy: end[1], r: 0.62,
-        fill: "none", stroke: P.obso, "stroke-width": 0.22, opacity: 0.9,
+        cx: end[0], cy: end[1], r: chosen ? 0.95 : 0.62,
+        fill: chosen ? P.obso : "none", "fill-opacity": chosen ? 0.35 : 0,
+        stroke: P.obso, "stroke-width": chosen ? 0.34 : 0.22, opacity: 0.95,
+        "data-ray": String(fan.rays.indexOf(ray)),
+        style: "cursor:pointer", "pointer-events": "all",
       });
       if (values && ray.obso != null) {
         // flip the caption below the endpoint near the touchline, so it stays

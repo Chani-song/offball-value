@@ -99,6 +99,7 @@ export function surfaceAt(entry, score, scene, index, out) {
   const cells = nx * ny;
   const values = out || new Float64Array(cells);
   controlAt(entry, index, values);
+  surfaceAt.lastControl = Float64Array.from(values);
 
   const bx = scene.ball.x[index];
   const by = scene.ball.y[index];
@@ -253,4 +254,35 @@ export function candidatePasses(scene, index) {
       return { degrees, end: [x1, y1] };
     }),
   };
+}
+
+/**
+ * The three OBSO terms and their product at one pitch coordinate.
+ *
+ * Reported separately because they answer different questions: control is who
+ * would get there, transition is whether the ball goes there at all, and EPV
+ * is what the place is worth. The product is the only one of the four that is
+ * OBSO; EPV on its own is position-only and knows nothing about the defensive
+ * line, which is why the panel never calls it xT.
+ */
+export function componentsAt(entry, score, scene, index, x, y, cached = null) {
+  const { nx, ny, length, width } = entry.grid;
+  const control = cached || controlAt(entry, index, new Float64Array(entry.cells));
+  const bx = scene.ball.x[index];
+  const by = scene.ball.y[index];
+  if (!Number.isFinite(bx) || !Number.isFinite(by)) return null;
+
+  const grid = entry.grid;
+  const controlValue = sampleAt(grid, control, x, y);
+  const transition = Math.exp(
+    -(((x - bx) ** 2 + (y - by) ** 2)) / (2 * entry.sigma * entry.sigma),
+  );
+  // the score grid is stored attacking right; mirror the lookup, not the array
+  const epv = sampleAt(grid, score.values, entry.direction < 0 ? -x : x, y);
+  return { control: controlValue, transition, epv, obso: controlValue * transition * epv };
+}
+
+/** Pitch control alone at one frame, for callers that want to reuse it. */
+export function controlFieldAt(entry, index, out) {
+  return controlAt(entry, index, out || new Float64Array(entry.cells));
 }

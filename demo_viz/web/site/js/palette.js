@@ -18,6 +18,8 @@ export const P = {
   defend: "#5F7392",
   ball: "#FFFFFF",
   obso: "#9B8CFF",
+  reach: "#8FA6B8",
+  solver: "#7BE8A8",
 };
 
 export const ROLE_COLOUR = {
@@ -41,4 +43,6 @@ export const LAYER_LABEL = {
   candidates: "Suggested players",
   paths: "Player movements",
   passes: "Candidate passes",
+  reach: "Reachable area",
+  solver: "Solver solution",
 };

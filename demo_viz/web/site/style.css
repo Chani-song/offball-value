@@ -131,7 +131,8 @@ main {
 /* -------------------------------------------------------------------- dock */
 .dock {
   flex: 0 0 clamp(316px, 23vw, 400px); display: flex; flex-direction: column;
-  gap: 11px; min-height: 0; overflow: hidden;
+  gap: 11px; min-height: 0; overflow-y: auto; overflow-x: hidden;
+  scrollbar-width: thin;
   justify-content: flex-start;
 }
 .card {
@@ -282,3 +283,21 @@ main {
   .pitch-wrap { height: 58vh; }
   .top, main { max-width: none; }
 }
+
+/* ------------------------------------------------------------ analysis */
+/* A reading panel, not a dashboard: one column of label/value rows that
+   appear only when the layer or selection behind them is active. */
+.analysis dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; }
+.analysis dt { color: var(--text2); font-size: 11.5px; white-space: nowrap; }
+.analysis dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums;
+               font-size: 11.5px; color: var(--text); }
+.analysis dd.dim { color: var(--muted); }
+.an-section { padding: 9px 0 0 0; }
+.an-section + .an-section { border-top: 1px solid var(--grid); margin-top: 8px; }
+.an-section h4 { margin: 0 0 6px 0; font-size: 10px; letter-spacing: 0.09em;
+                 text-transform: uppercase; color: var(--muted); font-weight: 700; }
+.an-provenance { margin-top: 7px; font-size: 10.5px; color: var(--muted);
+                 line-height: 1.4; word-break: break-word; }
+.an-none { color: var(--muted); font-size: 11.5px; }
+.tag-derived { color: #9B8CFF; }
+.tag-solver { color: #7BE8A8; }

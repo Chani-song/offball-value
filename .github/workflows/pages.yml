@@ -12,6 +12,8 @@ on:
       - "demo_viz/web/**"
       - "demo_viz/web_data/**"
       - "src/offball_value/reference_obso.py"
+      - "src/offball_value/action_space.py"
+      - "demo_viz/core/candidates.py"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
 

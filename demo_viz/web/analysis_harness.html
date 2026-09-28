@@ -1,0 +1,33 @@
+<!doctype html>
+<!-- Reachability parity harness: not part of the published site.
+     js/reach.js is a hand port of action_space.solve_endpoint_motion, so the
+     two can drift. tests/test_demo_viz_analysis.py feeds the same cases to
+     both and compares feasibility and the solved motion. -->
+<html><head><meta charset="utf-8"><title>reach</title></head>
+<body><pre id="out">running</pre>
+<script type="module">
+import { REACH, reachableMask, solveEndpointMotion } from "./js/reach.js";
+
+const plan = JSON.parse(document.getElementById("plan").textContent);
+const out = { config: REACH, cases: [], masks: [] };
+
+for (const item of plan.cases) {
+  const motion = solveEndpointMotion(item.start, item.velocity, item.endpoint);
+  out.cases.push({
+    key: item.key,
+    feasible: motion.feasible,
+    reason: motion.reason ?? null,
+    acceleration: motion.feasible ? motion.acceleration : null,
+    accelerationDuration: motion.feasible ? motion.accelerationDuration : null,
+    terminalSpeed: motion.feasible ? motion.terminalSpeed : null,
+  });
+}
+
+for (const item of plan.masks || []) {
+  const mask = reachableMask(item.start, item.velocity);
+  out.masks.push({ key: item.key, cells: mask.cells, areaM2: mask.areaM2 });
+}
+
+document.getElementById("out").textContent = JSON.stringify(out);
+</script>
+</body></html>

@@ -1,13 +1,17 @@
 // Wiring: scene loading, the role dock, drag and drop, overlays, playback.
 
-import { InfluenceCache } from "./influence.js";
+import { InfluenceCache, velocityAt } from "./influence.js";
 import { P, ROLE_COLOUR, ROLE_LABEL, ROLE_SIDE } from "./palette.js";
 import { Pitch } from "./pitch.js";
 import { autoTriplet, rankBeneficiaries, rankDefenders } from "./ranking.js";
 import { drawChart } from "./chart.js";
 import { Selection } from "./selection.js";
 import { ballAt, loadIndex, loadScene, onsetFor, playerAt } from "./scene.js";
-import { candidatePasses, loadControl, loadScoreGrid, sampleAt, surfaceAt } from "./obso.js";
+import {
+  candidatePasses, componentsAt, loadControl, loadScoreGrid, sampleAt, surfaceAt,
+} from "./obso.js";
+import { REACH, reachableMask } from "./reach.js";
+import { commandName, loadSolver, primaryTrajectory, summary as solverSummary } from "./solver.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -26,6 +30,10 @@ const state = {
   drag: null,
   obso: null,                // { entry, score } once the threat view is used
   obsoValues: null,          // scratch buffer for the current frame's surface
+  inspect: null,             // player id under the last click, for the panel
+  endpoint: null,            // index of the selected candidate ray
+  reach: null,               // { playerId, frame, mask } memo for one frame
+  solver: null,              // { sceneId, state } once the solver layer is used
 };
 
 // ---------------------------------------------------------------------------
@@ -50,6 +58,8 @@ function urlState() {
     about: params.get("about") === "1",
     mode: params.get("mode"),          // space | gain | obso
     passes: params.get("passes") === "1",
+    on: params.get("on"),              // comma list of layers to switch on
+    inspect: params.get("inspect"),    // shirt number to open the panel on
   };
 }
 
@@ -77,10 +87,18 @@ function applyUrlState(wanted) {
   if (wanted.mode && ["space", "gain", "obso"].includes(wanted.mode)) {
     $("wake-mode").value = wanted.mode;
   }
-  if (wanted.passes) {
-    state.layers.add("passes");
-    const box = document.querySelector('[data-layer="passes"]');
+  const wantedLayers = [
+    ...(wanted.passes ? ["passes"] : []),
+    ...(wanted.on ? wanted.on.split(",").map((s) => s.trim()).filter(Boolean) : []),
+  ];
+  for (const layer of wantedLayers) {
+    state.layers.add(layer);
+    const box = document.querySelector(`[data-layer="${layer}"]`);
     if (box) box.checked = true;
+  }
+  if (wanted.inspect) {
+    const found = scene.players.find((p) => p.shirt === String(wanted.inspect));
+    if (found) state.inspect = found.id;
   }
   if (wanted.time != null && wanted.time !== "") {
     const frame = Number(wanted.time);
@@ -144,6 +162,13 @@ async function openScene(file, wanted = null) {
   state.frame = peakGainFrame() ?? Math.min(onset.index + Math.round(1.5 * scene.fps),
                                             scene.n_frames - 1);
   if (wanted) applyUrlState(wanted);
+  // a new scene invalidates everything keyed to the old one
+  state.endpoint = null;
+  state.reach = null;
+  state.solver = null;
+  // the panel is more use open than empty, so start on the runner
+  state.inspect = state.selection.runner
+    || state.selection.defenders[0] || state.selection.beneficiaries[0] || null;
   $("time").max = String(scene.n_frames - 1);
   $("time").value = String(state.frame);
   $("scene").value = file;
@@ -235,7 +260,9 @@ function render() {
   }
 
   if (state.layers.has("paths")) pitch.drawPaths(scene);
-  renderPasses(index, threat);
+  renderReach(index);
+  const fan = renderPasses(index, threat);
+  renderSolverLayer();
   if (state.layers.has("lane")) pitch.drawLane(scene, selection.beneficiaries, index);
   if (state.layers.has("trail") && selection.runner) {
     pitch.drawTrail(scene, selection.runner, index);
@@ -259,6 +286,7 @@ function render() {
   renderStat(slot, swap);
   renderChart(swap, freeze);
   renderCandidates(freeze, slot);
+  renderAnalysis(index, slot, threat, fan);
   $("readout").textContent = `${scene.times[index] >= 0 ? "+" : ""}${scene.times[index].toFixed(2)} s`;
   $("time").value = String(index);
 }
@@ -346,12 +374,12 @@ function renderPasses(index, threat) {
   const note = $("passes-note");
   if (!state.layers.has("passes")) {
     if (note) note.hidden = true;
-    return;
+    return null;
   }
   const fan = candidatePasses(scene, index);
   if (!fan) {
     if (note) { note.hidden = false; note.textContent = "No clear carrier this frame"; }
-    return;
+    return null;
   }
   if (note) note.hidden = true;
   if (threat) {
@@ -359,7 +387,258 @@ function renderPasses(index, threat) {
       ray.obso = sampleAt(threat.grid, threat.values, ray.end[0], ray.end[1]);
     }
   }
-  pitch.drawCandidates(scene, fan, { values: Boolean(threat) });
+  pitch.drawCandidates(scene, fan, {
+    values: Boolean(threat), selected: state.endpoint,
+  });
+  return fan;
+}
+
+/** Velocity and acceleration from the tracks, the same way influence.js does. */
+function motionOf(player, index) {
+  const { scene } = state;
+  const window = Math.max(2, Math.round(REACH.velocityHistorySeconds * scene.fps));
+  const [vx, vy] = velocityAt(player.x, player.y, index, scene.fps, window);
+  const step = Math.max(1, Math.round(scene.fps * 0.2));
+  const before = Math.max(0, index - step);
+  const after = Math.min(scene.n_frames - 1, index + step);
+  const [ax0, ay0] = velocityAt(player.x, player.y, before, scene.fps, window);
+  const [ax1, ay1] = velocityAt(player.x, player.y, after, scene.fps, window);
+  const dt = (after - before) / scene.fps;
+  const ax = dt > 0 ? (ax1 - ax0) / dt : 0;
+  const ay = dt > 0 ? (ay1 - ay0) / dt : 0;
+  return { vx, vy, speed: Math.hypot(vx, vy), acceleration: Math.hypot(ax, ay) };
+}
+
+/** The reachable set for the inspected player, memoised per player and frame. */
+function reachFor(index) {
+  const { scene } = state;
+  if (!state.inspect) return null;
+  const player = scene.byId.get(state.inspect);
+  if (!player) return null;
+  const x = player.x[index];
+  const y = player.y[index];
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+  if (state.reach && state.reach.playerId === state.inspect && state.reach.frame === index) {
+    return state.reach.mask;
+  }
+  const { vx, vy } = motionOf(player, index);
+  const mask = reachableMask([x, y], [vx, vy]);
+  state.reach = { playerId: state.inspect, frame: index, mask };
+  return mask;
+}
+
+function renderReach(index) {
+  if (!state.layers.has("reach")) return;
+  const mask = reachFor(index);
+  if (!mask) return;
+  state.pitch.drawReach(mask.grid, mask.values, state.scene);
+}
+
+/** Real solver output for this scene, fetched once, or the unavailable state. */
+function solverFor() {
+  const { scene } = state;
+  if (!scene) return null;
+  if (state.solver && state.solver.sceneId === scene.scene_id) return state.solver.data;
+  if (state.solver && state.solver.pending) return null;
+  state.solver = { sceneId: scene.scene_id, pending: true, data: null };
+  loadSolver(scene.scene_id).then((data) => {
+    if (!state.scene || state.scene.scene_id !== scene.scene_id) return;
+    state.solver = { sceneId: scene.scene_id, pending: false, data };
+    render();
+  });
+  return null;
+}
+
+function renderSolverLayer() {
+  if (!state.layers.has("solver")) return;
+  const data = solverFor();
+  // nothing is drawn when there is no artifact: the panel says so instead
+  if (!data || !data.available) return;
+  const trajectory = primaryTrajectory(data);
+  if (trajectory) state.pitch.drawSolverTrajectory(state.scene, trajectory);
+}
+
+// ---------------------------------------------------------------------------
+// analysis panel
+// ---------------------------------------------------------------------------
+const NUMBER = (value, digits = 2) =>
+  (Number.isFinite(value) ? value.toFixed(digits) : "—");
+
+function rows(node, entries) {
+  node.replaceChildren();
+  for (const [label, value, dim] of entries) {
+    const dt = document.createElement("dt");
+    dt.textContent = label;
+    const dd = document.createElement("dd");
+    dd.textContent = value;
+    if (dim) dd.className = "dim";
+    node.append(dt, dd);
+  }
+}
+
+function section(id, visible) {
+  const node = $(id);
+  if (node) node.hidden = !visible;
+  return visible;
+}
+
+function renderAnalysis(index, slot, threat, fan) {
+  const { scene, cache, selection } = state;
+  const card = $("analysis-card");
+  if (!card) return;
+
+  const player = state.inspect ? scene.byId.get(state.inspect) : null;
+  const wantsThreat = Boolean(player) || state.endpoint != null;
+  const wantsPass = state.layers.has("passes") && Boolean(fan);
+  const wantsSolver = state.layers.has("solver");
+
+  // ---- player ----
+  if (section("an-player", Boolean(player))) {
+    const motion = motionOf(player, index);
+    const entries = [
+      ["Player", `#${player.shirt} ${player.name}`],
+      ["Team", player.side === "attack" ? scene.attacking_team : scene.defending_team],
+      ["Role", ROLE_LABEL[selection.roleOf(player.id)] || "—"],
+      ["Speed", `${NUMBER(motion.speed, 1)} m/s`],
+      ["Acceleration", `${NUMBER(motion.acceleration, 1)} m/s²`],
+    ];
+    const ball = ballRaw(index);
+    if (ball) {
+      entries.push(["Distance to ball",
+        `${NUMBER(Math.hypot(player.x[index] - ball[0], player.y[index] - ball[1]), 1)} m`]);
+    }
+    const counterpart = nearestCounterpart(player, index);
+    if (counterpart) {
+      entries.push([`Distance to #${counterpart.player.shirt}`,
+        `${NUMBER(counterpart.distance, 1)} m`]);
+    }
+    const onset = scene.onsets?.[player.id];
+    if (onset && player.side === "attack") {
+      const delta = (index - onset.index) / scene.fps;
+      entries.push(["Run start",
+        delta >= 0 ? `${NUMBER(delta, 1)} s ago` : `in ${NUMBER(-delta, 1)} s`]);
+    }
+    if (player.side === "attack" && cache) {
+      entries.push(["Available space",
+        `${NUMBER(cache.residual(player.id, slot).value, 1)}`]);
+    }
+    if (state.layers.has("reach")) {
+      const mask = reachFor(index);
+      entries.push(["Reachable in 2.0 s",
+        mask ? `${Math.round(mask.areaM2)} m²` : "—", !mask]);
+    }
+    rows($("an-player-rows"), entries);
+  }
+
+  // ---- space & threat ----
+  const point = state.endpoint != null && fan
+    ? fan.rays[state.endpoint].end
+    : (player ? [player.x[index], player.y[index]] : null);
+  if (section("an-threat", wantsThreat && Boolean(point))) {
+    const parts = threatComponents(index, point);
+    rows($("an-threat-rows"), parts
+      ? [
+        ["Where", state.endpoint != null ? "Selected endpoint" : `#${player.shirt}`],
+        ["Pitch control", NUMBER(parts.control, 2)],
+        ["Ball transition", NUMBER(parts.transition, 3)],
+        ["EPV", NUMBER(parts.epv, 3)],
+        ["OBSO", NUMBER(parts.obso, 4)],
+      ]
+      : [["Threat components", "Select OBSO threat to compute", true]]);
+  }
+
+  // ---- passing ----
+  if (section("an-pass", wantsPass)) {
+    const node = $("an-pass-rows");
+    if (state.endpoint == null) {
+      rows(node, [["Endpoint", "Click one to inspect", true]]);
+    } else {
+      const ray = fan.rays[state.endpoint];
+      const [x0, y0] = fan.origin;
+      const distance = Math.hypot(ray.end[0] - x0, ray.end[1] - y0);
+      rows(node, [
+        ["Carrier", `#${fan.carrier.shirt} ${fan.carrier.name}`],
+        ["Direction", `${ray.degrees > 0 ? "+" : ""}${ray.degrees}° from attack`],
+        ["Distance", `${NUMBER(distance, 1)} m`],
+        ["Ball travel", `${NUMBER(distance / OBSO_BALL_SPEED, 2)} s`],
+      ]);
+    }
+  }
+
+  // ---- solver ----
+  if (section("an-solver", wantsSolver)) {
+    renderSolverRows();
+  }
+
+  card.hidden = !(Boolean(player) || wantsPass || wantsSolver);
+  $("analysis-hint").textContent = player ? `#${player.shirt}` : "";
+}
+
+/**
+ * The OBSO convention's own ball speed, 15 m/s, from ReferenceOBSOConfig.
+ * It is the only ball-travel number this repository defines without a fitted
+ * model, and it is what the pitch-control term already assumes.
+ */
+const OBSO_BALL_SPEED = 15.0;
+
+function ballRaw(index) {
+  const bx = state.scene.ball.x[index];
+  const by = state.scene.ball.y[index];
+  return Number.isFinite(bx) && Number.isFinite(by) ? [bx, by] : null;
+}
+
+function nearestCounterpart(player, index) {
+  const { selection, scene } = state;
+  const ids = player.side === "attack" ? selection.defenders
+    : [...selection.runners, ...selection.beneficiaries];
+  let best = null;
+  for (const id of ids) {
+    const other = scene.byId.get(id);
+    if (!other || other.id === player.id) continue;
+    const distance = Math.hypot(player.x[index] - other.x[index],
+                                player.y[index] - other.y[index]);
+    if (!best || distance < best.distance) best = { player: other, distance };
+  }
+  return best;
+}
+
+function threatComponents(index, point) {
+  if (!point || !state.obso || state.obso.pending) return null;
+  const { entry, score } = state.obso;
+  if (!entry || !score) return null;
+  return componentsAt(entry, score, state.scene, index, point[0], point[1],
+                      surfaceAt.lastControl);
+}
+
+function renderSolverRows() {
+  const node = $("an-solver-rows");
+  const data = solverFor();
+  if (!data) { rows(node, [["Solver", "Loading…", true]]); return; }
+  if (!data.available) {
+    rows(node, [["Solver", data.reason || "Not computed for this scene", true]]);
+    return;
+  }
+  const info = solverSummary(data);
+  const attack = info.attack?.kind === "release"
+    ? "release the ball"
+    : `carrier ${commandName(info.attack?.carrier, data.attack_direction)}, `
+      + `receiver ${commandName(info.attack?.receiver, data.attack_direction)}`;
+  rows(node, [
+    ["Equilibrium value", NUMBER(info.value, 4)],
+    ["Certificate gap", info.gap != null ? info.gap.toExponential(1) : "—"],
+    ["Root policy", info.mixed ? "mixed" : "pure"],
+    ["Attack action", attack],
+    ["Attack probability", NUMBER(info.attack?.probability, 3)],
+    ["Defender action", commandName(info.defence?.defender, data.attack_direction)],
+    ["Defender probability", NUMBER(info.defence?.probability, 3)],
+    ["Release probability", NUMBER(info.releaseProbability, 3)],
+    ["Horizon", `${info.steps} × ${NUMBER(info.stepSeconds, 1)} s`],
+  ]);
+  const note = document.createElement("div");
+  note.className = "an-provenance";
+  const p = info.provenance || {};
+  note.textContent = `${p.repository}@${p.commit} · ${p.artifact}#${p.state_index}`;
+  node.after(note);
 }
 
 function renderStat(slot, swap) {
@@ -609,6 +888,8 @@ function beginDrag(event, player, fromRole = null) {
     } else if (!dragged.moved) {
       if (dragged.fromRole) state.selection.arm(dragged.fromRole);
       else state.selection.applyClick(state.scene, dragged.playerId);
+      // clicking always inspects, whatever the click did to the roles
+      state.inspect = dragged.playerId;
     }
     render();
   };
@@ -733,6 +1014,28 @@ function bindControls() {
     });
   }
   $("wake-mode").addEventListener("change", render);
+
+  // clicking a candidate endpoint selects it for the Analysis panel; clicking
+  // the pitch background clears the selection
+  $("pitch").addEventListener("click", (event) => {
+    const ray = event.target?.getAttribute?.("data-ray");
+    if (ray == null) return;
+    event.stopPropagation();
+    const index = Number(ray);
+    state.endpoint = state.endpoint === index ? null : index;
+    render();
+  });
+
+  const analysisToggle = $("analysis-toggle");
+  if (analysisToggle) {
+    analysisToggle.addEventListener("click", () => {
+      const body = $("analysis-body");
+      const open = body.hidden;
+      body.hidden = !open;
+      $("analysis-chev").textContent = open ? "\u25be" : "\u25b8";
+      analysisToggle.setAttribute("aria-expanded", String(open));
+    });
+  }
 }
 
 function openSheet(open) {

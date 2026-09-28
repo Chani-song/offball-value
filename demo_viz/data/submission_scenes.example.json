@@ -1,0 +1,38 @@
+{
+  "_comment": [
+    "EXAMPLE ONLY. The final ten submission scenes are not chosen yet and are",
+    "deliberately not listed here. Copy this file to submission_scenes.json and",
+    "replace the entries; with no submission_scenes.json the demo falls back to",
+    "the existing Strong/Medium explorer.",
+    "kind 'scene' is a tracked Bundesliga scene from web_data/.",
+    "kind 'solver_reference' is one of the solver's own declared 2v1 study",
+    "states -- not a match scene, and never shown as one.",
+    "solver_artifact is '<solver run directory>#<state index>', or null."
+  ],
+  "scenes": [
+    {
+      "scene_id": "J03WOH:shot_006_P1_1054",
+      "title": "One-two run pins the full-back",
+      "order": 1,
+      "kind": "scene",
+      "annotation": {
+        "runners": ["7"],
+        "defenders": ["11"],
+        "beneficiaries": ["34"]
+      },
+      "focus_frame": 95,
+      "solver_artifact": null,
+      "notes": "Example entry. No solver artifact exists for this scene."
+    },
+    {
+      "scene_id": "solver_open_000",
+      "title": "Solver reference: open 2v1",
+      "order": 2,
+      "kind": "solver_reference",
+      "annotation": {},
+      "focus_frame": null,
+      "solver_artifact": "~/Research/offball_demo/mit_ssac2027_ref/results/exact_100#3",
+      "notes": "A declared study state from the solver's own scenario set."
+    }
+  ]
+}
