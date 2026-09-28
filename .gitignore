@@ -5,7 +5,10 @@ __pycache__/
 *.egg-info/
 .ipynb_checkpoints/
 data/raw/
-data/processed/
+data/processed/*
+!data/processed/pass_models/
+data/processed/pass_models/*
+!data/processed/pass_models/A_*.json
 relatedworks/
 .DS_Store
 

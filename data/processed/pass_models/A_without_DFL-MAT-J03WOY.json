@@ -1,0 +1,37 @@
+{
+  "kind": "physics_race_logit",
+  "coef": [
+    1.0247420430906822,
+    1.0224310511286678,
+    1.3151994290319633
+  ],
+  "ball_speed": {
+    "intercept": 12.352146185499498,
+    "slope": 0.21305963059858,
+    "min": 7.46675,
+    "max": 25.4415,
+    "fitted_on": 1436
+  },
+  "player": {
+    "reaction_s": 0.2,
+    "speed_up": 4.5,
+    "braking": 6.0,
+    "plant_min_speed": 2.0,
+    "plant_braking": 9.0,
+    "plant_seconds": 0.1,
+    "max_speed": 9.0
+  },
+  "metadata": {
+    "training": "our Bundesliga open-play passes, tracking labels, intended-at-kick targets",
+    "passes_file": "/scratch/bbmr/kseo1/offball-value/data/processed/pass_models/passes.jsonl",
+    "passes": 1561,
+    "held_out_match": "DFL-MAT-J03WOY",
+    "trained_on": [
+      "DFL-MAT-J03WMX",
+      "DFL-MAT-J03WOH",
+      "DFL-MAT-J03WPY",
+      "DFL-MAT-J03WQQ",
+      "DFL-MAT-J03WR9"
+    ]
+  }
+}
