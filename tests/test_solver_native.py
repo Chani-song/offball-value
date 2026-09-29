@@ -318,11 +318,26 @@ class PublicUiTests(unittest.TestCase):
         self.assertEqual(["space", "gain"],
                          re.findall(r'<option value="([a-z]+)"', self.markup))
 
-    def test_the_analysis_panel_leads_with_the_solver_chain(self):
+    def test_the_analysis_panel_follows_the_paper_story(self):
+        """Scene, player, off-ball context, then the value drill-down.
+
+        The pass and threat models are replaceable components in the abstract,
+        so the release chain sits below the story rather than leading it.
+        """
+
         order = [self.markup.index(f'id="an-{name}"')
-                 for name in ("scene", "offball", "pass", "player")]
-        self.assertEqual(sorted(order), order,
-                         "Scene, Off-ball effect, Solver pass model, Player")
+                 for name in ("scene", "player", "offball", "pass", "solver")]
+        self.assertEqual(sorted(order), order)
+
+    def test_the_release_chain_is_a_drill_down(self):
+        self.assertIn('id="value-toggle"', self.markup)
+        self.assertIn("Action value details", self.markup)
+        body = self.markup[self.markup.index('id="an-pass-body"'):][:40]
+        self.assertIn("hidden", body, "the drill-down should start collapsed")
+
+    def test_the_off_ball_pair_is_context_not_a_verdict(self):
+        self.assertIn("<h4>Off-ball context</h4>", self.markup)
+        self.assertNotIn("<h4>Off-ball effect</h4>", self.markup)
 
     def test_the_four_solver_rows_are_rendered(self):
         block = self.app[self.app.index("function renderReleaseRows"):]

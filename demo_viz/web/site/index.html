@@ -140,12 +140,21 @@
           <dl id="an-scene-rows"></dl>
           <div class="an-note" id="an-scene-note" hidden></div>
         </section>
+        <section class="an-section" id="an-player" hidden>
+          <h4>Player</h4>
+          <dl id="an-player-rows"></dl>
+        </section>
         <section class="an-section" id="an-offball" hidden>
-          <h4>Off-ball effect</h4>
+          <h4>Off-ball context</h4>
           <dl id="an-offball-rows"></dl>
         </section>
         <section class="an-section" id="an-pass" hidden>
-          <h4>Solver pass model</h4>
+          <button class="disclosure sub" id="value-toggle" aria-expanded="false">
+            <span class="chev" id="value-chev">▸</span>
+            <span class="label">Action value details</span>
+            <span class="muted" id="value-hint"></span>
+          </button>
+          <div id="an-pass-body" hidden>
           <dl id="an-pass-rows"></dl>
           <div class="an-note" id="an-pass-note" hidden></div>
           <button class="disclosure sub" id="details-toggle" aria-expanded="false" hidden>
@@ -153,10 +162,7 @@
             <span class="label">Model details</span>
           </button>
           <dl id="an-detail-rows" hidden></dl>
-        </section>
-        <section class="an-section" id="an-player" hidden>
-          <h4>Player</h4>
-          <dl id="an-player-rows"></dl>
+          </div>
         </section>
         <section class="an-section" id="an-solver" hidden>
           <h4>Solver</h4>

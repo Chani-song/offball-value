@@ -547,3 +547,62 @@ The Pages sanity check now **asserts** the public artifact has no
 than quietly adding 5.5 MB.
 
 307 tests pass.
+
+---
+
+# Paper-story alignment — Phase A, and where it stopped (2026-09-29)
+
+`PAPER_STORY_TRACE.md` traced every abstract-facing quantity to code.
+`ABSTRACT_DEMO_MAPPING.md` maps each abstract claim to a demo feature and its
+status. `DELTA_EXPORT_REQUIREMENTS.md` states exactly what would unblock the
+equilibrium half.
+
+## The finding
+
+**About half the abstract is implemented; the other half is prose.**
+
+Implemented and real, in the stage-3 solver: equilibrium value, the certified
+best-response gap, per-decision mixed policies for both sides, pure-vs-mixed
+("torn", likeliest move below 0.8), the football naming of compass moves, and
+the "solver answer" — the *modal line*, where at every decision both sides take
+the action their policy weights most, explicitly *"an illustration of the
+policy, not a sample from it"*.
+
+**Not implemented anywhere, in either repository:** relative rank among
+feasible counterfactuals, similarity to the optimal action, regret against an
+observed action, frame-by-frame player evaluation, and clip-level aggregation
+of player scores. The only `regret` in the tree is
+`dynamic_response_game.normalized_option_regret`, a normalised min over a
+defender-option cost matrix in the v0.1 lineage — scored by the OBSO stack this
+demo deliberately demoted, and not a comparison of an observed action to an
+optimum.
+
+Static-vs-responsive has no single-scale implementation either: three candidate
+readings exist, on three different scales, and none is labelled that way in
+code. Choosing one is a team decision.
+
+## What this pass therefore did, and did not, do
+
+Per the instruction to stop before inventing the missing layer, this pass made
+only the sanctioned hierarchy change:
+
+| | before | after |
+| --- | --- | --- |
+| Analysis order | Scene → Off-ball effect → **Solver pass model** → Player | Scene → Player → **Off-ball context** → *Action value details* |
+| Release chain | a top-level section, always open | a **collapsed drill-down**, with a one-line `payoff 0.789` summary on its header |
+| Off-ball pair | "Off-ball effect" | "Off-ball context" — it explains why the scene matters, not how the player is scored |
+
+The pass-model computation is unchanged and still exact. It simply no longer
+reads as the contribution, which is what the abstract asks for.
+
+**No story modes were built.** Two of the three proposed modes (Counterfactual,
+Evaluation) have no data and no metric behind them; shipping them would be
+controls that do nothing.
+
+## The one blocker
+
+The demo cannot tell the paper's evaluation story because **the evaluation
+story is not implemented**. No export unblocks it — it needs a defined method
+first. Everything else is one Delta artifact away.
+
+309 tests pass.

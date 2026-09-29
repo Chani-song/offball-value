@@ -48,6 +48,7 @@ const state = {
   showcaseId: null,          // the curated entry currently open
   release: null,             // solver release quantities, once the explorer is used
   detailsOpen: false,        // the Model details disclosure
+  valueOpen: false,          // the Action value details drill-down
 };
 
 // ---------------------------------------------------------------------------
@@ -713,6 +714,13 @@ function selectedReceiver() {
  */
 function renderReleaseRows(index, fan) {
   const node = $("an-pass-rows");
+  const body = $("an-pass-body");
+  const valueToggle = $("value-toggle");
+  if (body) body.hidden = !state.valueOpen;
+  if (valueToggle) {
+    $("value-chev").textContent = state.valueOpen ? "\u25be" : "\u25b8";
+    valueToggle.setAttribute("aria-expanded", String(state.valueOpen));
+  }
   const note = $("an-pass-note");
   const toggle = $("details-toggle");
   const details = $("an-detail-rows");
@@ -725,6 +733,7 @@ function renderReleaseRows(index, fan) {
   if (state.endpoint == null) {
     rows(node, [["Target", "Click one to inspect", true]]);
     note.hidden = true;
+    if ($("value-hint")) $("value-hint").textContent = "";
     hideDetails();
     return;
   }
@@ -751,6 +760,12 @@ function renderReleaseRows(index, fan) {
     ["Release payoff", NUMBER(result.releasePayoff, 3)],
   ];
   rows(node, entries);
+  const hint = $("value-hint");
+  if (hint) {
+    hint.textContent = result.legal
+      ? `payoff ${NUMBER(result.releasePayoff, 3)}`
+      : (result.offside ? "offside" : "off pitch");
+  }
   // make the gate legible without a paragraph about it
   node.lastElementChild?.classList.add("strong");
   if (!result.legal) {
@@ -1348,6 +1363,14 @@ function bindControls() {
       $("an-pass")?.scrollIntoView({ block: "nearest", behavior: "smooth" });
     }
   });
+
+  const valueToggle = $("value-toggle");
+  if (valueToggle) {
+    valueToggle.addEventListener("click", () => {
+      state.valueOpen = !state.valueOpen;
+      render();
+    });
+  }
 
   const detailsToggle = $("details-toggle");
   if (detailsToggle) {
