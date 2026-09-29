@@ -1,5 +1,11 @@
 # Abstract → demo traceability
 
+> **Re-verified 2026-09-29 against `origin/kyuhyeok-dev` @ `c6423d4`** (the
+> previous audit base `3c9965b` was stale by one commit). That commit adds
+> fitted coefficients for pass model A and changes no code, so **every status
+> below is unchanged**. Model A lands in row 10 — the completion-proxy slot the
+> abstract itself calls replaceable. Details in `PAPER_STORY_TRACE.md` §5.
+
 Each claim the abstract makes, the demo feature that carries it, the code
 behind it, and whether it is real today. Read `PAPER_STORY_TRACE.md` for the
 definitions.
@@ -28,7 +34,7 @@ interface change. `KYUHYEOK_UPDATE_INTEGRATION.md` is the checklist.
 | 7 | Aggregation of frame-level evaluations across a clip | Clip summary cards, per story role | contract `ClipSummary`; aggregation supplied per metric | **slot live** |
 | 8 | Static vs responsive counterfactual comparison | Counterfactual mode → paired cards, each with its own `semantics` | contract `CounterfactualSide`; no single-scale comparison exists | **slot live** (see trace §2) |
 | 9 | Pure and mixed equilibrium behaviour | Game solution → weighted policy bars, support counts, pure/mixed | `policy.js` decode + `split_by_step(below=0.8)`, `fsplit0` | **blocked** for a tracked scene; **live** against a real reference state (`story_harness.html`) |
-| 10 | Pass/xT-like models are interchangeable components | Action value details, demoted below the story | `payoff.release_payoffs_with_background` | **live** |
+| 10 | Pass/xT-like models are interchangeable components | Action value details, demoted below the story | `payoff.release_payoffs_with_background` | **live** — and now demonstrably so: `c6423d4` shares a fitted drop-in alternative (pass model A, `physics_race_logit`, *"the interface is ExpectedPass.predict's"*) with leave-one-match-out cross-fitting |
 
 ## What the demo can honestly claim today
 

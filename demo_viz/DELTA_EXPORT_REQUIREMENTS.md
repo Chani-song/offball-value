@@ -117,3 +117,37 @@ and the claim get updated together.
 The export refuses an unusable reference rather than guessing:
 `export_solver.py` skips a manifest entry whose `solver_artifact` is malformed
 or whose directory is absent, and says which entry it skipped.
+
+
+---
+
+## 8. If the run used pass model A (`c6423d4`, 2026-09-28)
+
+`origin/kyuhyeok-dev` @ `c6423d4` shares the fitted coefficients for pass model
+A (`A_all.json`, six `A_without_<match>.json`, and the `A_crossfit.json`
+router). Nothing about this request changes, but two details are worth knowing
+before an artifact arrives.
+
+**A `passA` run's manifest carries an extra block.** `run.py:model_router`
+writes `pass_model_router` into `manifest.json`: the router's own JSON plus a
+sha256 per model file. Our reader
+(`demo_viz/solver/adapter.py:read_manifest`) requires only `config` and ignores
+unknown keys, so such a manifest loads unchanged — and the sha256 map is exactly
+the provenance we would want to display. **Still send the manifest**; do not
+strip the block.
+
+**Say which pass model the run used.** The canonical
+`stage3_passer2on1_agile.sbatch` uses `andrew/models/experimental_pass.json`;
+the `stage3_*_passA` variants use `A_crossfit.json`. These are different
+completion models — A prices the arrival race and reads velocities, the other
+is a positions-only 33-feature logistic — so a value from one is not comparable
+with a value from the other. The demo names the model it is showing, and
+`PASS_MODEL_TRACE.md` documents the positions-only one; if a `passA` run is
+sent, that document needs a sibling section before the numbers go on screen.
+
+**Not shared, and not being asked for:** `B1_crossfit.json`, `B1SB_all.json`,
+`report.json` and `passes.jsonl` remain ignored. Only the `A_*.json` files were
+un-ignored.
+
+**This does not touch §6.** Pass model A is a completion proxy. The evaluation
+layer is still unimplemented, and no export of coefficients can change that.

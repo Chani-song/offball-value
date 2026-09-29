@@ -11,6 +11,19 @@ adapter boundary has leaked and that is the bug to fix first.
 
 ---
 
+## Audit baseline
+
+| | |
+| --- | --- |
+| Last audited `origin/kyuhyeok-dev` | **`c6423d4`** (2026-09-28 13:15 -0500) |
+| Previous baseline | `3c9965b` (2026-09-25) |
+| Between them | one commit: fitted pass-model-A coefficients, no code |
+| Evaluation layer at `c6423d4` | **still unimplemented** — all ten quantities |
+
+Step 1 below exists because the local remote-tracking ref was stale once
+already. **Always `git fetch origin --prune` before comparing**, and record the
+SHA you actually audited here.
+
 ## Where things are
 
 | | |
@@ -27,10 +40,21 @@ adapter boundary has leaked and that is the bug to fix first.
 
 ## The eight steps
 
-1. **Fetch and inspect the branch.** `git fetch origin && git log --oneline
-   origin/kyuhyeok-dev -15`. Do not merge it: this repository reads the
-   research code, it does not vendor it (one exception, `_passer2on1_payoff.py`,
-   which a test holds byte-identical).
+1. **Fetch first, then diff from the recorded baseline.**
+
+   ```bash
+   git fetch origin --prune                      # the ref goes stale silently
+   git rev-parse origin/kyuhyeok-dev             # record this above
+   git log --oneline <baseline>..origin/kyuhyeok-dev
+   git diff --name-status <baseline>..origin/kyuhyeok-dev
+   ```
+
+   Diff from the recorded baseline rather than re-reading the whole tree, and
+   check `git for-each-ref refs/remotes/` in case the work landed on another
+   branch. Do not merge: this repository reads the research code, it does not
+   vendor it (one exception, `_passer2on1_payoff.py`, which a test holds
+   byte-identical). A commit that touches no `.py` cannot have added a metric —
+   confirm that before spending time on the contents.
 
 2. **Identify the output definitions.** For each quantity below, find the
    function that computes it and read the implementation, not the name. The

@@ -6,6 +6,15 @@ it lives, and whether the demo could honestly show it today.
 Traced 2026-09-29 against the current tree, `origin/kyuhyeok-dev` @ `3c9965b`
 and `~/Research/offball_demo/mit_ssac2027_ref` @ `e8b0a95` (read-only).
 
+> **Re-audited 2026-09-29 at `origin/kyuhyeok-dev` @ `c6423d4`.** The local
+> remote-tracking ref had been stale: the branch had moved `3c9965b..c6423d4`.
+> The single new commit adds eight fitted pass-model coefficient files and a
+> `.gitignore` rule to share them. **No `.py`, no sbatch, no test changed** —
+> `git diff --name-only 3c9965b..c6423d4` touches nothing under `src/`,
+> `scripts/`, `tests/`, `andrew-*/` or `deploy/`. Every conclusion below stands
+> unaltered, and was re-verified by reading semantics at the new SHA rather
+> than by trusting the file list. See §5.
+
 **Headline: the equilibrium half of the abstract is implemented and real. The
 player-evaluation half — relative rank, similarity to optimal, regret against
 the observed action, frame-by-frame scoring, clip aggregation — is not
@@ -142,3 +151,74 @@ playable at all.
 Roughly **half** the abstract's narrative is code; the evaluation half is
 prose. Per §35 this pass stops at the honest boundary: hierarchy changes and
 architecture, no invented metrics.
+
+
+---
+
+## 5. Re-audit at `c6423d4` (2026-09-29)
+
+`3c9965b..c6423d4` is one commit, linear, no rewrite (`git merge-base
+--is-ancestor` confirms the old base is an ancestor of the new head):
+
+    c6423d4  2026-09-28 13:15 -0500
+    pass model A: share the fitted coefficient files
+    (A_all, A_without_<match>, A_crossfit router)
+
+Nine files: `data/processed/pass_models/A_all.json`, six
+`A_without_DFL-MAT-*.json`, `A_crossfit.json`, and `.gitignore` (edited only to
+un-ignore `data/processed/pass_models/A_*.json`).
+
+### What pass model A is
+
+`src/offball_value/physics_pass.py` — unchanged since before the audit, and
+already covered by it. Candidate A prices a pass from the **arrival race**:
+ball speed `v = intercept + slope · distance` fitted on measured launch speeds,
+players moved by the solver's own `agile_motion.AGILE`, two time margins
+(receiver, lane) clipped to ±3 s, then `P = sigmoid(b0 + b1·receiver +
+b2·lane)`. Its own docstring states the point of it: *"The solver's pass model
+reads positions only, so a runner sprinting into the space behind a defender
+who is running the other way prices the same as two men standing still. This
+model reads the race instead."*
+
+`A_crossfit.json` is a router, not a model: `kind: per_match`, mapping
+`provenance.match_id` to the model fitted **without** that match, with
+`A_all.json` as the default. `run.py:model_router` resolves it and writes a
+`pass_model_router` block, with a sha256 per model file, into the run manifest.
+
+### Why this changes nothing in the table above
+
+Model A occupies the **completion-proxy slot** — its docstring says so: *"The
+interface is ExpectedPass.predict's, so the game calls it unchanged."* That is
+row 10 of `ABSTRACT_DEMO_MAPPING.md`, the row the abstract itself calls a
+replaceable component, and the row this demo deliberately demoted. It is not
+relative rank, similarity, regret, an observed-action projection, a frame-level
+score, a clip aggregate, or a static/responsive pair.
+
+Re-checked at `c6423d4` by reading the implementations, not the names:
+
+| Name that sounds like the abstract | What it actually is |
+| --- | --- |
+| `scripts/rank_triples.py` | ranks **(runner, defender, beneficiary) triples for human review** so ~1,900 candidates become a shortlist. Its `regret` is `minimax_worst_q` minus the defender's best reply knowing the target — the **defender's** cost of uncertainty in the v0.1 local game. Its own docstring: *"Ranking scenes for review is not the same as defining the dilemma."* |
+| `scripts/search_ranking_criterion.py` | AUC of existing ranking columns against Chani's expert labels — asks whether any column separates her scenes. A scene-selection diagnostic. |
+| `scripts/criterion_on_matched_runners.py` | the same AUC restricted to triples whose runner she named. Same purpose. |
+| `similarity`, `observed_action`, `exploitability` | **zero matches** anywhere in `src/`, `scripts/` or `andrew-*/`. |
+
+### The canonical pipeline still uses the old pass model
+
+`deploy/delta/stage3_passer2on1_agile.sbatch` — the job that produced the
+meeting page (§1) — still passes
+`--model "$ROOT/andrew/models/experimental_pass.json" --allow-proxy-labels`,
+byte-identical to `3c9965b`. The `stage3_*_passA/passB1/passB1SB` sbatch files
+are **parallel model-comparison jobs** and predate this commit.
+
+Every file this demo's adapter depends on is byte-identical between the two
+SHAs: `summarise_stage3.py`, `render_solver_story.py`, `stage3_read.py`,
+`andrew-passer2on1/passer2on1/payoff.py`, `andrew-passer2on1/scripts/run.py`,
+`stage3_passer2on1_agile.sbatch`.
+
+### Still not implemented, at `c6423d4`
+
+All ten, unchanged: `observed_action`, feasible actions for evaluation, the
+static/responsive pair on one scale, `observed_action_rank`, `relative_rank`,
+`similarity_to_optimal`, observed-action regret, frame-level player evaluation,
+clip-level aggregation, exploitability.
