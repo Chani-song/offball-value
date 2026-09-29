@@ -52,7 +52,7 @@ def build(out: Path, data_dir: Path = WEB_DATA, clean: bool = True,
         showcase = HERE.parent / "data" / "submission_showcase.json"
         if showcase.exists():
             shutil.copy2(showcase, target / "submission_showcase.json")
-        extras = ["solver", "release"]
+        extras = ["solver", "release", "story"]
         if include_legacy_obso:
             extras.append("obso")
         for extra in extras:
@@ -60,6 +60,12 @@ def build(out: Path, data_dir: Path = WEB_DATA, clean: bool = True,
             if source.exists():
                 shutil.copytree(source, target / extra, dirs_exist_ok=True)
     return out
+
+
+#: Modules the page imports dynamically, each used by one story mode. They sit
+#: in the build like any other file but are never fetched until that mode is
+#: opened, so counting them in the first load would overstate it.
+ON_DEMAND = ("js/policy.js", "js/evalstrip.js")
 
 
 def report(out: Path) -> str:
@@ -70,19 +76,25 @@ def report(out: Path) -> str:
             size = path.stat().st_size
             total += size
             rows.append((str(path.relative_to(out)), size))
-    shell = sum(size for name, size in rows if not name.startswith("data/"))
+    shell = sum(size for name, size in rows
+                if not name.startswith("data/") and name not in ON_DEMAND)
+    deferred = sum(size for name, size in rows if name in ON_DEMAND)
     scenes = [(name, size) for name, size in rows if name.startswith("data/")
               and not name.endswith("index.json")
               and not name.endswith("submission_showcase.json")
               and not name.startswith("data/obso/")
               and not name.startswith("data/solver/")
-              and not name.startswith("data/release/")]
+              and not name.startswith("data/release/")
+              and not name.startswith("data/story/")]
     obso = [(name, size) for name, size in rows if name.startswith("data/obso/")]
     solver = [(name, size) for name, size in rows if name.startswith("data/solver/")]
     release = [(name, size) for name, size in rows if name.startswith("data/release/")]
+    story = [(name, size) for name, size in rows if name.startswith("data/story/")
+             and not name.endswith("contract.json")]
     index = sum(size for name, size in rows
                 if name.endswith("data/index.json")
-                or name.endswith("submission_showcase.json"))
+                or name.endswith("submission_showcase.json")
+                or name.endswith("data/story/contract.json"))
     legacy = ([f"obso        {len(obso)} files, "
                f"{sum(s for _, s in obso) / 1024 / 1024:.2f} MB total   "
                f"(legacy, included only with --include-legacy-obso)"]
@@ -91,12 +103,17 @@ def report(out: Path) -> str:
         f"build       {out}",
         f"files       {len(rows)}",
         f"shell       {shell / 1024:8.1f} KB   (html + css + js, loaded once)",
+        f"on demand   {deferred / 1024:8.1f} KB   (policy + evaluation strip, "
+        f"imported when their mode is opened)",
         f"index       {index / 1024:8.1f} KB   (scene list, loaded once)",
         f"scenes      {len(scenes)} files, {sum(s for _, s in scenes) / 1024 / 1024:.2f} MB "
         f"total, {(sum(s for _, s in scenes) / max(len(scenes), 1)) / 1024:.0f} KB each "
         f"(loaded one at a time)",
         f"solver      {len(solver)} files, {sum(s for _, s in solver) / 1024:.0f} KB "
         f"total (only when the solver layer is picked)",
+        f"story       {len(story)} files, {sum(s for _, s in story) / 1024:.0f} KB "
+        f"total, {(sum(s for _, s in story) / max(len(story), 1)) / 1024:.0f} KB each "
+        f"(paper-story contract, one at a time with the scene)",
         f"release     {len(release)} files, {sum(s for _, s in release) / 1024 / 1024:.2f} MB "
         f"total, {(sum(s for _, s in release) / max(len(release), 1)) / 1024:.0f} KB each "
         f"(only when the pass-model explorer is used)",

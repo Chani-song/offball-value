@@ -61,6 +61,12 @@ class ShowcaseScene:
     scenario_type: str | None
     featured: bool = False
     order: int | None = None
+    #: A curated one-line title for the case study, and a sentence under it.
+    #: Optional and empty for every scene until someone writes one: an
+    #: uncurated scene falls back to its match/event label rather than to a
+    #: generated phrase. See PAPER_STORY_TRACE.md section 4.
+    story_title: str = ""
+    story_summary: str = ""
 
     @property
     def playable(self) -> bool:
@@ -101,6 +107,8 @@ class ShowcaseScene:
             "timing": self.timing,
             "annotation": self.annotation,
             "solver": {"status": self.solver_status, "scenario_type": self.scenario_type},
+            "story_title": self.story_title,
+            "story_summary": self.story_summary,
         }
 
 
@@ -176,6 +184,10 @@ def validate_scene(raw: Any, position: int) -> ShowcaseScene:
     if not isinstance(featured, bool):
         raise ShowcaseError(f"{where}: featured must be a boolean")
 
+    for key in ("story_title", "story_summary"):
+        if raw.get(key) is not None and not isinstance(raw[key], str):
+            raise ShowcaseError(f"{where}: {key} must be a string")
+
     review = raw.get("review") or {}
     return ShowcaseScene(
         showcase_id=showcase_id,
@@ -196,6 +208,8 @@ def validate_scene(raw: Any, position: int) -> ShowcaseScene:
         scenario_type=solver.get("scenario_type"),
         featured=featured,
         order=order,
+        story_title=str(raw.get("story_title", "")),
+        story_summary=str(raw.get("story_summary", "")),
     )
 
 

@@ -11,14 +11,51 @@ import {
   candidatePasses, componentsAt, loadControl, loadScoreGrid, sampleAt, surfaceAt,
 } from "./obso.js";
 import { REACH, reachableMask } from "./reach.js";
-import { commandName, loadSolver, primaryTrajectory, summary as solverSummary } from "./solver.js";
+import { loadSolver, primaryTrajectory, summary as solverSummary } from "./solver.js";
 import {
   PROVENANCE_LABEL, availableFilters, defaultFilter, filtered, loadShowcase,
   matchLabel, resolveRoles, selectorLabel,
 } from "./showcase.js";
 import { loadModelCard, loadRelease, releaseFor, releaseRow } from "./release.js";
+import {
+  actionText, loadContract, loadStory, metricText, presentSeries, reservedSeries,
+  sourceTitle,
+} from "./story.js";
 
 const $ = (id) => document.getElementById(id);
+
+// ---------------------------------------------------------------------------
+// mode-specific components, fetched when they are first needed
+// ---------------------------------------------------------------------------
+// Two components belong to exactly one mode: the policy bars to Game solution,
+// the evaluation strip to Evaluation. Neither is reachable in the public demo
+// today -- no scene has a solved policy, and no evaluation series exists -- so
+// keeping them out of the first load costs nothing now and one re-render later.
+let policyModule = null;
+let policyLoading = false;
+
+/** The equilibrium policy component, or null until it arrives. */
+function policyLib() {
+  if (policyModule) return policyModule;
+  if (!policyLoading) {
+    policyLoading = true;
+    import("./policy.js").then((module) => { policyModule = module; render(); });
+  }
+  return null;
+}
+
+let stripModule = null;
+let stripLoading = false;
+
+/** The frame-evaluation strip, or null until it arrives. */
+function stripLib() {
+  if (stripModule) return stripModule;
+  if (!stripLoading) {
+    stripLoading = true;
+    import("./evalstrip.js").then((module) => { stripModule = module; render(); });
+  }
+  return null;
+}
 
 /** Layers whose only readout lives in the Analysis panel. */
 const ANALYSIS_LAYERS = new Set(["solver", "reach", "passes"]);
@@ -49,6 +86,10 @@ const state = {
   release: null,             // solver release quantities, once the explorer is used
   detailsOpen: false,        // the Model details disclosure
   valueOpen: false,          // the Action value details drill-down
+  mode: "observed",          // the story mode: which question is being asked
+  storyRole: "runner",       // runner | passer | defender
+  story: null,               // the paper-story contract payload for this scene
+  solverView: "policy",      // policy | actual | overlay
 };
 
 // ---------------------------------------------------------------------------
@@ -77,6 +118,8 @@ function urlState() {
     on: params.get("on"),              // comma list of layers to switch on
     inspect: params.get("inspect"),    // shirt number to open the panel on
     target: params.get("target"),      // exploratory ray index, 0-4
+    story: params.get("story"),        // story mode, for linkable screenshots
+    role: params.get("role"),          // runner | passer | defender
   };
 }
 
@@ -101,6 +144,10 @@ function applyUrlState(wanted) {
   }
   if (wanted.swap) state.selection.swapAttackRoles();
   if (wanted.fit != null) setView(wanted.fit === "1" ? "focus" : "full");
+  if (wanted.role && ["runner", "passer", "defender"].includes(wanted.role)) {
+    state.storyRole = wanted.role;
+  }
+  if (wanted.story) setMode(wanted.story, true);
   if (wanted.mode && ["space", "gain"].includes(wanted.mode)) {
     $("wake-mode").value = wanted.mode;
   }
@@ -215,6 +262,7 @@ async function openScene(file, wanted = null) {
   state.reach = null;
   state.solver = null;
   state.release = null;
+  state.story = null;
   if (wanted) applyUrlState(wanted);
   // the panel is more use open than empty, so start on the runner
   state.inspect = state.selection.runner
@@ -309,7 +357,10 @@ function render() {
     pitch.drawField(cache.grid, null, scene);
   }
 
-  if (state.layers.has("paths")) pitch.drawPaths(scene);
+  if (state.layers.has("paths")
+      || (state.mode === "game_solution" && state.solverView !== "policy")) {
+    pitch.drawPaths(scene);
+  }
   renderReach(index);
   const fan = renderPasses(index, threat);
   renderSolverLayer();
@@ -333,11 +384,16 @@ function render() {
   });
 
   renderDock();
+  // the headline stat is off-ball context, which the paper puts below the
+  // story; outside Observed its space belongs to the mode's own panel
+  const stat = document.querySelector(".card.stat");
+  if (stat) stat.hidden = state.mode !== "observed";
   renderStat(slot, swap);
   renderChart(swap, freeze);
   renderCandidates(freeze, slot);
   renderAnalysis(index, slot, threat, fan);
   renderTicks();
+  renderEvalStrip(index);
   $("readout").textContent = `${scene.times[index] >= 0 ? "+" : ""}${scene.times[index].toFixed(2)} s`;
   $("time").value = String(index);
 }
@@ -466,26 +522,30 @@ function motionOf(player, index) {
 }
 
 /** The reachable set for the inspected player, memoised per player and frame. */
-function reachFor(index) {
+function reachFor(index, playerId = state.inspect) {
   const { scene } = state;
-  if (!state.inspect) return null;
-  const player = scene.byId.get(state.inspect);
+  if (!playerId) return null;
+  const player = scene.byId.get(playerId);
   if (!player) return null;
   const x = player.x[index];
   const y = player.y[index];
   if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
-  if (state.reach && state.reach.playerId === state.inspect && state.reach.frame === index) {
+  if (state.reach && state.reach.playerId === playerId && state.reach.frame === index) {
     return state.reach.mask;
   }
   const { vx, vy } = motionOf(player, index);
   const mask = reachableMask([x, y], [vx, vy]);
-  state.reach = { playerId: state.inspect, frame: index, mask };
+  state.reach = { playerId, frame: index, mask };
   return mask;
 }
 
 function renderReach(index) {
   if (!state.layers.has("reach")) return;
-  const mask = reachFor(index);
+  // in Counterfactual mode the question is about the story role, so the
+  // reachable set follows it rather than whoever was last clicked
+  const target = state.mode === "counterfactual"
+    ? resolveStoryRole(index)?.id : state.inspect;
+  const mask = reachFor(index, target);
   if (!mask) return;
   state.pitch.drawReach(mask.grid, mask.values, state.scene);
 }
@@ -510,6 +570,8 @@ function renderSolverLayer() {
   const data = solverFor();
   // nothing is drawn when there is no artifact: the panel says so instead
   if (!data || !data.available) return;
+  // "Actual movement" shows the tracking alone, as the old meeting page did
+  if (state.mode === "game_solution" && state.solverView === "actual") return;
   const trajectory = primaryTrajectory(data);
   if (trajectory) state.pitch.drawSolverTrajectory(state.scene, trajectory);
 }
@@ -532,10 +594,42 @@ function rows(node, entries) {
   }
 }
 
+/**
+ * Show a panel section, if the current mode asks that question.
+ *
+ * The mode decides what the reviewer is being asked; the panel follows. A
+ * section outside the current mode's list is not rendered at all -- an empty
+ * card answering a question nobody asked is noise, and section 31 gives the
+ * reviewer thirty seconds.
+ */
 function section(id, visible) {
+  const on = Boolean(visible) && (MODE_SECTIONS[state.mode] || []).includes(id);
   const node = $(id);
-  if (node) node.hidden = !visible;
-  return visible;
+  if (node) node.hidden = !on;
+  return on;
+}
+
+/**
+ * The one renderer every paper-facing field goes through.
+ *
+ * A metric that arrives from an updated research pipeline needs no code here:
+ * it carries its own label, unit, source and definition version, and lands in
+ * this list. A field with no value renders its reason -- never a dash, never a
+ * zero, never an example number.
+ */
+function contractRows(node, records, textOf) {
+  node.replaceChildren();
+  for (const record of records) {
+    if (!record) continue;
+    const { available, text } = textOf(record);
+    const dt = document.createElement("dt");
+    dt.textContent = record.label;
+    const dd = document.createElement("dd");
+    dd.textContent = text;
+    if (available) dd.title = sourceTitle(record);
+    else dd.className = "pending";
+    node.append(dt, dd);
+  }
 }
 
 function renderAnalysis(index, slot, threat, fan) {
@@ -545,9 +639,17 @@ function renderAnalysis(index, slot, threat, fan) {
 
   // ---- scene ----
   const curated = currentShowcase();
+  // outside Observed the scene is context for a question asked below it, so
+  // it shrinks to a header and gives the room to the mode's own content
+  const brief = state.mode !== "observed";
   if (section("an-scene", Boolean(curated))) {
-    const entries = [
+    const entries = brief ? [
+      ["Case study",
+       `${curated.story_title || curated.showcase_id} · `
+       + `${curated.review?.agreement_label || "—"} human-reviewed`],
+    ] : [
       ["Case study", curated.showcase_id],
+      ...(curated.story_title ? [["Story", curated.story_title]] : []),
       ["Review", `${curated.review?.agreement_label || "—"} · human reviewer ratings`],
       ["Provenance", PROVENANCE_LABEL[curated.provenance] || curated.provenance],
       ["Match", matchLabel(curated)],
@@ -558,6 +660,7 @@ function renderAnalysis(index, slot, threat, fan) {
     if (curated.solver?.scenario_type) {
       entries.push(["Solver scenario", curated.solver.scenario_type]);
     }
+    if (brief) entries.length = 1;
     rows($("an-scene-rows"), entries);
     const note = $("an-scene-note");
     if (state.showcaseRolesApplied === false) {
@@ -572,7 +675,7 @@ function renderAnalysis(index, slot, threat, fan) {
 
   const player = state.inspect ? scene.byId.get(state.inspect) : null;
   const wantsPass = state.layers.has("passes") && Boolean(fan);
-  const wantsSolver = state.layers.has("solver");
+  const wantsSolver = state.mode === "game_solution" || state.layers.has("solver");
 
   // ---- player ----
   if (section("an-player", Boolean(player))) {
@@ -584,29 +687,29 @@ function renderAnalysis(index, slot, threat, fan) {
       ["Speed", `${NUMBER(motion.speed, 1)} m/s`],
       ["Acceleration", `${NUMBER(motion.acceleration, 1)} m/s²`],
     ];
-    const ball = ballRaw(index);
+    const ball = brief ? null : ballRaw(index);
     if (ball) {
       entries.push(["Distance to ball",
         `${NUMBER(Math.hypot(player.x[index] - ball[0], player.y[index] - ball[1]), 1)} m`]);
     }
-    const counterpart = nearestCounterpart(player, index);
+    const counterpart = brief ? null : nearestCounterpart(player, index);
     if (counterpart) {
       entries.push([`Distance to #${counterpart.player.shirt}`,
         `${NUMBER(counterpart.distance, 1)} m`]);
     }
-    const onset = scene.onsets?.[player.id];
+    const onset = brief ? null : scene.onsets?.[player.id];
     if (onset && player.side === "attack") {
       const delta = (index - onset.index) / scene.fps;
       entries.push(["Run start",
         delta >= 0 ? `${NUMBER(delta, 1)} s ago` : `in ${NUMBER(-delta, 1)} s`]);
     }
-    if (player.side === "attack" && cache) {
+    if (!brief && player.side === "attack" && cache) {
       // the beneficiary's own figure lives in Off-ball effect; this is the
       // residual space of whoever is being inspected, which is not the same row
       entries.push(["Space at this player",
         `${NUMBER(cache.residual(player.id, slot).value, 1)}`]);
     }
-    if (state.layers.has("reach")) {
+    if (!brief && state.layers.has("reach")) {
       const mask = reachFor(index);
       entries.push(["Kinematic reach, 2.0 s",
         mask ? `${Math.round(mask.areaM2)} m²` : "—", !mask]);
@@ -639,8 +742,311 @@ function renderAnalysis(index, slot, threat, fan) {
     renderSolverRows();
   }
 
-  card.hidden = !(Boolean(curated) || Boolean(player) || wantsPass || wantsSolver);
+  // ---- the rest of the paper story ----
+  renderDecision(index);
+  renderCounterfactual();
+  renderEvaluation();
+  renderClipSummary();
+  renderSourceRows();
+
+  card.hidden = ![...card.querySelectorAll(".an-section")].some((s) => !s.hidden);
+  $("analysis-label").textContent = MODE_TITLE[state.mode] || "Analysis";
   $("analysis-hint").textContent = player ? `#${player.shirt}` : "";
+}
+
+// ---------------------------------------------------------------------------
+// the paper story: four modes over one scene
+// ---------------------------------------------------------------------------
+/**
+ * Which panel sections each mode shows.
+ *
+ * Each list is a subset of the panel's own order, which is the paper's
+ * argument: scene, player, decision, counterfactual, evaluation, clip, game
+ * solution, off-ball context, action value details, source.
+ */
+const MODE_SECTIONS = {
+  observed: ["an-scene", "an-player", "an-offball", "an-source"],
+  counterfactual: ["an-scene", "an-player", "an-decision", "an-counterfactual",
+                   "an-pass", "an-source"],
+  evaluation: ["an-scene", "an-player", "an-decision", "an-evaluation", "an-clip",
+               "an-source"],
+  game_solution: ["an-scene", "an-solver", "an-source"],
+};
+
+const MODE_TITLE = {
+  observed: "What happened",
+  counterfactual: "What else was possible",
+  evaluation: "How good the observed action was",
+  game_solution: "What the equilibrium recommends",
+};
+
+const STORY_ROLE_LABEL = { runner: "Runner", passer: "Passer", defender: "Defender" };
+
+/**
+ * The paper-story payload for this scene, fetched once.
+ *
+ * Null means this build has none -- a checkout that has not run
+ * export_paper_story still shows the observed story, which is the honest
+ * subset rather than a broken page.
+ */
+function storyFor() {
+  const { scene } = state;
+  if (!scene) return null;
+  if (state.story && state.story.sceneId === scene.scene_id) return state.story.data;
+  if (state.story && state.story.pending) return null;
+  state.story = { sceneId: scene.scene_id, pending: true, data: null };
+  Promise.all([loadStory(scene.scene_id), loadContract()]).then(([data]) => {
+    if (!state.scene || state.scene.scene_id !== scene.scene_id) return;
+    state.story = { sceneId: scene.scene_id, pending: false, data };
+    render();
+  });
+  return null;
+}
+
+function setMode(mode, quiet = false) {
+  if (!MODE_SECTIONS[mode]) return;
+  state.mode = mode;
+  for (const button of document.querySelectorAll("#story-modes .mode")) {
+    const on = button.dataset.mode === mode;
+    button.classList.toggle("is-on", on);
+    button.setAttribute("aria-selected", String(on));
+  }
+  // each mode brings on the layer that answers its question; the reviewer can
+  // still switch it off, and switching back to Observed puts it away
+  setLayer("reach", mode === "counterfactual");
+  setLayer("solver", mode === "game_solution");
+  $("solver-view").hidden = mode !== "game_solution";
+  if (!quiet) render();
+}
+
+function setLayer(name, on) {
+  if (on) state.layers.add(name); else state.layers.delete(name);
+  const box = document.querySelector(`[data-layer="${name}"]`);
+  if (box) box.checked = on;
+}
+
+/**
+ * The player the story question is being asked about.
+ *
+ * `passer` is the ball carrier at this frame, resolved by the same possession
+ * rule the pass explorer uses -- read off the tracking, not assigned. It is
+ * *not* the demo's `beneficiary`, which is the attacker whose space the run
+ * opens and which stays off-ball context.
+ */
+function resolveStoryRole(index) {
+  const { scene, selection } = state;
+  if (!scene) return null;
+  if (state.storyRole === "runner") return scene.byId.get(selection.runner) || null;
+  if (state.storyRole === "defender") {
+    return scene.byId.get(selection.defenders[0]) || null;
+  }
+  return candidatePasses(scene, index)?.carrier || null;
+}
+
+function setStoryRole(role) {
+  if (!STORY_ROLE_LABEL[role]) return;
+  state.storyRole = role;
+  // the role picker is a player picker: the panel above and the reachable set
+  // follow it, so the three readouts cannot disagree about who is meant
+  const player = resolveStoryRole(state.frame);
+  if (player) { state.inspect = player.id; state.reach = null; }
+  render();
+}
+
+function renderStoryRoles() {
+  const node = $("story-roles");
+  node.replaceChildren();
+  for (const role of Object.keys(STORY_ROLE_LABEL)) {
+    const button = document.createElement("button");
+    button.className = `roleb${state.storyRole === role ? " is-on" : ""}`;
+    button.type = "button";
+    button.dataset.storyRole = role;
+    button.textContent = STORY_ROLE_LABEL[role];
+    button.setAttribute("aria-pressed", String(state.storyRole === role));
+    node.append(button);
+  }
+}
+
+function renderDecision(index) {
+  if (!section("an-decision", true)) return;
+  const { scene } = state;
+  renderStoryRoles();
+  const player = resolveStoryRole(index);
+  const time = scene.times[index];
+  const entries = [
+    ["Frame", `${index} · ${time >= 0 ? "+" : ""}${time.toFixed(2)} s`],
+  ];
+  if (player) {
+    entries.push([STORY_ROLE_LABEL[state.storyRole], `#${player.shirt} ${player.name}`]);
+    if (state.storyRole === "passer") {
+      entries.push(["Resolved by", "in possession at this frame · observed tracking"]);
+    }
+  } else {
+    entries.push([STORY_ROLE_LABEL[state.storyRole],
+                  state.storyRole === "passer"
+                    ? "No clear carrier at this frame"
+                    : "No player in this role for this scene", true]);
+  }
+  if (state.layers.has("reach")) {
+    const mask = player ? reachFor(index, player.id) : null;
+    entries.push(["Kinematic reach, 2.0 s",
+                  mask ? `${Math.round(mask.areaM2)} m² · model reachability` : "—",
+                  !mask]);
+  }
+  rows($("an-decision-rows"), entries);
+}
+
+/**
+ * Observed action, feasible set, and the static/responsive pair.
+ *
+ * Every one of these is a reserved slot today. The research code has no
+ * projection of observed tracking onto an action set, no feasible-alternative
+ * ranking, and no paired static/responsive evaluation on one scale -- see
+ * PAPER_STORY_TRACE.md section 2. The structure is here so that when those
+ * land, the adapter fills them and this function does not change.
+ */
+function renderCounterfactual() {
+  const story = storyFor();
+  if (!section("an-counterfactual", true)) return;
+  const block = story?.counterfactual?.[state.storyRole];
+  const pair = $("cf-pair");
+  if (!block) {
+    rows($("an-cf-rows"), [["Counterfactual",
+      story ? "Not defined for this role" : "Paper-story payload not in this build",
+      true]]);
+    pair.replaceChildren();
+    $("an-cf-change").replaceChildren();
+    return;
+  }
+  contractRows($("an-cf-rows"),
+               [block.observed_action, block.feasible_actions, block.release_library],
+               (r) => (r.name === "observed_action" ? actionText(r) : metricText(r)));
+  pair.replaceChildren();
+  for (const side of [block.static, block.responsive]) {
+    if (!side) continue;
+    const card = document.createElement("div");
+    card.className = "cfside";
+    const head = document.createElement("div");
+    head.className = "cfhead";
+    head.textContent = side.label;
+    const semantics = document.createElement("div");
+    semantics.className = side.semantics ? "cfsem" : "cfsem pending";
+    semantics.textContent = side.semantics
+      || "Baseline semantics pending updated research implementation";
+    const list = document.createElement("dl");
+    contractRows(list, [side.best_action, side.value],
+                 (r) => (r.name.endsWith("_value") ? metricText(r) : actionText(r)));
+    card.append(head, semantics, list);
+    pair.append(card);
+  }
+  contractRows($("an-cf-change"), [block.value_change], metricText);
+}
+
+function renderEvaluation() {
+  const story = storyFor();
+  if (!section("an-evaluation", true)) return;
+  const block = story?.evaluation?.[state.storyRole];
+  const note = $("an-eval-note");
+  if (!block) {
+    rows($("an-eval-rows"), [["Evaluation",
+      story ? "Not defined for this role" : "Paper-story payload not in this build",
+      true]]);
+    note.hidden = true;
+    return;
+  }
+  contractRows($("an-eval-rows"), [...block.metrics, block.optimal_action],
+               (r) => (r.name === "optimal_action" ? actionText(r) : metricText(r)));
+  const none = block.metrics.every((m) => m.availability !== "available");
+  note.hidden = !none;
+  if (none) {
+    note.textContent = "Evaluation outputs are not available for this scene yet. "
+      + "This view populates from the player-evaluation pipeline; nothing is "
+      + "substituted in the meantime.";
+  }
+}
+
+function renderClipSummary() {
+  const story = storyFor();
+  if (!section("an-clip", true)) return;
+  const node = $("clip-cards");
+  node.replaceChildren();
+  const summary = story?.clip_summary || {};
+  for (const role of story?.roles || Object.keys(STORY_ROLE_LABEL)) {
+    const card = document.createElement("div");
+    card.className = "clipcard";
+    const head = document.createElement("div");
+    head.className = "cliphead";
+    head.textContent = STORY_ROLE_LABEL[role] || role;
+    const list = document.createElement("dl");
+    // the aggregation is the producer's, carried per metric: nothing here
+    // means, medians or percentiles anything
+    contractRows(list, summary[role] || [], metricText);
+    card.append(head, list);
+    node.append(card);
+  }
+}
+
+function renderSourceRows() {
+  const story = storyFor();
+  if (!section("an-source", true)) return;
+  const entries = [];
+  if (story) {
+    entries.push(["Story contract", story.schema]);
+    const p = story.provenance || {};
+    const none = p.evaluation_source === "none";
+    entries.push(["Evaluation source",
+                  none ? "none · not implemented in the research code yet"
+                       : `${p.evaluation_source} · definition ${p.definition_version}`,
+                  none]);
+  } else {
+    entries.push(["Story contract", "not exported in this build", true]);
+  }
+  entries.push(["Tracking", "IDSSE Bundesliga, 25 Hz · observed"]);
+  rows($("an-source-rows"), entries);
+}
+
+/**
+ * The frame-by-frame strip.
+ *
+ * Only series the payload carries are drawn. With none, the strip says what
+ * would appear here and names the reserved series -- an empty state that looks
+ * intentional, because it is. No example curve is ever drawn.
+ */
+function renderEvalStrip(index) {
+  const strip = $("eval-strip");
+  strip.hidden = state.mode !== "evaluation";
+  if (strip.hidden) return;
+  const block = storyFor()?.evaluation?.[state.storyRole];
+  const series = presentSeries(block);
+  const plot = $("eval-plot");
+  const empty = $("eval-empty");
+  const readout = $("eval-readout");
+  if (!series.length) {
+    plot.replaceChildren();
+    empty.hidden = false;
+    const reserved = reservedSeries(block).map((s) => s.label);
+    empty.textContent = "Frame-level evaluation will appear here when evaluation "
+      + "outputs are loaded"
+      + (reserved.length ? `: ${reserved.join(", ")}.` : ".");
+    readout.textContent = "";
+    return;
+  }
+  empty.hidden = true;
+  const lib = stripLib();
+  if (!lib) return;                       // a re-render follows when it lands
+  const nearest = lib.drawEvalStrip(plot, {
+    series, nFrames: state.scene.n_frames, frame: index,
+    width: plot.clientWidth,
+    onSeek: (frame) => { state.frame = frame; render(); },
+  });
+  // the nearest computed sample, named as such: between two solved frames
+  // there is no value, and saying which frame it came from is the honest read
+  readout.textContent = (nearest || [])
+    .map((near, i) => (near
+      ? `${series[i].label} ${near.value.toFixed(3)}`
+        + (near.exact ? "" : ` (frame ${near.frame})`)
+      : null))
+    .filter(Boolean).join(" · ");
 }
 
 /**
@@ -795,36 +1201,70 @@ function renderReleaseRows(index, fan) {
   }
 }
 
+/**
+ * The game solution: the equilibrium half of the abstract, which is real.
+ *
+ * Every quantity here is the solver's own, under the solver's own name. The
+ * certificate is the root best-response gap recomputed through the whole
+ * policy tree, not a residual from the solved value arrays, so it is reported
+ * as "Certificate gap" and not renamed to anything friendlier.
+ */
 function renderSolverRows() {
   const node = $("an-solver-rows");
+  const policy = $("an-policy");
+  const provenance = $("an-solver-prov");
   const data = solverFor();
-  if (!data) { rows(node, [["Solver", "Loading…", true]]); return; }
-  if (!data.available) {
-    rows(node, [["Solver", data.reason || "Not computed for this scene", true]]);
+
+  if (!data || !data.available) {
+    const detail = storyFor()?.equilibrium?.detail;
+    rows(node, [
+      ["Game solution",
+       data ? (data.reason || "Not computed for this scene") : "Loading\u2026", true],
+      ...(data && detail ? [["Why", detail, true]] : []),
+    ]);
+    policy.hidden = true;
+    provenance.hidden = true;
     return;
   }
+
+  const lib = policyLib();
+  if (!lib) {
+    rows(node, [["Game solution", "Loading\u2026", true]]);
+    policy.hidden = true;
+    provenance.hidden = true;
+    return;
+  }
+
   const info = solverSummary(data);
-  const attack = info.attack?.kind === "release"
-    ? "release the ball"
-    : `carrier ${commandName(info.attack?.carrier, data.attack_direction)}, `
-      + `receiver ${commandName(info.attack?.receiver, data.attack_direction)}`;
+  const attack = lib.attackRows(data);
+  const defence = lib.defenderRows(data);
   rows(node, [
     ["Equilibrium value", NUMBER(info.value, 4)],
     ["Certificate gap", info.gap != null ? info.gap.toExponential(1) : "—"],
     ["Root policy", info.mixed ? "mixed" : "pure"],
-    ["Attack action", attack],
-    ["Attack probability", NUMBER(info.attack?.probability, 3)],
-    ["Defender action", commandName(info.defence?.defender, data.attack_direction)],
-    ["Defender probability", NUMBER(info.defence?.probability, 3)],
+    ["Attack support",
+     `${lib.support(data.root_attack)} of ${data.root_attack.length}`],
+    ["Defender support",
+     `${lib.support(data.root_defender)} of ${data.root_defender.length}`],
     ["Release probability", NUMBER(info.releaseProbability, 3)],
     ["Horizon", `${info.steps} × ${NUMBER(info.stepSeconds, 1)} s`],
   ]);
-  const note = document.createElement("div");
-  note.className = "an-provenance";
+
+  policy.hidden = false;
+  lib.drawPolicy($("pol-attack"), attack);
+  lib.drawPolicy($("pol-defence"), defence);
+  $("pol-attack-kind").textContent = lib.isMixed(data.root_attack) ? "mixed" : "pure";
+  $("pol-defence-kind").textContent =
+    lib.isMixed(data.root_defender) ? "mixed" : "pure";
+  $("pol-note").textContent = `${lib.MODAL_LABEL}. ${lib.MODAL_NOTE}`;
+
+  // one element, rewritten -- not a fresh sibling per render
   const p = info.provenance || {};
-  note.textContent = `${p.repository}@${p.commit} · ${p.artifact}#${p.state_index}`;
-  node.after(note);
+  provenance.hidden = false;
+  provenance.textContent =
+    `${p.repository}@${p.commit} · ${p.artifact}#${p.state_index}`;
 }
+
 
 /**
  * Marks on the scrubber, from data rather than from pacing.
@@ -1388,6 +1828,32 @@ function bindControls() {
       body.hidden = !open;
       $("analysis-chev").textContent = open ? "\u25be" : "\u25b8";
       analysisToggle.setAttribute("aria-expanded", String(open));
+    });
+  }
+
+  bindStory();
+}
+
+/** The four story modes, the story-role picker, and the solver view. */
+function bindStory() {
+  for (const button of document.querySelectorAll("#story-modes .mode")) {
+    button.addEventListener("click", () => setMode(button.dataset.mode));
+  }
+  const roles = $("story-roles");
+  if (roles) {
+    // delegated, because the buttons are rebuilt whenever the panel renders
+    roles.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-story-role]");
+      if (button) setStoryRole(button.dataset.storyRole);
+    });
+  }
+  for (const button of document.querySelectorAll("#solver-view .seg")) {
+    button.addEventListener("click", () => {
+      state.solverView = button.dataset.solverview;
+      for (const other of document.querySelectorAll("#solver-view .seg")) {
+        other.classList.toggle("is-on", other === button);
+      }
+      render();
     });
   }
 }

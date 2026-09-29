@@ -82,3 +82,38 @@ method first, and that is a team decision, not an export. The nearest existing
 machinery is `markov.policy_transfer_bounds`, which reprices a fixed *policy*
 against fresh best responses — not a single observed action, and only for
 comparing payoff models on an identical scenario.
+
+
+---
+
+## 7. What happens to an artifact once it lands
+
+The demo now has a place to put one. Dropping a run directory into a local
+input folder and regenerating is three commands:
+
+```bash
+# 1. point the submission manifest at it: "<run directory>#<state index>"
+#    in demo_viz/data/submission_scenes.json, for the scene it belongs to
+# 2. read the artifact and normalise it into the shape the browser draws
+.venv/bin/python -m demo_viz.web.export_solver --from-manifest
+# 3. re-derive the paper-story payloads, which pick the solver file up
+.venv/bin/python -m demo_viz.web.export_paper_story
+.venv/bin/python -m demo_viz.web.build
+```
+
+The Game solution mode then populates for that scene: equilibrium value,
+certificate gap, per-side support counts, weighted policy bars, and the
+modal-policy illustration. The component is finished and is exercised against
+a real solver study state by `demo_viz/web/story_harness.html`; only the
+attachment to a tracked scene is missing.
+
+**Nothing is attached by fuzzy match.** `paper_story.adapter.equilibrium_for`
+looks for an exported file under the scene's own key and reports
+`artifact_missing` otherwise — there is no name-similarity fallback, and
+`tests/test_paper_story.py` asserts that no tracked scene currently claims an
+equilibrium. When one does, that test fails on purpose, so the trace document
+and the claim get updated together.
+
+The export refuses an unusable reference rather than guessing:
+`export_solver.py` skips a manifest entry whose `solver_artifact` is malformed
+or whose directory is absent, and says which entry it skipped.

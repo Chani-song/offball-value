@@ -606,3 +606,68 @@ story is not implemented**. No export unblocks it — it needs a defined method
 first. Everything else is one Delta artifact away.
 
 309 tests pass.
+
+---
+
+# The final paper-story architecture (2026-09-29)
+
+Branch `chani-ssac-demo-final-story`, from `8841b31`.
+
+The previous pass established that half the abstract has no implementation.
+This pass builds the interface the abstract describes **anyway**, with typed,
+validated slots where the missing quantities will land — so that integrating
+them is an adapter change, not another redesign.
+
+## The interface
+
+Four story modes over one scene, one pitch and one timeline:
+
+| mode | question | state today |
+| --- | --- | --- |
+| **Observed** | What happened? | fully populated |
+| **Counterfactual** | What else could the player have done? | structure live; kinematic reachable area is real, the evaluation action set is pending |
+| **Evaluation** | How good was the observed action? | four reserved fields, each showing its own reason |
+| **Game solution** | What does the equilibrium recommend? | component complete, no artifact covers a tracked scene |
+
+The right panel follows the paper's argument:
+scene → player → current decision → counterfactual → player evaluation → clip
+summary → game solution → off-ball context → *action value details* → source.
+Off-ball context and the release chain come last, because both are replaceable
+components in the abstract and neither may read as the contribution.
+
+## The contract
+
+[`PAPER_STORY_SCHEMA.md`](PAPER_STORY_SCHEMA.md) documents it. The invariant:
+
+```
+availability == "available"   =>   value is not None  and  source is set
+availability != "available"   =>   value is None
+```
+
+Enforced at construction, and re-checked by `validate_payload` on data from
+outside the process. **A placeholder number cannot be constructed.** Five
+distinct availability states, each with its own sentence — never a dash.
+
+## The boundary
+
+`demo_viz/paper_story/adapter.py` is the only file that will know anything
+about the updated research code's output. The browser reads
+`data/story/<scene>.json` and the shipped vocabulary in `contract.json`; a test
+asserts the site never names `rows.jsonl`, `policies/`, a run directory or a
+state index in code.
+
+`tests/test_paper_story.py::FutureIntegrationTests` builds a scene from a stub
+evaluation source and asserts the values arrive with source and definition
+version attached, through exactly the code path the real pipeline will use —
+including a metric named `mean_regret`, a name no interface file mentions.
+If that test ever needs the UI changed to pass, the boundary has leaked.
+
+## What was not built
+
+No invented rank, similarity, regret, static baseline, aggregation or optimal
+trajectory. No example numbers, no fixture data in any public payload (a test
+enforces both). The development harness for the Game solution component lives
+outside the copied site folder and a test asserts the built site contains one
+HTML file.
+
+375 tests pass. Initial load 204 KB, total 8.03 MB.

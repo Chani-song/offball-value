@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Game solution component · solver reference state</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  body { padding: 20px 24px; }
+  .warn { border: 1px solid var(--defender); border-radius: 8px; color: var(--defender);
+          font-size: 11.5px; line-height: 1.5; margin: 0 0 14px 0; padding: 9px 12px;
+          max-width: 560px; }
+  .card.analysis { max-width: 560px; }
+</style>
+</head>
+<body>
+<!--
+  NOT PART OF THE PUBLIC SITE.
+
+  This file lives in demo_viz/web/, not demo_viz/web/site/, so the build never
+  copies it. It exists so the Game solution component can be exercised against
+  a real solver artifact: no Bundesliga scene has one, and inventing a state
+  to demonstrate the panel is exactly what this repository refuses to do.
+
+  The state below is one of the solver's own declared 2v1 study states. It is
+  real output, and it is not a match scene -- the banner says so, and
+  export_solver.py marks it `solver_reference` for the same reason.
+-->
+<p class="warn" id="banner">Loading…</p>
+
+<div class="card analysis">
+  <div class="disclosure"><span class="label">What the equilibrium recommends</span></div>
+  <section class="an-section">
+    <h4>Game solution</h4>
+    <dl id="an-solver-rows"></dl>
+    <div class="an-provenance" id="an-solver-prov"></div>
+    <div id="an-policy">
+      <div class="polblock">
+        <div class="pol-h">Attack policy <span class="muted" id="pol-attack-kind"></span></div>
+        <div id="pol-attack"></div>
+      </div>
+      <div class="polblock">
+        <div class="pol-h">Defender policy <span class="muted" id="pol-defence-kind"></span></div>
+        <div id="pol-defence"></div>
+      </div>
+      <p class="an-note" id="pol-note"></p>
+    </div>
+  </section>
+</div>
+
+<script type="module">
+import { attackRows, defenderRows, drawPolicy, isMixed, support, MODAL_LABEL, MODAL_NOTE }
+  from "./js/policy.js";
+import { summary } from "./js/solver.js";
+
+const $ = (id) => document.getElementById(id);
+const N = (v, d = 2) => (Number.isFinite(v) ? v.toFixed(d) : "—");
+// lane_006 by default: it is the one solved state here with a genuinely mixed
+// root on both sides (0.878/0.122 and 0.884/0.116), so it exercises the part
+// of the component a single arrow would destroy.
+const key = new URLSearchParams(location.search).get("state")
+  || "solver_exact_100_006";
+
+const response = await fetch(`data/solver/${key}.json`);
+const data = await response.json();
+
+$("banner").textContent = `TEST HARNESS · ${data.label}. ${data.caveat} `
+  + "This page is not part of the published demo.";
+
+const info = summary(data);
+const rows = [
+  ["Equilibrium value", N(info.value, 4)],
+  ["Certificate gap", info.gap != null ? info.gap.toExponential(1) : "—"],
+  ["Root policy", info.mixed ? "mixed" : "pure"],
+  ["Attack support", `${support(data.root_attack)} of ${data.root_attack.length}`],
+  ["Defender support", `${support(data.root_defender)} of ${data.root_defender.length}`],
+  ["Release probability", N(info.releaseProbability, 3)],
+  ["Horizon", `${info.steps} × ${N(info.stepSeconds, 1)} s`],
+];
+const list = $("an-solver-rows");
+for (const [label, value] of rows) {
+  const dt = document.createElement("dt"); dt.textContent = label;
+  const dd = document.createElement("dd"); dd.textContent = value;
+  list.append(dt, dd);
+}
+
+drawPolicy($("pol-attack"), attackRows(data));
+drawPolicy($("pol-defence"), defenderRows(data));
+$("pol-attack-kind").textContent = isMixed(data.root_attack) ? "mixed" : "pure";
+$("pol-defence-kind").textContent = isMixed(data.root_defender) ? "mixed" : "pure";
+$("pol-note").textContent = `${MODAL_LABEL}. ${MODAL_NOTE}`;
+const p = info.provenance || {};
+$("an-solver-prov").textContent =
+  `${p.repository}@${p.commit} · ${p.artifact}#${p.state_index}`;
+document.title = `${data.label} · harness`;
+</script>
+</body>
+</html>

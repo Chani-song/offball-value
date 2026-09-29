@@ -94,7 +94,12 @@ export function filtered(scenes, filter) {
 
 /** One concise line for the selector: "S05 · 5/5 · Human-reviewed". */
 export function selectorLabel(scene) {
-  const parts = [scene.showcase_id];
+  // A curated story title names the case study when one has been written;
+  // until then the id and the review badge are the label, unchanged. Nothing
+  // generates a title, so an uncurated scene never acquires a fabricated one.
+  const parts = [scene.story_title
+    ? `${scene.showcase_id} · ${scene.story_title}`
+    : scene.showcase_id];
   const rating = topRating(scene);
   if (rating) parts.push(rating);
   parts.push(PROVENANCE_LABEL[scene.provenance] || scene.provenance);

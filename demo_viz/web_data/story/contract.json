@@ -1,0 +1,36 @@
+{
+  "schema": "paper-story/1",
+  "availability": [
+    "available",
+    "method_not_implemented",
+    "artifact_missing",
+    "scene_not_supported",
+    "mapping_unresolved"
+  ],
+  "availability_label": {
+    "available": "",
+    "method_not_implemented": "Awaiting updated evaluation pipeline",
+    "artifact_missing": "Not computed for this scene",
+    "scene_not_supported": "Not defined for this scene",
+    "mapping_unresolved": "Scene mapping unresolved"
+  },
+  "provenance": [
+    "human_reviewed",
+    "observed_tracking",
+    "derived_current_demo",
+    "solver",
+    "evaluation_pipeline",
+    "future_pipeline"
+  ],
+  "roles": [
+    "runner",
+    "passer",
+    "defender"
+  ],
+  "modes": [
+    "observed",
+    "counterfactual",
+    "evaluation",
+    "game_solution"
+  ]
+}

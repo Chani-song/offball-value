@@ -54,6 +54,24 @@
 
 <main>
   <section class="pitch-card">
+    <nav class="modes" id="story-modes" role="tablist" aria-label="Story mode">
+      <button class="mode is-on" data-mode="observed" role="tab" aria-selected="true">
+        <span class="mode-t">Observed</span>
+        <span class="mode-q">What happened?</span>
+      </button>
+      <button class="mode" data-mode="counterfactual" role="tab" aria-selected="false">
+        <span class="mode-t">Counterfactual</span>
+        <span class="mode-q">What else could the player have done?</span>
+      </button>
+      <button class="mode" data-mode="evaluation" role="tab" aria-selected="false">
+        <span class="mode-t">Evaluation</span>
+        <span class="mode-q">How good was the observed action?</span>
+      </button>
+      <button class="mode" data-mode="game_solution" role="tab" aria-selected="false">
+        <span class="mode-t">Game solution</span>
+        <span class="mode-q">What does the equilibrium recommend?</span>
+      </button>
+    </nav>
     <div class="scene-head">
       <h1 id="title">—</h1>
       <p id="subtitle"></p>
@@ -61,6 +79,11 @@
       <div class="segmented" id="view-toggle" role="group" aria-label="Pitch view">
         <button class="seg is-on" data-view="full">Full pitch</button>
         <button class="seg" data-view="focus">Focus</button>
+      </div>
+      <div class="segmented" id="solver-view" role="group" aria-label="Solver view" hidden>
+        <button class="seg is-on" data-solverview="policy">Solver policy</button>
+        <button class="seg" data-solverview="actual">Actual movement</button>
+        <button class="seg" data-solverview="overlay">Overlay</button>
       </div>
     </div>
     <div id="pitch" class="pitch-wrap"></div>
@@ -73,6 +96,14 @@
         <div class="ticks" id="time-ticks"></div>
       </div>
       <span id="readout" class="readout">0.00 s</span>
+    </div>
+    <div class="evalstrip" id="eval-strip" hidden>
+      <div class="evalstrip-head">
+        <span class="evalstrip-title">Frame-by-frame evaluation</span>
+        <span class="muted" id="eval-readout"></span>
+      </div>
+      <div id="eval-plot"></div>
+      <p class="empty" id="eval-empty" hidden></p>
     </div>
     <div class="layers">
       <label class="check"><input type="checkbox" data-layer="trail" checked> Runner movement</label>
@@ -131,7 +162,7 @@
     <div class="card analysis" id="analysis-card" hidden>
       <button class="disclosure" id="analysis-toggle" aria-expanded="true">
         <span class="chev" id="analysis-chev">▾</span>
-        <span class="label">Analysis</span>
+        <span class="label" id="analysis-label">Analysis</span>
         <span class="muted" id="analysis-hint"></span>
       </button>
       <div id="analysis-body">
@@ -143,6 +174,42 @@
         <section class="an-section" id="an-player" hidden>
           <h4>Player</h4>
           <dl id="an-player-rows"></dl>
+        </section>
+        <section class="an-section" id="an-decision" hidden>
+          <h4>Current decision</h4>
+          <div class="roleseg" id="story-roles" role="group" aria-label="Story role"></div>
+          <dl id="an-decision-rows"></dl>
+        </section>
+        <section class="an-section" id="an-counterfactual" hidden>
+          <h4>Counterfactual</h4>
+          <dl id="an-cf-rows"></dl>
+          <div class="cfpair" id="cf-pair"></div>
+          <dl id="an-cf-change"></dl>
+        </section>
+        <section class="an-section" id="an-evaluation" hidden>
+          <h4>Player evaluation</h4>
+          <dl id="an-eval-rows"></dl>
+          <p class="empty" id="an-eval-note" hidden></p>
+        </section>
+        <section class="an-section" id="an-clip" hidden>
+          <h4>Clip summary</h4>
+          <div class="clipcards" id="clip-cards"></div>
+        </section>
+        <section class="an-section" id="an-solver" hidden>
+          <h4>Game solution</h4>
+          <dl id="an-solver-rows"></dl>
+          <div class="an-provenance" id="an-solver-prov" hidden></div>
+          <div id="an-policy" hidden>
+            <div class="polblock">
+              <div class="pol-h">Attack policy <span class="muted" id="pol-attack-kind"></span></div>
+              <div id="pol-attack"></div>
+            </div>
+            <div class="polblock">
+              <div class="pol-h">Defender policy <span class="muted" id="pol-defence-kind"></span></div>
+              <div id="pol-defence"></div>
+            </div>
+            <p class="an-note" id="pol-note"></p>
+          </div>
         </section>
         <section class="an-section" id="an-offball" hidden>
           <h4>Off-ball context</h4>
@@ -164,9 +231,9 @@
           <dl id="an-detail-rows" hidden></dl>
           </div>
         </section>
-        <section class="an-section" id="an-solver" hidden>
-          <h4>Solver</h4>
-          <dl id="an-solver-rows"></dl>
+        <section class="an-section" id="an-source" hidden>
+          <h4>Source</h4>
+          <dl id="an-source-rows"></dl>
         </section>
       </div>
     </div>
@@ -280,6 +347,21 @@
           geometric heuristic on the goal-side marking target, not a research-pipeline
           output. Run starts come from the repository's kinematic onset detector where
           it fires, otherwise from a labelled acceleration cue.</dd>
+
+      <dt class="tag-explanatory">Not yet computed</dt>
+      <dd>The <b>Counterfactual</b> and <b>Evaluation</b> modes are built around
+          quantities the research code does not implement yet: the relative rank of
+          the observed action among feasible alternatives, its similarity to the
+          optimal action, regret against that optimum, the paired static/responsive
+          comparison on one scale, frame-by-frame player scoring and clip-level
+          aggregation. <i>None of these is estimated, approximated or stood in for
+          here.</i> Each field states its own reason, and a field with no value
+          cannot carry a number — the contract that produces this page refuses to
+          construct one. When the evaluation pipeline lands, the fields populate
+          from it with the producer's own definition version attached.<br>
+          The one <code>regret</code> that does exist in the repository belongs to a
+          different lineage — it compares defender options under the legacy OBSO
+          stack — and is deliberately not shown here as if it were this quantity.</dd>
 
       <dt class="tag-muted">Legacy / reference diagnostic</dt>
       <dd>An OBSO stack — pitch control × ball transition × a static EPV grid — is

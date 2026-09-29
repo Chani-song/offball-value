@@ -319,14 +319,17 @@ class PublicUiTests(unittest.TestCase):
                          re.findall(r'<option value="([a-z]+)"', self.markup))
 
     def test_the_analysis_panel_follows_the_paper_story(self):
-        """Scene, player, off-ball context, then the value drill-down.
+        """The panel is ordered by the paper's argument, not by the code's.
 
-        The pass and threat models are replaceable components in the abstract,
-        so the release chain sits below the story rather than leading it.
+        Scene, then who, then the decision, then what else was possible, then
+        how good it was, then the clip, then the equilibrium. Off-ball context
+        and the release chain come last: both are replaceable components in
+        the abstract, so neither may read as the contribution.
         """
 
-        order = [self.markup.index(f'id="an-{name}"')
-                 for name in ("scene", "player", "offball", "pass", "solver")]
+        order = [self.markup.index(f'id="an-{name}"') for name in (
+            "scene", "player", "decision", "counterfactual", "evaluation",
+            "clip", "solver", "offball", "pass", "source")]
         self.assertEqual(sorted(order), order)
 
     def test_the_release_chain_is_a_drill_down(self):
