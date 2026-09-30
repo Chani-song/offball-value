@@ -9,6 +9,13 @@ data/processed/*
 !data/processed/pass_models/
 data/processed/pass_models/*
 !data/processed/pass_models/A_*.json
+# the abstract's pass model (A-sym, fitted coefficients) and player limits (measured percentiles): numbers only
+!data/processed/pass_models_sym/
+data/processed/pass_models_sym/*
+!data/processed/pass_models_sym/Asym_*.json
+!data/processed/physics_limits/
+data/processed/physics_limits/*
+!data/processed/physics_limits/agile_p999_nodelay.json
 relatedworks/
 .DS_Store
 

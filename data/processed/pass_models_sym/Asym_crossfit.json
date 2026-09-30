@@ -1,0 +1,13 @@
+{
+  "kind": "per_match",
+  "default": "Asym_all.json",
+  "by_match": {
+    "DFL-MAT-J03WMX": "Asym_without_DFL-MAT-J03WMX.json",
+    "DFL-MAT-J03WOH": "Asym_without_DFL-MAT-J03WOH.json",
+    "DFL-MAT-J03WOY": "Asym_without_DFL-MAT-J03WOY.json",
+    "DFL-MAT-J03WPY": "Asym_without_DFL-MAT-J03WPY.json",
+    "DFL-MAT-J03WQQ": "Asym_without_DFL-MAT-J03WQQ.json",
+    "DFL-MAT-J03WR9": "Asym_without_DFL-MAT-J03WR9.json"
+  },
+  "why": "a scene from match M is priced by the model fitted without M"
+}
