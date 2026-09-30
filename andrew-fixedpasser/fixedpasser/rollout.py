@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import numpy as np
 
+from .run_passes import target_of
+
 
 def rollout(solution, seed=0):
     rng = np.random.default_rng(seed)
@@ -36,9 +38,10 @@ def rollout(solution, seed=0):
             release = attack == actions**2
         if release:
             who, choice = game.pass_target(k, index)
+            target = target_of(choice, snapshot[who], game.scenario.attack_direction,
+                               snapshot[f"{who}_velocity"], game.scenario)
             snapshot.update(event="release", to=who, family=choice.family,
-                            target=choice.target(snapshot[who],
-                                                 game.scenario.attack_direction).tolist())
+                            target=np.asarray(target).tolist())
             break
         if k == steps:
             snapshot["event"] = "no_pass"     # no legal release worth more than nothing

@@ -180,10 +180,17 @@ def _run(position, velocity, desired, scenario, config, physics, hold, plant):
 
 
 def advance(position, velocity, player: PlayerState, command: int, scenario: Scenario,
-            config: GameConfig, physics: Physics, hold_s: float = 0.0):
-    """The imported motion.advance with the agile limits. Same return."""
-    desired = (np.asarray(config.directions[command]) * player.maximum_speed
-               * scenario.attack_direction)
+            config: GameConfig, physics: Physics, hold_s: float = 0.0, command_set=None, k: int = 0):
+    """The imported motion.advance with the agile limits. Same return.
+
+    With `command_set` (this body's relative commands) the desired velocity is
+    the command's direction from this state at full speed; without, the compass."""
+    if command_set is None:
+        desired = (np.asarray(config.directions[command]) * player.maximum_speed
+                   * scenario.attack_direction)
+    else:
+        desired = command_direction(command_set[command], position, velocity, k, config, scenario,
+                                    player.maximum_speed) * player.maximum_speed
     hold = _steps(hold_s, config)
     curve = _run(position, velocity, desired, scenario, config, physics, hold, plant=False)
     cut = _run(position, velocity, desired, scenario, config, physics, hold, plant=True)
@@ -194,9 +201,17 @@ def advance(position, velocity, player: PlayerState, command: int, scenario: Sce
 
 
 def build_layers(player: PlayerState, scenario: Scenario, config: GameConfig,
-                 physics=None, delay_s: float = 0.0):
-    """motion.build_layers; with physics None it IS the imported function."""
+                 physics=None, delay_s: float = 0.0, command_set=None):
+    """motion.build_layers; with physics None and no command set it IS the imported function.
+    `command_set`: this body's relative commands (one per compass slot), or None."""
     physics = resolve(physics)
+    if command_set is not None:
+        if len(command_set) != len(config.directions):
+            raise ValueError("a relative command set must have one command per compass slot")
+        if command_set[0].kind != "stop":
+            raise ValueError("command 0 must be the stop; the layers start every body on it")
+        if physics is None:
+            raise ValueError("relative commands need an explicit physics (use 'agile')")
     if physics is None:
         if delay_s:
             raise ValueError("the imported motion has no reaction delay")
@@ -215,7 +230,7 @@ def build_layers(player: PlayerState, scenario: Scenario, config: GameConfig,
             for action in range(actions):
                 p, v, path = advance(current.position[state], current.velocity[state],
                                      player, action, scenario, config, physics,
-                                     hold_s=delay_s if k == 0 else 0.0)
+                                     hold_s=delay_s if k == 0 else 0.0, command_set=command_set, k=k)
                 key = (*p, *v, action)
                 if key not in seen:
                     seen[key] = len(positions)
@@ -233,11 +248,177 @@ def build_layers(player: PlayerState, scenario: Scenario, config: GameConfig,
     return layers
 
 
-def layers_for(scenario: Scenario, config: GameConfig, physics=None):
+def layers_for(scenario: Scenario, config: GameConfig, physics=None, commands=None):
     """The three strategic bodies' layers in slot order (carrier, receiver,
-    defender). The reaction delay goes to the defender slot only."""
+    defender). The reaction delay goes to the defender slot only. `commands`:
+    relative command sets by slot (relative_commands), or None for the compass."""
     physics = resolve(physics)
     delay = physics.defender_delay_s if physics is not None else 0.0
-    return (build_layers(scenario.carrier, scenario, config, physics),
-            build_layers(scenario.receiver, scenario, config, physics),
-            build_layers(scenario.defender, scenario, config, physics, delay_s=delay))
+    cmd = commands or {}
+    return (build_layers(scenario.carrier, scenario, config, physics, command_set=cmd.get("carrier")),
+            build_layers(scenario.receiver, scenario, config, physics, command_set=cmd.get("receiver")),
+            build_layers(scenario.defender, scenario, config, physics, delay_s=delay,
+                         command_set=cmd.get("defender")))
+
+
+# ---------------------------------------------------------------------------
+# Relative commands (2026-09-27, meeting of 2026-09-25 and the reviewer's rule)
+#
+# Compass commands have no diagonals and no meaning: "west" is only "toward the
+# runner" by accident, and the page had to guess names for them. A relative
+# command names a football intention and turns it into a direction FROM THE
+# BODY'S OWN STATE, so the solver's structure (each body's states built on its
+# own, then combined) is untouched. Every anchor is fixed when the game is
+# built: another body's position is its onset position carried on at its onset
+# velocity, the 3v1 passer is his real track, the goal is the goal. That is
+# my approximation, chosen to keep the bodies independent; over 1.8 s the
+# extrapolation is close.
+#
+# The runner-related defender command is INTERCEPT, not pursuit. It aims at
+# the earliest point on the runner's projected line (onset position + onset
+# velocity x t) that the defender can reach by the time the runner gets there,
+# or at the line's end within the horizon if he cannot. A defender told to
+# intercept a run in behind therefore drops toward the space the run is going
+# to, never at the runner's back.
+#
+# Command 0 is always the stop, as the compass had it: the layer builder starts
+# every body on command 0.
+
+GOAL_HALF_WIDTH = 3.66
+
+
+@dataclass(frozen=True)
+class Command:
+    """One relative command of one body. `anchor` holds what the kind needs:
+    toward/between: [steps + 1, 2] points per instant; intercept: (origin,
+    velocity) of the run line; fixed: a unit vector; stop/continue: nothing."""
+    name: str
+    kind: str
+    anchor: tuple = ()
+
+    def as_dict(self) -> dict:
+        return {"name": self.name, "kind": self.kind}
+
+
+def goal_of(scenario: Scenario):
+    return np.array([scenario.pitch_length if scenario.attack_direction == 1 else 0.0,
+                     scenario.pitch_width / 2.0])
+
+
+def _unit(v):
+    n = float(np.linalg.norm(v))
+    return v / n if n > 1e-9 else np.zeros(2)
+
+
+def _clip(p, scenario: Scenario):
+    return np.clip(p, [0.0, 0.0], [scenario.pitch_length, scenario.pitch_width])
+
+
+def intercept_point(position, k, run_origin, run_velocity, config: GameConfig, max_speed: float,
+                    scenario: Scenario):
+    """Earliest point on the run line the body can reach in time, else its end."""
+    t0 = config.times[k]
+    horizon = config.steps * config.step_seconds
+    for t in np.arange(config.times[min(k + 1, config.steps)], horizon + 1e-9, 0.1):
+        point = _clip(run_origin + run_velocity * t, scenario)
+        if np.linalg.norm(point - position) <= max_speed * (t - t0):
+            return point
+    return _clip(run_origin + run_velocity * horizon, scenario)
+
+
+def command_direction(command: Command, position, velocity, k: int, config: GameConfig,
+                      scenario: Scenario, max_speed: float):
+    """Unit direction (zero for the stop) of `command` for a body at this state."""
+    p = np.asarray(position, dtype=float)
+    if command.kind == "stop":
+        return np.zeros(2)
+    if command.kind == "continue":
+        u = _unit(np.asarray(velocity, dtype=float))
+        return u if np.linalg.norm(velocity) >= 0.5 else np.array([float(scenario.attack_direction), 0.0])
+    if command.kind == "fixed":
+        return np.asarray(command.anchor, dtype=float)
+    ahead = min(k + 1, config.steps)
+    if command.kind == "toward":
+        target = np.asarray(command.anchor[ahead], dtype=float)
+    elif command.kind == "intercept":
+        origin, run = (np.asarray(a, dtype=float) for a in command.anchor)
+        target = intercept_point(p, k, origin, run, config, max_speed, scenario)
+    elif command.kind == "between":
+        first, second = command.anchor
+        a = np.asarray(first[ahead], dtype=float)
+        if isinstance(second, Command):
+            origin, run = (np.asarray(x, dtype=float) for x in second.anchor)
+            b = intercept_point(p, k, origin, run, config, max_speed, scenario)
+        else:
+            b = np.asarray(second[ahead], dtype=float)
+        target = 0.5 * (a + b)
+    else:
+        raise ValueError(f"unknown command kind {command.kind}")
+    gap = target - p
+    return _unit(gap) if np.linalg.norm(gap) > 0.5 else np.zeros(2)
+
+
+def _track(position, velocity, config: GameConfig, scenario: Scenario):
+    """[steps + 1, 2]: a body carried on at its onset velocity, kept on the pitch."""
+    p, v = np.asarray(position, dtype=float), np.asarray(velocity, dtype=float)
+    return tuple(tuple(_clip(p + v * t, scenario)) for t in config.times)
+
+
+def _lateral_away(run_velocity, from_point, of_point, scenario: Scenario):
+    """Unit vector perpendicular to the run, on the side away from `from_point`."""
+    u = _unit(np.asarray(run_velocity, dtype=float))
+    if np.linalg.norm(u) < 1e-9:
+        u = np.array([float(scenario.attack_direction), 0.0])
+    n = np.array([-u[1], u[0]])
+    return tuple(n if np.dot(n, np.asarray(of_point) - np.asarray(from_point)) >= 0 else -n)
+
+
+def relative_commands(record: dict, config: GameConfig, kind: str) -> dict:
+    """Command sets by solver slot (carrier, receiver, defender) for one record.
+
+    kind "2v1": carrier slot = the ball carrier, receiver slot = the runner.
+    kind "3v1": carrier slot = the runner, receiver slot = the beneficiary,
+    the passer scripted from record["passer"]. Deterministic in the record, so
+    the readers rebuild the same sets.
+    """
+    from defensive_positioning.equilibrium_clips import scenario_from
+    sc = scenario_from(record["scenario"])
+    goal = tuple(tuple(goal_of(sc)) for _ in config.times)
+    stop = Command("멈추기", "stop")
+    cont = Command("계속", "continue")
+    to_goal = Command("골문 쪽", "toward", goal)
+    d0 = np.asarray(sc.defender.position, dtype=float)
+    if kind == "2v1":
+        ball_track = _track(sc.carrier.position, sc.carrier.velocity, config, sc)
+        runner = sc.receiver
+        run_line = (tuple(runner.position), tuple(runner.velocity))
+        intercept = Command("러너 차단", "intercept", run_line)
+        carrier_cmds = (stop, cont, to_goal,
+                        Command("왼쪽 옆", "fixed", (0.0, float(sc.attack_direction))),
+                        Command("오른쪽 옆", "fixed", (0.0, -float(sc.attack_direction))))
+        runner_cmds = (stop, cont, to_goal, Command("볼 쪽", "toward", ball_track),
+                       Command("옆으로", "fixed", _lateral_away(runner.velocity, d0, runner.position, sc)))
+        defender_cmds = (stop, Command("볼 쪽", "toward", ball_track), intercept,
+                         Command("사이 지키기", "between", (ball_track, intercept)), to_goal)
+        return {"carrier": carrier_cmds, "receiver": runner_cmds, "defender": defender_cmds}
+    if kind == "3v1":
+        passer = np.asarray(record["passer"]["positions"], dtype=float)
+        if passer.shape[0] < config.steps + 1:
+            raise ValueError("passer track shorter than the game")
+        ball_track = tuple(tuple(float(x) for x in passer[k]) for k in range(config.steps + 1))
+        runner, bene = sc.carrier, sc.receiver
+        run_line = (tuple(runner.position), tuple(runner.velocity))
+        intercept = Command("러너 차단", "intercept", run_line)
+        bene_track = _track(bene.position, bene.velocity, config, sc)
+        runner_cmds = (stop, cont, to_goal, Command("볼 쪽", "toward", ball_track),
+                       Command("옆으로", "fixed", _lateral_away(runner.velocity, d0, runner.position, sc)))
+        bene_cmds = (stop, cont, to_goal, Command("볼 쪽", "toward", ball_track),
+                     Command("옆으로", "fixed", _lateral_away(bene.velocity, d0, bene.position, sc)))
+        defender_cmds = (stop, intercept, Command("수혜자 쪽", "toward", bene_track),
+                         Command("사이 지키기", "between", (bene_track, intercept)), to_goal)
+        return {"carrier": runner_cmds, "receiver": bene_cmds, "defender": defender_cmds}
+    raise ValueError(f"unknown game kind {kind}")
+
+
+def command_names(commands: dict | None) -> dict | None:
+    return None if commands is None else {slot: [c.name for c in cmds] for slot, cmds in commands.items()}
