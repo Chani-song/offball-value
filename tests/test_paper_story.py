@@ -754,10 +754,10 @@ class LazyComponentTests(unittest.TestCase):
 
     def test_the_policy_and_strip_components_are_imported_on_demand(self):
         head = self.app[:self.app.index("const $ =")]
-        self.assertNotIn("policy.js", head)
-        self.assertNotIn("evalstrip.js", head)
-        self.assertIn('import("./policy.js")', self.app)
-        self.assertIn('import("./evalstrip.js")', self.app)
+        for name in ("policy.js", "evalstrip.js", "figure.js", "arrows.js",
+                     "obso.js"):
+            self.assertNotIn(name, head, name)
+            self.assertIn(f'import("./{name}")', self.app, name)
 
     def test_the_strip_is_not_fetched_when_there_is_nothing_to_draw(self):
         """Today that means it is never fetched at all."""
@@ -781,9 +781,15 @@ class LazyComponentTests(unittest.TestCase):
         initial = shell + index + contract + extra
         # the two lazy components are part of the shell on disk but are never
         # fetched today, so subtract them for what a visitor actually loads
-        for name in ("policy.js", "evalstrip.js"):
+        for name in ("policy.js", "evalstrip.js", "figure.js", "arrows.js",
+                     "obso.js"):
             initial -= (SITE / "js" / name).stat().st_size
-        self.assertLess(initial, 245 * 1024,
+        # 2026-09-30, figure alignment: the role markers, the attack-direction
+        # indicator and the annotation->solver role translation run on every
+        # render and cannot be deferred (+7 KB); splitting the carrier rule out
+        # of obso.js and deferring the OBSO stack, the conventions and the
+        # arrow language paid for them and more. Raise this only with a reason.
+        self.assertLess(initial, 250 * 1024,
                         f"initial load is {initial / 1024:.1f} KB")
 
 

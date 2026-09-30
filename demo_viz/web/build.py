@@ -65,7 +65,8 @@ def build(out: Path, data_dir: Path = WEB_DATA, clean: bool = True,
 #: Modules the page imports dynamically, each used by one story mode. They sit
 #: in the build like any other file but are never fetched until that mode is
 #: opened, so counting them in the first load would overstate it.
-ON_DEMAND = ("js/policy.js", "js/evalstrip.js")
+ON_DEMAND = ("js/policy.js", "js/evalstrip.js", "js/figure.js",
+             "js/arrows.js", "js/obso.js")
 
 
 def report(out: Path) -> str:
@@ -103,8 +104,8 @@ def report(out: Path) -> str:
         f"build       {out}",
         f"files       {len(rows)}",
         f"shell       {shell / 1024:8.1f} KB   (html + css + js, loaded once)",
-        f"on demand   {deferred / 1024:8.1f} KB   (policy + evaluation strip, "
-        f"imported when their mode is opened)",
+        f"on demand   {deferred / 1024:8.1f} KB   (policy, evaluation strip and "
+        f"figure conventions, imported when their mode is opened)",
         f"index       {index / 1024:8.1f} KB   (scene list, loaded once)",
         f"scenes      {len(scenes)} files, {sum(s for _, s in scenes) / 1024 / 1024:.2f} MB "
         f"total, {(sum(s for _, s in scenes) / max(len(scenes), 1)) / 1024:.0f} KB each "

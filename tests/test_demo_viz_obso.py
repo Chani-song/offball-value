@@ -327,13 +327,22 @@ class CandidateConstantTests(unittest.TestCase):
     """The geometric rule is one set of documented constants, shared."""
 
     def test_python_and_javascript_agree_on_the_rule(self):
-        source = (SITE / "js" / "obso.js").read_text()
+        # the carrier rule moved to carrier.js when OBSO became lazy; obso.js
+        # re-exports it, and this checks the definitions at their new home
+        source = (SITE / "js" / "carrier.js").read_text()
         self.assertEqual(25.0, CANDIDATE_DISTANCE_M)
         self.assertEqual((-45.0, -22.5, 0.0, 22.5, 45.0), CANDIDATE_ANGLES_DEG)
         self.assertIn(f"CANDIDATE_DISTANCE_M = {CANDIDATE_DISTANCE_M:g}", source)
         self.assertIn("[-45, -22.5, 0, 22.5, 45]", source)
         self.assertIn(f"CARRIER_MAX_M = {CARRIER_MAX_M:g}", source)
         self.assertIn(f"CARRIER_MARGIN_M = {CARRIER_MARGIN_M:g}", source)
+
+    def test_obso_still_re_exports_them_for_its_own_readers(self):
+        source = (SITE / "js" / "obso.js").read_text()
+        self.assertIn('from "./carrier.js"', source)
+        for name in ("candidatePasses", "carrierAt", "CANDIDATE_DISTANCE_M",
+                     "CANDIDATE_ANGLES_DEG", "CARRIER_MAX_M", "CARRIER_MARGIN_M"):
+            self.assertIn(name, source, name)
 
     def test_the_layer_is_off_by_default(self):
         markup = (SITE / "index.html").read_text()

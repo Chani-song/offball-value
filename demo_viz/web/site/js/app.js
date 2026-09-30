@@ -6,10 +6,8 @@ import { Pitch } from "./pitch.js";
 import { autoTriplet, rankBeneficiaries, rankDefenders } from "./ranking.js";
 import { drawChart } from "./chart.js";
 import { Selection } from "./selection.js";
-import { ballAt, loadIndex, loadScene, onsetFor, playerAt } from "./scene.js";
-import {
-  candidatePasses, componentsAt, loadControl, loadScoreGrid, sampleAt, surfaceAt,
-} from "./obso.js";
+import { ballAt, loadIndex, loadScene, onsetFor, playerAt, viewVector } from "./scene.js";
+import { candidatePasses } from "./carrier.js";
 import { REACH, reachableMask } from "./reach.js";
 import { loadSolver, primaryTrajectory, summary as solverSummary } from "./solver.js";
 import {
@@ -40,6 +38,57 @@ function policyLib() {
   if (!policyLoading) {
     policyLoading = true;
     import("./policy.js").then((module) => { policyModule = module; render(); });
+  }
+  return null;
+}
+
+let figureModule = null;
+let figureLoading = false;
+
+/**
+ * The paper figures' decoders, or null until they arrive.
+ *
+ * Only a solver view names an action, so the conventions module stays out of
+ * the first load; the shape table pitch.js needs is inlined there.
+ */
+function figureLib() {
+  if (figureModule) return figureModule;
+  if (!figureLoading) {
+    figureLoading = true;
+    import("./figure.js").then((module) => { figureModule = module; render(); });
+  }
+  return null;
+}
+
+let obsoModule = null;
+let obsoLoading = false;
+
+/**
+ * The legacy OBSO stack, or null until it arrives.
+ *
+ * The public wake-mode control offers Available space and Space created only,
+ * so nothing in the submission interface can reach this. It is kept, and kept
+ * lazy: the implementation and its parity tests stay (see the Source panel's
+ * "Legacy / reference diagnostic"), and a visitor never parses it.
+ */
+function obsoLib() {
+  if (obsoModule) return obsoModule;
+  if (!obsoLoading) {
+    obsoLoading = true;
+    import("./obso.js").then((module) => { obsoModule = module; render(); });
+  }
+  return null;
+}
+
+let arrowsModule = null;
+let arrowsLoading = false;
+
+/** The figures' arrow language, or null until it arrives. */
+function arrowsLib() {
+  if (arrowsModule) return arrowsModule;
+  if (!arrowsLoading) {
+    arrowsLoading = true;
+    import("./arrows.js").then((module) => { arrowsModule = module; render(); });
   }
   return null;
 }
@@ -177,6 +226,8 @@ function applyUrlState(wanted) {
   } else {
     const frame = peakGainFrame();
     if (frame != null) state.frame = frame;
+    // an explicit ?t= is the visitor's; anything else defers to the mode
+    ensureDecisionFrame();
   }
 }
 
@@ -377,12 +428,18 @@ function render() {
     pitch.drawGhost(scene, cache, selection.defenders, index, freeze,
                     { labels: state.layers.has("labels") });
   }
+  renderDilemma(index);
+  renderPolicyArrows(index);
   pitch.drawPlayers(scene, index, selection, {
     labels: state.layers.has("labels"),
     activeSide,
     hints: state.layers.has("candidates") ? hints : [],
     dragging: state.drag ? state.drag.playerId : null,
+    solverRoles: solverRolesAt(index),
+    // the figures mute everyone but the central actors; the numbers keep them
+    muted: state.mode === "counterfactual" || state.mode === "game_solution",
   });
+  pitch.drawAttackDirection();
 
   renderDock();
   // the headline stat is off-ball context, which the paper puts below the
@@ -448,7 +505,9 @@ function fitBox(margin = 12, minimumWidth = 46, ballAttach = 18) {
  */
 function obsoSurface(index) {
   const { scene } = state;
-  if (!scene) return null;
+  const obso = obsoLib();
+  if (!scene || !obso) return null;
+  const { loadControl, loadScoreGrid, surfaceAt } = obso;
   if (!state.obso || state.obso.sceneId !== scene.scene_id) {
     if (state.obso && state.obso.pending) return null;
     state.obso = { sceneId: scene.scene_id, pending: true, entry: null, score: null };
@@ -806,9 +865,50 @@ function storyFor() {
   return null;
 }
 
+/**
+ * The first frame at or after `from` where the tracking gives a ball carrier.
+ *
+ * The dilemma and the equilibrium are both asked *of a decision*, and a
+ * decision needs someone on the ball: the research code's own defender action
+ * names are "toward the ball", "toward the runner", "toward goal", and the
+ * first of those has no meaning once the ball is loose. The shot frame, which
+ * is where the timeline starts, usually has no carrier at all.
+ */
+function decisionFrame(from) {
+  const { scene, selection } = state;
+  if (!scene) return from;
+  const onset = scene.onsets?.[selection.runner]?.index;
+  const start = Number.isInteger(onset) ? onset : from;
+  for (let i = start; i < scene.n_frames; i += 1) {
+    if (candidatePasses(scene, i)?.carrier) return i;
+  }
+  for (let i = from; i >= 0; i -= 1) {
+    if (candidatePasses(scene, i)?.carrier) return i;
+  }
+  return from;                              // nothing on the ball anywhere
+}
+
+/**
+ * Put the playhead on a frame the current mode can actually ask about.
+ *
+ * Called from `setMode` and again at the end of `applyUrlState`, because the
+ * URL's own time handling runs after the mode is applied and would otherwise
+ * put the playhead back on the shot.
+ */
+function ensureDecisionFrame() {
+  const asksADecision = state.mode === "counterfactual"
+    || state.mode === "game_solution";
+  if (!asksADecision) return;
+  if (candidatePasses(state.scene, state.frame)?.carrier) return;
+  state.frame = decisionFrame(state.frame);
+  const slider = $("time");
+  if (slider) slider.value = String(state.frame);
+}
+
 function setMode(mode, quiet = false) {
   if (!MODE_SECTIONS[mode]) return;
   state.mode = mode;
+  ensureDecisionFrame();
   for (const button of document.querySelectorAll("#story-modes .mode")) {
     const on = button.dataset.mode === mode;
     button.classList.toggle("is-on", on);
@@ -854,6 +954,147 @@ function setStoryRole(role) {
   const player = resolveStoryRole(state.frame);
   if (player) { state.inspect = player.id; state.reach = null; }
   render();
+}
+
+/**
+ * The demo's annotation roles translated to the paper's solver roles.
+ *
+ * These are two vocabularies, not one. The annotation names a **runner**, a
+ * **defender** and a **beneficiary** -- a person's reading of the play. The
+ * solver names a **ball carrier**, a **runner**, a **beneficiary** and a
+ * **defender** -- slots in a game. They overlap but do not coincide: the ball
+ * carrier is read from the tracking and has no annotation role at all, and in
+ * the solver's 2v1 game the carrier *is* the beneficiary, which is not true of
+ * the annotation.
+ *
+ * So this maps only what is warranted, and returns nothing for a player whose
+ * solver role is not determined. Nothing is guessed to fill a shape.
+ */
+function solverRolesAt(index) {
+  const { scene, selection } = state;
+  if (!scene) return {};
+  const out = {};
+  for (const id of selection.runners) out[id] = "runner";
+  for (const id of selection.beneficiaries) out[id] = "beneficiary";
+  for (const id of selection.defenders) out[id] = "defender";
+  const carrier = candidatePasses(scene, index)?.carrier;
+  // read from the tracking, and it wins: "who has the ball" is not an opinion
+  if (carrier) out[carrier.id] = "ball carrier";
+  return out;
+}
+
+/**
+ * The football name for a defender's compass move, by the research code's own
+ * rule (`stage3_read.name_move_targets`, ported in figure.js).
+ *
+ * Returns null unless the scene actually gives the three targets the rule
+ * needs -- the ball carrier, the runner and the goal.
+ */
+function defenderMoveNameAt(index, commandIndex) {
+  const { scene, selection } = state;
+  const defender = scene?.byId.get(selection.defenders[0]);
+  const runner = scene?.byId.get(selection.runner);
+  const carrier = candidatePasses(scene, index)?.carrier;
+  if (!defender || !runner || !carrier) return null;
+  const at = (p) => [p.x[index], p.y[index]];
+  if (![...at(defender), ...at(runner), ...at(carrier)].every(Number.isFinite)) {
+    return null;
+  }
+  const lib = figureLib();
+  if (!lib) return null;                    // a re-render follows when it lands
+  const direction = scene.attacking_direction >= 0 ? 1 : -1;
+  const goal = [direction * (scene.pitch[0] / 2), 0];
+  return lib.defenderMoveLabel(lib.worldDirection(commandIndex, direction),
+                               at(defender),
+                               lib.targetsFor(at(carrier), at(runner), goal));
+}
+
+/**
+ * The defender's five commands at this frame, named by the research code's
+ * own rule, with the aim direction each one steers along.
+ *
+ * `probability` is deliberately null: naming the moves needs only the scene,
+ * but saying how a defender should mix them needs the solved game, and no
+ * solver artifact covers any scene here. An unweighted fan is the honest
+ * picture of "these are the options"; weighting it without a policy would be
+ * inventing one.
+ */
+function defenderOptionsAt(index) {
+  const { scene, selection } = state;
+  const lib = figureLib();
+  const defender = scene?.byId.get(selection.defenders[0]);
+  if (!lib || !defender) return null;
+  // the naming rule works in pitch coordinates; the drawing is on screen, and
+  // `view` reflects one into the other -- mixing them mirrors every arrow
+  const origin = playerAt(scene, defender, index);
+  if (!origin) return null;
+  const direction = scene.attacking_direction >= 0 ? 1 : -1;
+  const options = [];
+  for (let k = 0; k < lib.SOLVER_DIRS.length; k += 1) {
+    const label = defenderMoveNameAt(index, k);
+    if (!label) return null;
+    const [ux, uy] = lib.worldDirection(k, direction);
+    options.push({ index: k, label, aim: viewVector(scene, ux, uy),
+                   probability: null });
+  }
+  return { origin, defender, options };
+}
+
+/**
+ * The equilibrium policy on the pitch, for a scene with a real artifact.
+ *
+ * The arrows are the same ones the dilemma draws, weighted by the solved
+ * policy instead of drawn alike, and the decision follows the playhead: the
+ * step whose time bracket contains the current frame. Nothing here runs
+ * without `solverFor()` returning an available state, and no Bundesliga scene
+ * has one -- this is exercised by demo_viz/web/story_harness.html against a
+ * genuine solver study state.
+ */
+function renderPolicyArrows(index) {
+  if (state.mode !== "game_solution") return;
+  if (state.solverView === "actual") return;
+  const data = solverFor();
+  const lib = arrowsLib();
+  const figure = figureLib();
+  const policies = policyLib();
+  if (!data?.available || !lib || !figure || !policies) return;
+
+  const { scene, selection } = state;
+  const seconds = scene.times[index] - scene.times[0];
+  const step = Math.max(0, Math.min(data.steps - 1,
+                                    Math.floor(seconds / (data.step_seconds || 1))));
+  const body = policies.bodyPolicies(data, step);
+  if (!body) return;
+
+  const direction = scene.attacking_direction >= 0 ? 1 : -1;
+  const draw = (playerId, probabilities, colour, isDefender) => {
+    const player = scene.byId.get(playerId);
+    if (!player || !probabilities) return;
+    const origin = playerAt(scene, player, index);
+    if (!origin) return;
+    const options = probabilities.map((probability, k) => {
+      const [ux, uy] = figure.worldDirection(k, direction);
+      const label = isDefender ? defenderMoveNameAt(index, k)
+                               : figure.compassName([ux, uy], direction);
+      return { label: label || "", probability, aim: viewVector(scene, ux, uy) };
+    }).filter((o) => o.probability > 1e-9 && o.label);
+    lib.drawActionArrows(state.pitch, origin, options, { colour, length: 5.0 });
+  };
+
+  draw(selection.defenders[0], body.defender, ROLE_COLOUR.defender, true);
+  draw(selection.runner, body.receiver, ROLE_COLOUR.runner, false);
+  const carrier = candidatePasses(scene, index)?.carrier;
+  if (carrier) draw(carrier.id, body.carrier, ROLE_COLOUR.beneficiary, false);
+}
+
+/** The dilemma fan, drawn only where the mode asks the dilemma question. */
+function renderDilemma(index) {
+  if (state.mode !== "counterfactual") return;
+  const lib = arrowsLib();
+  const fan = defenderOptionsAt(index);
+  if (!lib || !fan) return;
+  lib.drawActionArrows(state.pitch, fan.origin, fan.options,
+                       { colour: ROLE_COLOUR.defender, length: 4.6 });
 }
 
 function renderStoryRoles() {
@@ -1103,11 +1344,12 @@ function nearestCounterpart(player, index) {
 }
 
 function threatComponents(index, point) {
-  if (!point || !state.obso || state.obso.pending) return null;
+  const obso = obsoLib();
+  if (!obso || !point || !state.obso || state.obso.pending) return null;
   const { entry, score } = state.obso;
   if (!entry || !score) return null;
-  return componentsAt(entry, score, state.scene, index, point[0], point[1],
-                      surfaceAt.lastControl);
+  return obso.componentsAt(entry, score, state.scene, index, point[0], point[1],
+                           obso.surfaceAt.lastControl);
 }
 
 /**

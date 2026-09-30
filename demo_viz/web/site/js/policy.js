@@ -129,3 +129,61 @@ export const MODAL_LABEL = "Modal policy illustration";
 export const MODAL_NOTE =
   "Highest-weight action at each decision. This illustrates the equilibrium "
   + "policy; it is not a sampled trajectory.";
+
+/**
+ * Per-body action probabilities at one decision, for drawing on the pitch.
+ *
+ * The attack policy is a joint distribution over (carrier command, receiver
+ * command) plus the pass columns, so each attacker's own distribution is the
+ * joint summed over the other attacker -- exactly as
+ * `extract_panel_policy.panel` does it (`joint.sum(axis=1)`, `joint.sum(axis=0)`).
+ * Summing is not an approximation here: it is that body's marginal.
+ *
+ * `step` 0 is the opening decision, the one the figures' t = 0 panel shows and
+ * the only one whose joint attack policy the artifact carries. Later steps
+ * return the defender's policy from `modal_line`, which is real and per-step,
+ * and no attacker marginals -- the caller must say so rather than reuse the
+ * root's.
+ */
+export function bodyPolicies(state, step = 0) {
+  if (!state?.available) return null;
+  const n = (state.directions || []).length;
+  if (!n) return null;
+  const line = (state.modal_line || [])[step];
+
+  if (step > 0) {
+    if (!line?.defender_policy) return null;
+    return { step, time: line.time, defender: [...line.defender_policy],
+             carrier: null, receiver: null, release: line.release_probability,
+             attackKnown: false };
+  }
+
+  const attack = state.root_attack || [];
+  const moves = Number.isInteger(state.move_columns) ? state.move_columns : n * n;
+  const carrier = new Array(n).fill(0);
+  const receiver = new Array(n).fill(0);
+  for (let i = 0; i < moves && i < attack.length; i += 1) {
+    carrier[Math.floor(i / n)] += attack[i];
+    receiver[i % n] += attack[i];
+  }
+  return {
+    step: 0,
+    time: line?.time ?? 0,
+    defender: [...(state.root_defender || [])],
+    carrier, receiver,
+    release: attack.slice(moves).reduce((s, p) => s + p, 0),
+    attackKnown: true,
+  };
+}
+
+/**
+ * Whether a distribution's mass is intact, and what is missing if not.
+ *
+ * Section 29: a truncated policy shows its residual rather than being
+ * normalised back to one without provenance.
+ */
+export function massOf(probabilities, tolerance = 1e-6) {
+  const total = (probabilities || []).reduce((s, p) => s + p, 0);
+  return { total, complete: Math.abs(total - 1) <= tolerance,
+           residual: 1 - total };
+}

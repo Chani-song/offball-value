@@ -2,14 +2,21 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Game solution component · solver reference state</title>
+<title>Equilibrium figure · solver reference state</title>
 <link rel="stylesheet" href="style.css">
 <style>
-  body { padding: 20px 24px; }
+  body { padding: 18px 22px; max-width: 1180px; }
   .warn { border: 1px solid var(--defender); border-radius: 8px; color: var(--defender);
-          font-size: 11.5px; line-height: 1.5; margin: 0 0 14px 0; padding: 9px 12px;
-          max-width: 560px; }
-  .card.analysis { max-width: 560px; }
+          font-size: 11.5px; line-height: 1.5; margin: 0 0 12px 0; padding: 9px 12px; }
+  .cols { display: grid; grid-template-columns: 1fr 340px; gap: 16px; align-items: start; }
+  .pitch-wrap { background: var(--pitch, #132019); border-radius: 10px; overflow: hidden; }
+  .card.analysis { margin: 0; }
+  .steps { display: flex; gap: 0; margin: 0 0 10px 0; border: 1px solid var(--grid);
+           border-radius: 8px; overflow: hidden; width: fit-content; }
+  .steps button { background: transparent; border: 0; color: var(--muted); cursor: pointer;
+                  font: inherit; font-size: 11.5px; padding: 6px 14px; }
+  .steps button + button { border-left: 1px solid var(--grid); }
+  .steps button.is-on { background: var(--panel); color: var(--text); font-weight: 700; }
 </style>
 </head>
 <body>
@@ -17,81 +24,194 @@
   NOT PART OF THE PUBLIC SITE.
 
   This file lives in demo_viz/web/, not demo_viz/web/site/, so the build never
-  copies it. It exists so the Game solution component can be exercised against
-  a real solver artifact: no Bundesliga scene has one, and inventing a state
-  to demonstrate the panel is exactly what this repository refuses to do.
+  copies it and a test asserts the built site holds one HTML file.
 
-  The state below is one of the solver's own declared 2v1 study states. It is
-  real output, and it is not a match scene -- the banner says so, and
-  export_solver.py marks it `solver_reference` for the same reason.
+  It exists because no solver artifact covers any Bundesliga scene, and the
+  equilibrium drawing therefore has nothing real to render in the public demo.
+  Rather than validate the figure grammar against invented numbers, it is
+  validated here against a genuine solved state from the solver's own declared
+  2v1 scenario set -- real output, and not a match scene. The banner says so.
 -->
 <p class="warn" id="banner">Loading…</p>
 
-<div class="card analysis">
-  <div class="disclosure"><span class="label">What the equilibrium recommends</span></div>
-  <section class="an-section">
-    <h4>Game solution</h4>
-    <dl id="an-solver-rows"></dl>
-    <div class="an-provenance" id="an-solver-prov"></div>
-    <div id="an-policy">
+<div class="cols">
+  <div>
+    <div class="steps" id="steps"></div>
+    <div id="pitch" class="pitch-wrap"></div>
+  </div>
+
+  <div class="card analysis">
+    <div class="disclosure"><span class="label">What the equilibrium recommends</span></div>
+    <section class="an-section">
+      <h4>Game solution</h4>
+      <dl id="rows"></dl>
+      <div class="an-provenance" id="prov"></div>
+    </section>
+    <section class="an-section">
+      <h4>Policy details</h4>
       <div class="polblock">
-        <div class="pol-h">Attack policy <span class="muted" id="pol-attack-kind"></span></div>
-        <div id="pol-attack"></div>
+        <div class="pol-h">Attack <span class="muted" id="akind"></span></div>
+        <div id="attack"></div>
       </div>
       <div class="polblock">
-        <div class="pol-h">Defender policy <span class="muted" id="pol-defence-kind"></span></div>
-        <div id="pol-defence"></div>
+        <div class="pol-h">Defender <span class="muted" id="dkind"></span></div>
+        <div id="defence"></div>
       </div>
-      <p class="an-note" id="pol-note"></p>
-    </div>
-  </section>
+      <p class="an-note" id="note"></p>
+    </section>
+  </div>
 </div>
 
 <script type="module">
-import { attackRows, defenderRows, drawPolicy, isMixed, support, MODAL_LABEL, MODAL_NOTE }
-  from "./js/policy.js";
+import { Pitch } from "./js/pitch.js";
+import { P } from "./js/palette.js";
+import { drawActionArrows, drawPassChoice } from "./js/arrows.js";
+import { compassName, defenderMoveLabel, targetsFor, worldDirection, SOLVER_ROLES }
+  from "./js/figure.js";
+import { attackRows, bodyPolicies, defenderRows, drawPolicy, isMixed, massOf,
+         support, MODAL_LABEL, MODAL_NOTE } from "./js/policy.js";
 import { summary } from "./js/solver.js";
 
 const $ = (id) => document.getElementById(id);
 const N = (v, d = 2) => (Number.isFinite(v) ? v.toFixed(d) : "—");
-// lane_006 by default: it is the one solved state here with a genuinely mixed
-// root on both sides (0.878/0.122 and 0.884/0.116), so it exercises the part
-// of the component a single arrow would destroy.
 const key = new URLSearchParams(location.search).get("state")
-  || "solver_exact_100_006";
+  || "solver_exact_100_006";     // the one mixed on both sides
 
-const response = await fetch(`data/solver/${key}.json`);
-const data = await response.json();
-
-$("banner").textContent = `TEST HARNESS · ${data.label}. ${data.caveat} `
+const data = await (await fetch(`data/solver/${key}.json`)).json();
+$("banner").textContent = `REFERENCE SOLVER STUDY STATE · ${data.label}. ${data.caveat} `
   + "This page is not part of the published demo.";
 
-const info = summary(data);
-const rows = [
-  ["Equilibrium value", N(info.value, 4)],
-  ["Certificate gap", info.gap != null ? info.gap.toExponential(1) : "—"],
-  ["Root policy", info.mixed ? "mixed" : "pure"],
-  ["Attack support", `${support(data.root_attack)} of ${data.root_attack.length}`],
-  ["Defender support", `${support(data.root_defender)} of ${data.root_defender.length}`],
-  ["Release probability", N(info.releaseProbability, 3)],
-  ["Horizon", `${info.steps} × ${N(info.stepSeconds, 1)} s`],
-];
-const list = $("an-solver-rows");
-for (const [label, value] of rows) {
-  const dt = document.createElement("dt"); dt.textContent = label;
-  const dd = document.createElement("dd"); dd.textContent = value;
-  list.append(dt, dd);
+const ad = data.attack_direction;
+// the study state carries its own pitch and its three bodies' positions, so the
+// harness builds the minimal scene the Pitch needs -- no tracking is involved
+const scene = {
+  pitch: data.pitch, attacking_direction: ad, flip: ad < 0,
+  players: [], byId: new Map(), n_frames: 1,
+  // in the 2v1 game the carrier has the ball; the Pitch draws it from here
+  ball: { x: [data.start.carrier[0]], y: [data.start.carrier[1]] },
+  times: [0], onsets: {},
+};
+const ROLES = SOLVER_ROLES["2v1"];   // ball carrier, runner, defender
+const SLOTS = ["carrier", "receiver", "defender"];
+const COLOUR = { carrier: P.beneficiary, receiver: P.runner, defender: P.defender };
+SLOTS.forEach((slot, i) => {
+  const [x, y] = data.start[slot];
+  scene.players.push({ id: slot, shirt: String(i + 1), name: ROLES[i],
+                       side: slot === "defender" ? "defend" : "attack",
+                       x: [x], y: [y] });
+});
+for (const p of scene.players) scene.byId.set(p.id, p);
+
+const pitch = new Pitch($("pitch"), {});
+// the three bodies are the whole scene here, so all of them are "picked":
+// that is what gives them the full-emphasis marker the figures use
+const ROLE_OF = { carrier: "beneficiary", receiver: "runner", defender: "defender" };
+const selection = { roleOf: (id) => ROLE_OF[id] || null,
+                    runners: ["receiver"], defenders: ["defender"],
+                    beneficiaries: ["carrier"] };
+const solverRoles = { carrier: ROLES[0], receiver: ROLES[1], defender: ROLES[2] };
+
+let step = 0;
+const steps = (data.modal_line || []).length || 1;
+for (let k = 0; k < steps; k += 1) {
+  const b = document.createElement("button");
+  b.textContent = `${(data.step_seconds * k).toFixed(1)} s`;
+  b.onclick = () => { step = k; draw(); };
+  $("steps").append(b);
 }
 
-drawPolicy($("pol-attack"), attackRows(data));
-drawPolicy($("pol-defence"), defenderRows(data));
-$("pol-attack-kind").textContent = isMixed(data.root_attack) ? "mixed" : "pure";
-$("pol-defence-kind").textContent = isMixed(data.root_defender) ? "mixed" : "pure";
-$("pol-note").textContent = `${MODAL_LABEL}. ${MODAL_NOTE}`;
-const p = info.provenance || {};
-$("an-solver-prov").textContent =
-  `${p.repository}@${p.commit} · ${p.artifact}#${p.state_index}`;
-document.title = `${data.label} · harness`;
+function view(x, y) { return scene.flip ? [-x, y] : [x, -y]; }
+function viewVec(ux, uy) { return scene.flip ? [-ux, uy] : [ux, -uy]; }
+
+function options(slot, probabilities) {
+  const [dx, dy] = data.start[slot];
+  const targets = targetsFor(data.start.carrier, data.start.receiver,
+                             [ad * (data.pitch[0] / 2), 0]);
+  return (probabilities || []).map((probability, k) => {
+    const u = worldDirection(k, ad);
+    const label = slot === "defender"
+      ? defenderMoveLabel(u, [dx, dy], targets)
+      : compassName(u, ad);
+    return { label, probability, aim: viewVec(u[0], u[1]) };
+  }).filter((o) => o.probability > 1e-9);
+}
+
+function draw() {
+  for (const [i, b] of [...$("steps").children].entries()) {
+    b.classList.toggle("is-on", i === step);
+  }
+  pitch.clearDynamic();
+  pitch.drawField(null, null, scene);
+  pitch.drawAttackDirection();
+
+  const body = bodyPolicies(data, step);
+  for (const slot of SLOTS) {
+    const probabilities = slot === "defender" ? body?.defender
+      : (slot === "carrier" ? body?.carrier : body?.receiver);
+    if (!probabilities) continue;
+    drawActionArrows(pitch, view(...data.start[slot]), options(slot, probabilities),
+                     { colour: COLOUR[slot], length: 5.0 });
+  }
+  // the pass, in the figures' dashed black, only from a real release policy
+  if (body?.release > 0.01 && data.pass_candidates?.length === 0) {
+    const t = data.trajectories?.[0]?.release_target;
+    if (t) drawPassChoice(pitch, view(...data.start.carrier), view(...t),
+                          `Pass + receive · ${Math.round(body.release * 100)}%`);
+  }
+  pitch.drawPlayers(scene, 0, selection, { labels: true, solverRoles });
+
+  const info = summary(data);
+  const dm = massOf(body?.defender);
+  const rows = [
+    ["Decision", `${step} · ${(data.step_seconds * step).toFixed(1)} s`],
+    ["Equilibrium value", N(info.value, 4)],
+    ["Certificate gap", info.gap != null ? info.gap.toExponential(1) : "—"],
+    ["Attacker", body?.attackKnown
+      ? `${isMixed(data.root_attack) ? "Mixed" : "Pure"} · support `
+        + `${support(data.root_attack)}`
+      : "root only in this artifact"],
+    ["Defender", `${isMixed(body?.defender || []) ? "Mixed" : "Pure"} · support `
+                 + `${support(body?.defender || [])}`],
+    ["Defender mass", dm.complete ? "1.000"
+      : `${dm.total.toFixed(3)} · residual ${dm.residual.toFixed(3)}`],
+  ];
+  const list = $("rows"); list.replaceChildren();
+  for (const [k, v] of rows) {
+    const dt = document.createElement("dt"); dt.textContent = k;
+    const dd = document.createElement("dd"); dd.textContent = v;
+    list.append(dt, dd);
+  }
+  drawPolicy($("attack"), attackRows(data));
+  drawPolicy($("defence"), defenderRows({ ...data, root_defender: body?.defender || [] }));
+  $("akind").textContent = body?.attackKnown
+    ? (isMixed(data.root_attack) ? "mixed" : "pure") : "step 0 only";
+  $("dkind").textContent = isMixed(body?.defender || []) ? "mixed" : "pure";
+  $("note").textContent = `${MODAL_LABEL}. ${MODAL_NOTE}`;
+  const p = info.provenance || {};
+  $("prov").textContent = `${p.repository}@${p.commit} · ${p.artifact}#${p.state_index}`;
+}
+
+/** Crop to the three bodies plus room for their arrows, as the figures do. */
+function focusBox(pad = 14) {
+  const points = SLOTS.map((s) => view(...data.start[s]));
+  const xs = points.map((q) => q[0]);
+  const ys = points.map((q) => q[1]);
+  let x0 = Math.min(...xs) - pad;
+  let x1 = Math.max(...xs) + pad;
+  let y0 = Math.min(...ys) - pad;
+  let y1 = Math.max(...ys) + pad;
+  // keep the pitch's aspect so nothing is stretched
+  const aspect = (data.pitch[0] + 4) / (data.pitch[1] + 4);
+  const w = Math.max(x1 - x0, (y1 - y0) * aspect);
+  const h = w / aspect;
+  const cx = (x0 + x1) / 2;
+  const cy = (y0 + y1) / 2;
+  return [cx - w / 2, cy - h / 2, w, h];
+}
+
+pitch.setView(focusBox());
+draw();
+document.title = `${data.label} · equilibrium harness`;
 </script>
 </body>
 </html>

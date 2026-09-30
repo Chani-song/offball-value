@@ -34,6 +34,17 @@ export function view(scene, x, y) {
   return scene.flip ? [-x, y] : [x, -y];
 }
 
+/**
+ * A direction in pitch coordinates, as the same direction on screen.
+ *
+ * `view` is a reflection, so a vector takes its linear part: translating a
+ * direction with the point transform would be wrong, and forgetting it
+ * entirely draws every arrow mirrored in y.
+ */
+export function viewVector(scene, ux, uy) {
+  return scene.flip ? [-ux, uy] : [ux, -uy];
+}
+
 export function playerAt(scene, player, index) {
   return view(scene, player.x[index], player.y[index]);
 }

@@ -731,3 +731,76 @@ away"* is a claim, and the only warrant for one here is a person having said
 so — a test asserts no such sentence is assembled anywhere.
 
 414 tests. Initial load 241 KB (up 4 KB), Pages build 8.13 MB.
+
+---
+
+# Paper-figure alignment (2026-09-30)
+
+Branch `chani-ssac-demo-figure-aligned`, from `e337604`.
+Full detail in [`PAPER_FIGURE_ALIGNMENT.md`](PAPER_FIGURE_ALIGNMENT.md).
+
+## The finding that shaped this pass
+
+**The figure renderer is not on this machine.** Searched every ref in this
+repository, `origin/kyuhyeok-dev@e84553a`, the reference repo and the user's
+Desktop/Documents/Downloads for the figures' own captions — zero matches. Its
+colours, shapes and English action captions could not be recovered from source,
+and the brief's "Dribble / Slow down" match no decoder in the research code.
+
+So the pass split the alignment in two: **semantics ported exactly** from the
+figures' data producer, **house style taken from the brief and labelled as
+such**. `figure.js` says which is which at the top.
+
+## What was ported, and held numerically
+
+`extract_panel_policy.compass_name` (attackers: stop / forward / back / left /
+right) and `stage3_read.name_move_targets` (defender: the target whose cosine
+is largest and at least 0.3, ties to the later target, sideways below that, and
+`(0,0)` is **brake** not "stand"). Both of the abstract's runs use
+`--commands compass`, which is what decides that these are the figures'
+decoders.
+
+`FigureDecoderParityTests` runs the research functions and the browser port
+over 40 cases in a headless browser and requires identical strings — including
+the Korean names, which are glossed to English in one documented table.
+
+`볼 쪽` and `러너 쪽` are the dilemma in the research code's own words: *stay
+with the ball carrier* versus *follow the runner*.
+
+## What changed
+
+| | |
+| --- | --- |
+| Markers | shape per solver role — carrier circle, runner diamond, beneficiary triangle, defender square. Shape carries identity; colour reinforces it |
+| Roles | an explicit annotation→solver translation. The ball carrier comes from the tracking and wins; nothing is guessed to fill a shape |
+| Attack direction | `attack →`, drawn always. It is a constant, because `scene.flip` already normalises every scene to attack right |
+| Counterfactual | now **the dilemma**: the defender's five commands as an unweighted fan from his real position, each named by the research rule. Entering the mode moves the playhead to a frame that has a ball carrier — "toward the ball" is meaningless once the ball is loose, and the timeline opens on the shot |
+| Game solution | the same arrows weighted by the solved policy, with the decision following the playhead |
+| Background | muted to 22% in the solver modes. Visual only — every background defender stays in the numbers |
+
+## Honest limits
+
+No Bundesliga scene has a solver artifact, so Game solution is publicly the
+empty state. The equilibrium drawing is validated instead by
+`web/story_harness.html`, which draws the **real** `Pitch` with the **real**
+`arrows.js` and `figure.js` against a genuine solved study state
+(`lane_006`, mixed 0.878/0.122 both sides), banner-labelled a reference state.
+What it validates is what the demo would show.
+
+The artifact carries the root joint attack policy and `modal_line`'s per-step
+*defender* policy, not a per-step attack policy — so `bodyPolicies` returns
+`attackKnown: false` past step 0 rather than reusing the root, and the panel
+says "root only in this artifact". Probability mass is reported, never
+normalised.
+
+**One deliberate departure:** the brief asks for attackers in blue. The demo's
+runner-pink and beneficiary-cyan are load-bearing across every other view and
+the role dock, so recolouring would have cost more consistency than it bought.
+Defender orange matches.
+
+## Payload
+
+Deferring the OBSO stack, the conventions module and the arrow language, and
+splitting the carrier rule out of `obso.js`, paid for the always-loaded
+additions: **249.6 KB initial** against 241 KB before, with 30.9 KB now fetched
+only when a solver view opens. 446 tests.

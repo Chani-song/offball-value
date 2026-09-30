@@ -4,6 +4,22 @@
 // Same visual language as the rendered videos and the Dash app.
 
 import { P, ROLE_COLOUR } from "./palette.js";
+
+/**
+ * Marker shape per solver role, mirroring `figure.js:ROLE_SHAPE`.
+ *
+ * Inlined rather than imported: this is the only thing the pitch needs from
+ * the conventions module at load, and importing the module would pull its
+ * decoders into the first bundle for every visitor, including the ones who
+ * never open a solver view. `test_figure_alignment` holds the two copies equal.
+ */
+const ROLE_SHAPE = {
+  "ball carrier": "circle",
+  runner: "diamond",
+  beneficiary: "triangle",
+  teammate: "triangle",
+  defender: "square",
+};
 import { ballAt, playerAt, view } from "./scene.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -105,6 +121,7 @@ export class Pitch {
     const full = [-PITCH_L / 2 - MARGIN, -PITCH_W / 2 - MARGIN,
                   PITCH_L + 2 * MARGIN, PITCH_W + 2 * MARGIN];
     const [x, y, w, h] = box || full;
+    this.view = { x0: x, y0: y, x1: x + w, y1: y + h };
     this.svg.setAttribute("viewBox", `${x} ${y} ${w} ${h}`);
     // preserveAspectRatio fits whichever axis binds, so take the looser ratio
     this.k = Math.max(w / full[2], h / full[3]);
@@ -232,8 +249,20 @@ export class Pitch {
   }
 
   /** Players, with the side that can be clicked brought forward. */
+  /**
+   * `solverRoles` maps a player id to the paper's role (ball carrier / runner
+   * / beneficiary / defender) and decides his marker shape. It is a separate
+   * argument from `selection` on purpose: the demo's annotation roles and the
+   * solver's roles are different vocabularies and must not be silently
+   * equated (see PAPER_FIGURE_ALIGNMENT.md).
+   *
+   * `muted` dims everyone who is not a central actor, as the figures do.
+   * Muting is visual only -- every background defender stays in the numbers.
+   */
   drawPlayers(scene, index, selection, { labels = true, activeSide = null,
-                                          hints = [], dragging = null } = {}) {
+                                          hints = [], dragging = null,
+                                          solverRoles = null,
+                                          muted = false } = {}) {
     const hintSet = new Set(hints);
     for (const player of scene.players) {
       const position = playerAt(scene, player, index);
@@ -241,7 +270,9 @@ export class Pitch {
       const [x, y] = position;
       const role = selection.roleOf(player.id);
       const colour = role ? ROLE_COLOUR[role] : (player.side === "attack" ? P.attack : P.defend);
+      const solverRole = solverRoles ? solverRoles[player.id] : null;
       let opacity = role ? 1 : 0.55;
+      if (muted && !role && !solverRole) opacity = 0.22;
       if (activeSide && !role) opacity = player.side === activeSide ? 0.95 : 0.2;
       const radius = (role ? 1.55 : 1.2) * Math.max(this.k, 0.62);
 
@@ -263,9 +294,10 @@ export class Pitch {
         }));
       }
       if (role) {
-        group.appendChild(circle(x, y, radius + 1.5, { fill: colour, opacity: 0.16 }));
+        group.appendChild(roleMarker(x, y, radius + 1.5, solverRole,
+                                     { fill: colour, opacity: 0.16 }));
       }
-      group.appendChild(circle(x, y, radius, {
+      group.appendChild(roleMarker(x, y, radius, solverRole, {
         fill: colour, stroke: role ? colour : P.ink,
         "stroke-width": role ? 0.4 : 0.18,
       }));
@@ -463,6 +495,78 @@ export class Pitch {
     }
   }
 }
+
+/**
+ * A marker for one role, in the figures' shape language.
+ *
+ * Shape carries the role and colour only reinforces it, so the actors stay
+ * distinguishable in greyscale, in print and under colour-vision deficiency.
+ * `solverRole` is the paper's role (ball carrier / runner / beneficiary /
+ * defender); anyone without one keeps the circle everybody started with.
+ */
+function roleMarker(cx, cy, r, solverRole, attrs) {
+  const shape = ROLE_SHAPE[solverRole] || "circle";
+  if (shape === "circle") return circle(cx, cy, r, attrs);
+  const node = document.createElementNS(SVG_NS, "polygon");
+  let points;
+  // sized so every shape covers about the same area as the circle of radius r:
+  // a diamond and a triangle of equal half-width look much heavier otherwise
+  if (shape === "square") {
+    const s = r * 0.87;
+    points = [[-s, -s], [s, -s], [s, s], [-s, s]];
+  } else if (shape === "diamond") {
+    const s = r * 1.16;
+    points = [[0, -s], [s, 0], [0, s], [-s, 0]];
+  } else {                                  // triangle, point up
+    const s = r * 1.12;
+    points = [[0, -s * 0.94], [s * 0.92, s * 0.70], [-s * 0.92, s * 0.70]];
+  }
+  node.setAttribute("points",
+    points.map(([dx, dy]) => `${cx + dx},${cy + dy}`).join(" "));
+  for (const [k, v] of Object.entries(attrs || {})) node.setAttribute(k, String(v));
+  return node;
+}
+
+/**
+ * "attack →", as the figures carry it.
+ *
+ * `scene.view` normalises every scene so the attack runs to the right on
+ * screen (`scene.flip = attacking_direction < 0`), so this arrow is a
+ * constant rather than a per-scene fact. It is still worth drawing: a reader
+ * should not have to infer which way the play goes before reading an action
+ * arrow, and the figures carry it for the same reason.
+ */
+Pitch.prototype.drawAttackDirection = function drawAttackDirection() {
+  const direction = 1;
+  const box = this.view || { x0: -PITCH_L / 2 - MARGIN, y0: -PITCH_W / 2 - MARGIN,
+                             x1: PITCH_L / 2 + MARGIN, y1: PITCH_W / 2 + MARGIN };
+  const y = box.y0 + 1.9 * Math.max(this.k, 0.62);
+  const x = box.x0 + 3.2 * Math.max(this.k, 0.62);
+  const len = 5.0 * Math.max(this.k, 0.62);
+  const group = this.add("labels", "g", { class: "attack-dir", opacity: 0.72 });
+  const line = document.createElementNS(SVG_NS, "path");
+  const x0 = direction > 0 ? x : x + len;
+  const x1 = direction > 0 ? x + len : x;
+  const head = 0.9 * Math.max(this.k, 0.62);
+  line.setAttribute("d",
+    `M ${x0} ${y} L ${x1} ${y} M ${x1} ${y} `
+    + `l ${-direction * head} ${-head * 0.62} M ${x1} ${y} `
+    + `l ${-direction * head} ${head * 0.62}`);
+  line.setAttribute("fill", "none");
+  line.setAttribute("stroke", P.text2);
+  line.setAttribute("stroke-width", 0.22 * Math.max(this.k, 0.62));
+  line.setAttribute("stroke-linecap", "round");
+  group.appendChild(line);
+  // the label follows the arrow rather than preceding it: at the left margin
+  // an "end"-anchored label has nowhere to go and is clipped
+  const text = this.add("labels", "text", {
+    x: x + len + 0.8, y: y + 0.42 * Math.max(this.k, 0.62),
+    "text-anchor": "start",
+    "font-size": 1.5 * Math.max(this.k, 0.62), fill: P.text2, class: "attack-dir-label",
+  }, "attack");
+  group.appendChild(text);
+  return group;
+};
 
 function circle(cx, cy, r, attrs) {
   const node = document.createElementNS(SVG_NS, "circle");
