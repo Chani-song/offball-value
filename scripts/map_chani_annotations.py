@@ -49,7 +49,7 @@ NS = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
 
 
 def read_xlsx(path: Path, sheet_index: int = 0) -> list[list[str]]:
-    """Read a sheet without openpyxl (not installed in .venv-delta)."""
+    """Read a sheet without openpyxl (not installed in our environment)."""
     archive = zipfile.ZipFile(path)
     shared: list[str] = []
     if "xl/sharedStrings.xml" in archive.namelist():
@@ -103,10 +103,10 @@ def main() -> None:
     rows = read_xlsx(args.annotations)
     header = rows[0]
     records = [dict(zip(header, r)) for r in rows[1:] if any(r)]
-    print(f"주석 {len(records)}행")
+    print(f"{len(records)} annotation rows")
 
     candidates = pd.read_csv(args.candidates)
-    print(f"후보 풀 {len(candidates)}행, 경기 {candidates['match_id'].nunique()}개")
+    print(f"candidate pool {len(candidates)} rows, {candidates['match_id'].nunique()} matches")
 
     out = []
     for short_id in sorted({r["match_id"] for r in records}):
@@ -124,7 +124,7 @@ def main() -> None:
             )
             shots["frame_id"] = shots["frame_id"].fillna(filled)
         shots = shots.dropna(subset=["frame_id"])
-        print(f"  DFL ShotAtGoal 이벤트 {len(shots)}개")
+        print(f"  {len(shots)} DFL ShotAtGoal events")
 
         mine = [r for r in records if r["match_id"] == short_id]
         pool = candidates[candidates["match_id"] == match_id]
@@ -177,27 +177,27 @@ def main() -> None:
     frame.to_csv(args.output, index=False)
 
     print("\n" + "=" * 70)
-    print("1. 시계 정합성 — 주석 슛 시각 vs DFL ShotAtGoal 이벤트")
+    print("1. Clock alignment — annotated shot times vs DFL ShotAtGoal events")
     off = frame["clock_offset_s"].dropna()
-    print(f"   중앙값 {off.median():.3f}s  평균 {off.mean():.3f}s  "
-          f"90분위 {off.quantile(0.9):.3f}s  최대 {off.max():.3f}s")
+    print(f"   median {off.median():.3f}s  mean {off.mean():.3f}s  "
+          f"P90 {off.quantile(0.9):.3f}s  max {off.max():.3f}s")
     for thr in (0.5, 1.0, 2.0, 5.0):
-        print(f"   {thr}s 이내: {(off <= thr).sum()}/{len(off)} ({(off <= thr).mean():.1%})")
+        print(f"   within {thr}s: {(off <= thr).sum()}/{len(off)} ({(off <= thr).mean():.1%})")
 
-    print("\n2. 커버리지 — 레이블된 슛이 후보 풀 possession 안에 들어오는가")
+    print("\n2. Coverage — do labelled shots fall inside a candidate-pool possession?")
     lab = frame[frame["labelled"]]
-    print(f"   레이블 {len(lab)}개")
-    print(f"   같은 possession 안에 onset 있음: {(lab['onsets_in_phase'] > 0).sum()}/{len(lab)} "
+    print(f"   {len(lab)} labelled")
+    print(f"   onset in the same possession: {(lab['onsets_in_phase'] > 0).sum()}/{len(lab)} "
           f"({(lab['onsets_in_phase'] > 0).mean():.1%})")
-    print(f"   ±10s 안에 onset 있음:            {(lab['onsets_within_10s'] > 0).sum()}/{len(lab)} "
+    print(f"   onset within ±10s:            {(lab['onsets_within_10s'] > 0).sum()}/{len(lab)} "
           f"({(lab['onsets_within_10s'] > 0).mean():.1%})")
-    print("\n   effect별 같은-possession 적중:")
+    print("\n   same-possession hits by effect:")
     for eff in ("strong", "medium", "low"):
         sub = lab[lab["effect"] == eff]
         if len(sub):
             print(f"     {eff:7} {(sub['onsets_in_phase'] > 0).sum():>3}/{len(sub):<3} "
                   f"({(sub['onsets_in_phase'] > 0).mean():.1%})")
-    print(f"\n저장: {args.output}")
+    print(f"\nsaved: {args.output}")
 
 
 if __name__ == "__main__":

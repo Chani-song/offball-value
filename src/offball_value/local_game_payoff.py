@@ -816,7 +816,7 @@ def _response_candidates(
             references.append(
                 {
                     "response_id": "causal_policy",
-                    "label": "인과 정책 · t≤T 관측만 사용",
+                    "label": "causal policy · uses only observations at t≤T",
                     "kind": "causal_policy_reference",
                     "is_search_candidate": False,
                     "path_txy": [list(row) for row in causal_path],
@@ -838,7 +838,7 @@ def _response_candidates(
         responses.append(
             {
                 "response_id": f"focus:{option_id}",
-                "label": f"옵션 억제 · {cell['option_name']}",
+                "label": f"suppress option · {cell['option_name']}",
                 "kind": "option_focus",
                 "focus_option_id": str(option_id),
                 "is_search_candidate": True,
@@ -904,7 +904,7 @@ def _response_candidates(
                         f"r{int(round(100 * runner_weight))}"
                     ),
                     "label": (
-                        f"중간 대응 · runner {int(round(100 * runner_weight))}% / "
+                        f"compromise · runner {int(round(100 * runner_weight))}% / "
                         f"{primary['option_name']} "
                         f"{int(round(100 * (1-runner_weight)))}%"
                     ),

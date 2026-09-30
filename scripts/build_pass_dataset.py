@@ -3,7 +3,7 @@
 
 Written for the two candidate replacements of the solver's positions-only pass
 model (2026-09-25): A, a physics arrival race with three fitted numbers, and
-B1, 준현's own logistic refitted on his velocity feature set. Both are fitted
+B1, Andrew's own logistic refitted on his velocity feature set. Both are fitted
 on these rows, so both see the same passes, labels and targets.
 
 What each row holds, and why:
@@ -189,25 +189,25 @@ def collect(match_id: str, raw_dir: Path) -> list[dict]:
             "actual_receiver_is_intended": observed.receiver_id == intended.receiver_id,
             "event_frame_id": event_fid,
         })
-    print(f"  [{match_id}] 킥 순간을 못 찾아 제외 {unsynced}", flush=True)
+    print(f"  [{match_id}] dropped, kick instant not found: {unsynced}", flush=True)
     return rows
 
 
 def main() -> None:
     args = parse_args()
     ids = match_ids(args.raw_dir)
-    print("경기:", ids, flush=True)
+    print("matches:", ids, flush=True)
     rows = []
     with ProcessPoolExecutor(max_workers=args.workers) as pool:
         for match_id, got in zip(ids, pool.map(collect, ids, [args.raw_dir] * len(ids))):
             rows.extend(got)
             done = sum(r["label"] for r in got)
-            print(f"  [{match_id}] 패스 {len(got):,} · 성공 {done:,} ({done / max(len(got), 1):.3f})",
+            print(f"  [{match_id}] passes {len(got):,} · completed {done:,} ({done / max(len(got), 1):.3f})",
                   flush=True)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text("".join(json.dumps(r) + "\n" for r in rows))
     lab = sum(r["label"] for r in rows)
-    print(f"합계 {len(rows):,} 패스 · 성공률 {lab / max(len(rows), 1):.4f} → {args.output}", flush=True)
+    print(f"total {len(rows):,} passes · completion {lab / max(len(rows), 1):.4f} → {args.output}", flush=True)
 
 
 if __name__ == "__main__":

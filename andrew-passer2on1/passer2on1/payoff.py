@@ -44,7 +44,7 @@ from .run_passes import target_of
 
 # ---- threat variant "epv_time" (2026-09-27, after the through-ball diagnostic)
 #
-# 준현's threat is 0.2 + 0.8 * location * (0.55 + 0.25 room + 0.2 location(support)
+# Andrew's threat is 0.2 + 0.8 * location * (0.55 + 0.25 room + 0.2 location(support)
 # support_room). Its location term rises 13 % over the 8 m from 70 to 78 m and its
 # room term is direction-blind, so a runner free in behind is worth little more
 # than one marked at his feet; swapping the room term alone moved the in-behind /
@@ -59,7 +59,7 @@ from .run_passes import target_of
 #             arrival at the target minus the receiver's, by the same agile
 #             race as pass model A (4.5 m/s^2 up to 9 m/s). For a standing
 #             defender and a receiver already on the spot the margin is his
-#             own run time, so d is his distance and the room is exactly 준현's;
+#             own run time, so d is his distance and the room is exactly Andrew's;
 #             a defender running away gains margin and room, one closing in
 #             loses it. No new number enters.
 # Support and its room are as before. Retention (2v1) prices the carrier the

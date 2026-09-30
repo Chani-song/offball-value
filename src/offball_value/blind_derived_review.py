@@ -44,9 +44,9 @@ FORBIDDEN_TOKENS = (
 )
 
 _TEMPLATE = """<!doctype html>
-<html lang="ko"><head><meta charset="utf-8">
+<html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>파생 수혜자 블라인드 판정</title>
+<title>Derived-beneficiary blind labelling</title>
 <style>
 :root{color-scheme:dark}
 body{margin:0;background:#0d1117;color:#e6edf3;font:15px/1.55 -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",sans-serif}
@@ -71,8 +71,8 @@ textarea{width:100%;min-height:56px;resize:vertical}
 .q{font-weight:700;margin:2px 0 6px}
 </style></head><body>
 <header>
-  <h1>파생 수혜자 블라인드 판정</h1>
-  <div class="sub">모델 예측이 이 화면에 없습니다. 판정 후 사전등록 표와 대조합니다.</div>
+  <h1>Derived-beneficiary blind labelling</h1>
+  <div class="sub">This screen carries no model predictions. Labels are compared with the preregistered table afterwards.</div>
 </header>
 <main>
   <section>
@@ -80,7 +80,7 @@ textarea{width:100%;min-height:56px;resize:vertical}
       <select data-testid="scene-select" class="scene"></select>
       <select data-testid="defender-select" class="defender"></select>
     </div>
-    <svg class="pitch" data-testid="pitch-animation" viewBox="0 0 105 68" role="img" aria-label="장면 애니메이션">
+    <svg class="pitch" data-testid="pitch-animation" viewBox="0 0 105 68" role="img" aria-label="Scene animation">
       <rect x="0" y="0" width="105" height="68" fill="#123d1e"/>
       <rect x="0" y="13.85" width="16.5" height="40.3" fill="none" stroke="white" stroke-width=".25"/>
       <rect x="88.5" y="13.85" width="16.5" height="40.3" fill="none" stroke="white" stroke-width=".25"/>
@@ -89,44 +89,44 @@ textarea{width:100%;min-height:56px;resize:vertical}
       <g class="moving"></g>
     </svg>
     <div class="row">
-      <button class="play">재생</button>
+      <button class="play">Play</button>
       <input class="scrub" type="range" min="0" value="0" style="flex:1">
       <span class="time"></span>
     </div>
   </section>
   <section>
-    <div class="warn">답은 <b>반드시 아래 목록의 선수 이름</b>으로. 공간 묘사는 라벨이 될 수 없습니다
-    (누군가 그걸 선수로 옮기는 순간 블라인드가 깨집니다). <b>볼 소유자도 정답이 될 수 있습니다.</b>
-    확실하지 않으면 <b>없음</b>을 고르세요 — 억지 추측보다 낫습니다.</div>
+    <div class="warn">Answer <b>only with a player name from the list below</b>. A description of space cannot be a label
+    (the moment someone turns it into a player, the blinding is broken). <b>The ball carrier can also be the answer.</b>
+    If unsure, choose <b>None</b> — better than a forced guess.</div>
     <div class="card">
       <h2 class="ctx"></h2>
-      <div class="q">이 수비수가 러너를 따라가는 선택을 실제로 마주하나요?</div>
+      <div class="q">Does this defender actually face the choice of following the runner?</div>
       <div class="row">
-        <label style="margin:0"><input type="radio" name="reacts" value="yes"> 예</label>
-        <label style="margin:0"><input type="radio" name="reacts" value="no"> 아니오 (딜레마 없음)</label>
-        <label style="margin:0"><input type="radio" name="reacts" value="unsure"> 모르겠음</label>
+        <label style="margin:0"><input type="radio" name="reacts" value="yes"> Yes</label>
+        <label style="margin:0"><input type="radio" name="reacts" value="no"> No (no dilemma)</label>
+        <label style="margin:0"><input type="radio" name="reacts" value="unsure"> Not sure</label>
       </div>
-      <div class="q" style="margin-top:14px">따라갈 때와 아닐 때, 가장 이득 차이가 큰 선수는?</div>
+      <div class="q" style="margin-top:14px">Which player's gain differs most between following and not following?</div>
       <div class="opts" data-testid="beneficiary-options"></div>
-      <label>차선 (동률일 때만)</label>
+      <label>Second choice (only if tied)</label>
       <select class="alt"></select>
-      <label>확신도</label>
+      <label>Confidence</label>
       <select class="confidence">
-        <option value="high">높음</option><option value="medium" selected>보통</option><option value="low">낮음</option>
+        <option value="high">High</option><option value="medium" selected>Medium</option><option value="low">Low</option>
       </select>
-      <label>목록에 없는 수비수를 지목하고 싶다면 (이름 + 수혜자)</label>
-      <input class="outside" style="width:100%" placeholder="비워두셔도 됩니다">
-      <label>메모</label>
+      <label>To name a defender who is not on the list (name + beneficiary)</label>
+      <input class="outside" style="width:100%" placeholder="May be left blank">
+      <label>Note</label>
       <textarea class="note"></textarea>
       <div class="row">
-        <button class="primary save">저장하고 다음</button>
+        <button class="primary save">Save and next</button>
         <span class="progress"></span>
       </div>
     </div>
     <div class="card">
-      <h2>내보내기</h2>
-      <div class="sub">모든 행을 채운 뒤 CSV로 저장해 주세요.</div>
-      <div class="row"><button data-testid="review-export" class="export">CSV 내려받기</button></div>
+      <h2>Export</h2>
+      <div class="sub">Fill in every row, then save as CSV.</div>
+      <div class="row"><button data-testid="review-export" class="export">Download CSV</button></div>
     </div>
   </section>
 </main>
@@ -139,24 +139,24 @@ const scene=()=>DATA[si], defender=()=>scene().defenders[di];
 const key=()=>`${scene().match_id}:${scene().onset_frame_id}:${defender().defender_id}:${scene().repeat_tag||''}`;
 const esc=t=>String(t??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function fillSelectors(){
-  q('.scene').innerHTML=DATA.map((s,i)=>`<option value="${i}">${esc(s.match_label||s.match_id)} · ${esc(s.onset_frame_id)} · 러너 ${esc(s.runner_name)}</option>`).join('');
+  q('.scene').innerHTML=DATA.map((s,i)=>`<option value="${i}">${esc(s.match_label||s.match_id)} · ${esc(s.onset_frame_id)} · runner ${esc(s.runner_name)}</option>`).join('');
   q('.scene').value=si;
-  q('.defender').innerHTML=scene().defenders.map((d,i)=>`<option value="${i}">수비수 ${esc(d.defender_name)}</option>`).join('');
+  q('.defender').innerHTML=scene().defenders.map((d,i)=>`<option value="${i}">Defender ${esc(d.defender_name)}</option>`).join('');
   q('.defender').value=di;
 }
 function fillForm(){
   const d=defender(),saved=store[key()]||{};
-  q('.ctx').textContent=`${scene().runner_name} 의 오프더볼 · 볼 소유자 ${scene().carrier_name} · 수비수 ${d.defender_name}`;
+  q('.ctx').textContent=`Off-ball run by ${scene().runner_name} · ball carrier ${scene().carrier_name} · defender ${d.defender_name}`;
   q('[data-testid="beneficiary-options"]').innerHTML=d.options.map(o=>
-    `<label><input type="radio" name="ben" value="${esc(o.option_id)}"${saved.beneficiary===o.option_id?' checked':''}> ${esc(o.option_name)}${o.is_carrier?' (볼 소유자)':''}</label>`
-  ).join('')+`<label><input type="radio" name="ben" value="none"${saved.beneficiary==='none'?' checked':''}> 없음 — 뚜렷한 수혜자가 없음</label>`;
-  q('.alt').innerHTML='<option value="">(없음)</option>'+d.options.map(o=>`<option value="${esc(o.option_id)}"${saved.beneficiary_alt===o.option_id?' selected':''}>${esc(o.option_name)}</option>`).join('');
+    `<label><input type="radio" name="ben" value="${esc(o.option_id)}"${saved.beneficiary===o.option_id?' checked':''}> ${esc(o.option_name)}${o.is_carrier?' (ball carrier)':''}</label>`
+  ).join('')+`<label><input type="radio" name="ben" value="none"${saved.beneficiary==='none'?' checked':''}> None — no clear beneficiary</label>`;
+  q('.alt').innerHTML='<option value="">(none)</option>'+d.options.map(o=>`<option value="${esc(o.option_id)}"${saved.beneficiary_alt===o.option_id?' selected':''}>${esc(o.option_name)}</option>`).join('');
   document.getElementsByName('reacts').forEach(r=>{r.checked=saved.defender_reacts===r.value});
   q('.confidence').value=saved.confidence||'medium';
   q('.outside').value=saved.outside_list_who||'';
   q('.note').value=saved.note||'';
   const total=DATA.reduce((n,s)=>n+s.defenders.length,0);
-  q('.progress').textContent=`${Object.keys(store).length} / ${total} 행 완료`;
+  q('.progress').textContent=`${Object.keys(store).length} / ${total} rows done`;
 }
 function frames(){return scene().frames}
 function drawFrame(){
@@ -174,12 +174,12 @@ function drawFrame(){
   q('.moving').innerHTML=html;
   q('.scrub').max=frames().length-1;q('.scrub').value=fi;
   const t=Number(f.relative_time_s)||0;
-  q('.time').textContent=`t=${t>=0?'+':''}${t.toFixed(2)}초 · ${fi+1}/${frames().length}`;
+  q('.time').textContent=`t=${t>=0?'+':''}${t.toFixed(2)} s · ${fi+1}/${frames().length}`;
 }
 function save(){
   const ben=document.querySelector('input[name="ben"]:checked'),
     reacts=document.querySelector('input[name="reacts"]:checked');
-  if(!ben||!reacts){alert('반응 여부와 수혜자를 모두 고르세요 (모르면 "모르겠음"/"없음").');return}
+  if(!ben||!reacts){alert('Choose both the reaction and the beneficiary (if unsure, "Not sure"/"None").');return}
   store[key()]={match_id:scene().match_id,onset_frame_id:scene().onset_frame_id,
     repeat_tag:scene().repeat_tag||'',
     runner_name:scene().runner_name,carrier_name:scene().carrier_name,
@@ -200,8 +200,8 @@ function exportCsv(){
 q('.scene').addEventListener('change',e=>{si=Number(e.target.value);di=0;fi=0;fillSelectors();fillForm();drawFrame()});
 q('.defender').addEventListener('change',e=>{di=Number(e.target.value);fillForm();drawFrame()});
 q('.scrub').addEventListener('input',e=>{fi=Number(e.target.value);drawFrame()});
-q('.play').addEventListener('click',()=>{if(timer){clearInterval(timer);timer=null;q('.play').textContent='재생';return}
-  q('.play').textContent='정지';timer=setInterval(()=>{fi=(fi+1)%frames().length;drawFrame()},90)});
+q('.play').addEventListener('click',()=>{if(timer){clearInterval(timer);timer=null;q('.play').textContent='Play';return}
+  q('.play').textContent='Stop';timer=setInterval(()=>{fi=(fi+1)%frames().length;drawFrame()},90)});
 q('.save').addEventListener('click',save);
 q('.export').addEventListener('click',exportCsv);
 fillSelectors();fillForm();drawFrame();

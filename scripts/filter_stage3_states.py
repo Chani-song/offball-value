@@ -33,6 +33,7 @@ from __future__ import annotations
 import argparse
 import glob
 import json
+import os
 from pathlib import Path
 
 import numpy as np
@@ -46,7 +47,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--states", type=Path, required=True)
     p.add_argument("--output", type=Path, required=True)
     p.add_argument("--build", type=Path,
-                   default=Path("/work/hdd/bbmr/kseo1/offball-out/v7_r9_ssac"))
+                   default=Path(os.environ.get("OFFBALL_OUT_ROOT", Path(__file__).resolve().parents[1] / "out/runs")) / "v7_r9_ssac")
     p.add_argument("--onsets", default=str(ROOT / "data/processed/run_onset_v0_5/dir25/*/audit_selection.csv"))
     p.add_argument("--min-run-speed", type=float, default=3.8)
     p.add_argument("--buffer-m", type=float, default=0.0,
@@ -155,8 +156,8 @@ def main() -> None:
     args.output.write_text(json.dumps(out, indent=1))
     runs = sum(1 for d in dropped if d["reason"].startswith("run speed"))
     tri = sum(1 for d in dropped if "triangle" in d["reason"])  # inside or within the buffer
-    print(f"{len(source['states'])} → {len(kept)}  (런 속도 탈락 {runs} · 삼각형 탈락 {tri} · "
-          f"기타 {len(dropped) - runs - tri})  → {args.output}")
+    print(f"{len(source['states'])} → {len(kept)}  (dropped for run speed {runs} · triangle {tri} · "
+          f"other {len(dropped) - runs - tri})  → {args.output}")
 
 
 if __name__ == "__main__":

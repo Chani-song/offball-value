@@ -6,7 +6,7 @@ solve. How good the candidates are is the fit report's business, not this.
 
   1  copies      physics_pass.py byte-identical in its three homes
   2  loading     every router file names models that load through
-                 physics_pass.load_pass_model; B1 loads through 준현's own
+                 physics_pass.load_pass_model; B1 loads through Andrew's own
                  ExpectedPass.load without the proxy opt-in (its targets are
                  intended-at-kick, not proxies)
   3  cross-fit   the routers cover every training match, each with a model
@@ -19,7 +19,7 @@ solve. How good the candidates are is the fit report's business, not this.
                  other way; the positions-only baseline cannot move at all
 
 Run:  PYTHONPATH=andrew-passer2on1:andrew-fixedpasser:src \\
-      .venv-delta/bin/python andrew-passer2on1/tests/test_pass_candidates.py data/processed/pass_models
+      python andrew-passer2on1/tests/test_pass_candidates.py data/processed/pass_models
 """
 
 from __future__ import annotations
@@ -65,7 +65,7 @@ def main() -> None:
                   meta.get("held_out_match") == m and m not in meta.get("trained_on", [m]))
             load_pass_model(models / f)
         loaded[name] = load_pass_model(models / router["default"])
-    check("B1 loads with 준현's loader, no proxy opt-in",
+    check("B1 loads with Andrew's loader, no proxy opt-in",
           isinstance(ExpectedPass.load(models / "B1_all.json"), ExpectedPass))
     check("A is the physics model", isinstance(loaded["A"], PhysicsRacePass))
 
@@ -96,7 +96,7 @@ def main() -> None:
               and np.abs(p - one).max() < 1e-9, f"{p.min():.3f}-{p.max():.3f}")
 
     print("5  velocity")
-    probe = {row["상황"]: row for row in report["probe"]}
+    probe = {row["situation"]: row for row in report["probe"]}
     rows = list(probe.values())
     check("A rises with the runner's sprint and the defender running away",
           rows[0]["A"] < rows[1]["A"] < rows[2]["A"], " → ".join(f"{r['A']:.3f}" for r in rows))

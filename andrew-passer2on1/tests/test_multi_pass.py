@@ -25,7 +25,7 @@ from passer2on1.multi_markov import certificate_multi, solve_multi
 from passer2on1.physics_pass import load_pass_model
 from passer2on1.solve import game_from, solve_one
 
-ROOT = Path(os.environ.get("OFFBALL_DATA_ROOT", "/scratch/bbmr/kseo1/offball-value"))
+ROOT = Path(os.environ.get("OFFBALL_DATA_ROOT", Path(__file__).resolve().parents[2]))
 STATES = ROOT / "data/processed/showcase_v1/figure_2v1/states_2v1_all.json"
 MODEL = ROOT / "andrew/models/experimental_pass.json"
 PHYSICS = json.loads((ROOT / "data/processed/physics_limits/agile_p999_nodelay.json").read_text())

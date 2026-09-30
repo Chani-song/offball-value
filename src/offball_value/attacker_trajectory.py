@@ -7,7 +7,7 @@ attacking options stayed pinned to the one path they happened to run.
 
 The reviewer's objection (2026-09-08): a team-mate who misreads the run
 scores zero occupation, so the run itself gets credited with nothing — but
-"수혜자 후보들이 바보같이 움직여서" is a fact about the team-mate, not
+"the beneficiary candidates moved stupidly" is a fact about the team-mate, not
 about the run. The first attempt (R7) fixed that by asking only "could he
 reach the space in time", which threw away the direction information that
 made R6 work: with a 1.5 s window most nearby players can reach it, so the

@@ -218,7 +218,7 @@ def main() -> None:
     xmodel = load_xpass_model(args.xpass_model)
     match_ids = [m for m in list_bundesliga_match_ids(args.raw_dir)
                  if m not in EXCLUDED_MATCHES]
-    print(f"경기 {len(match_ids)}개", flush=True)
+    print(f"{len(match_ids)} matches", flush=True)
 
     rows = []
     agg = {"events": 0, "unresolved": 0, "label_agree": 0, "label_seen": 0,
@@ -228,15 +228,15 @@ def main() -> None:
         rows.extend(got)
         for k in agg:
             agg[k] += st.get(k, 0)
-        print(f"  [{match_id}] 패스 {len(got):,} · 누적 {len(rows):,}", flush=True)
-    print(f"\n  이벤트 {agg['events']:,} · 추적으로 도착지 확정 실패 {agg['unresolved']:,}"
+        print(f"  [{match_id}] passes {len(got):,} · total {len(rows):,}", flush=True)
+    print(f"\n  events {agg['events']:,} · destination not resolved from tracking {agg['unresolved']:,}"
           f" ({agg['unresolved']/max(agg['events'],1):.1%})")
     if agg["label_seen"]:
-        print(f"  추적 라벨 vs 이벤트 Evaluation 일치율: "
-              f"{agg['label_agree']/agg['label_seen']:.1%}  (독립 검증)")
-        print(f"  의도 수신자 == 실제 수신자: "
+        print(f"  tracking label vs event Evaluation agreement: "
+              f"{agg['label_agree']/agg['label_seen']:.1%}  (independent check)")
+        print(f"  intended receiver == actual receiver: "
               f"{agg['intended_is_actual']/agg['label_seen']:.1%}"
-              f"  (100%% 면 누출, 낮으면 추론 실패 — 성공률 근처여야 정상)")
+              f"  (100%% means leakage, low means inference failure — should sit near the completion rate)")
 
     label = np.array([r["label"] for r in rows])
     raw = np.array([r["hybrid_raw"] for r in rows])
@@ -245,44 +245,44 @@ def main() -> None:
     inferred = np.zeros(len(rows), dtype=bool)
 
     print(f"\n{'='*84}")
-    print("[1] 모집단과 현재 수준")
+    print("[1] Population and current level")
     print("="*84)
-    print(f"  오픈플레이 패스 {len(rows):,}개 · 실제 성공률 {label.mean():.4f}")
+    print(f"  {len(rows):,} open-play passes · actual completion rate {label.mean():.4f}")
     ev_label = np.array([r["event_label"] for r in rows])
-    print(f"  이벤트 Evaluation 기준 성공률 {ev_label.mean():.4f} (참고)")
-    print(f"  이동거리 중앙 {np.median([r['travel_m'] for r in rows]):.1f} m · "
-          f"비행시간 중앙 {np.median([r['flight_s'] for r in rows]):.2f} s")
-    print(f"\n  하이브리드 4개 항의 중앙값")
-    for k, nm in (("path_survival","경로생존"),("receiver_first","수신자선점"),
-                  ("secure","확보"),("pressure","패서압박"),("xpass_geometry","xPass기하")):
+    print(f"  completion rate by event Evaluation {ev_label.mean():.4f} (for reference)")
+    print(f"  median travel distance {np.median([r['travel_m'] for r in rows]):.1f} m · "
+          f"median flight time {np.median([r['flight_s'] for r in rows]):.2f} s")
+    print(f"\n  Medians of the hybrid's 4 terms")
+    for k, nm in (("path_survival","path survival"),("receiver_first","receiver first"),
+                  ("secure","secure"),("pressure","passer pressure"),("xpass_geometry","xPass geometry")):
         print(f"    {nm:<12}{np.median([r[k] for r in rows]):>8.3f}")
-    print(f"\n  {'':<20}{'중앙':>9}{'평균':>9}{'Brier':>9}")
-    for nm, v in (("하이브리드 raw", raw), ("역학 단독", mech)):
+    print(f"\n  {'':<20}{'median':>9}{'mean':>9}{'Brier':>9}")
+    for nm, v in (("hybrid raw", raw), ("mechanistic only", mech)):
         print(f"  {nm:<18}{np.median(v):>9.3f}{v.mean():>9.3f}{brier(v, label):>9.4f}")
-    print(f"  {'실제':<18}{'':>9}{label.mean():>9.3f}")
+    print(f"  {'actual':<18}{'':>9}{label.mean():>9.3f}")
 
     print(f"\n{'='*84}")
-    print("[1b] 도착 경쟁별 실제 성공률 — 모델이 아니라 관측")
+    print("[1b] Actual completion rate by arrival race — observed, not modelled")
     print("="*84)
-    print("  margin = 수비수가 목표에 닿는 시간 − 수신자가 공을 잡을 수 있는 시간")
-    print("  (양수 = 수신자가 먼저, 0 = 동시, 음수 = 수비수가 먼저)\n")
+    print("  margin = time for the defender to reach the target − time for the receiver to be able to take the ball")
+    print("  (positive = receiver first, 0 = simultaneous, negative = defender first)\n")
     margin = np.array([r["defender_margin_s"] for r in rows])
-    print(f"  {'margin (초)':<20}{'n':>8}{'실제 성공률':>13}"
-          f"{'하이브리드':>11}{'역학':>9}")
-    bands = [(-99, -1.0, "수비수 1초+ 먼저"), (-1.0, -0.5, "-1.0 ~ -0.5"),
-             (-0.5, -0.2, "-0.5 ~ -0.2"), (-0.2, 0.2, "거의 동시"),
+    print(f"  {'margin (s)':<20}{'n':>8}{'actual rate':>13}"
+          f"{'hybrid':>11}{'mech.':>9}")
+    bands = [(-99, -1.0, "defender 1 s+ first"), (-1.0, -0.5, "-1.0 ~ -0.5"),
+             (-0.5, -0.2, "-0.5 ~ -0.2"), (-0.2, 0.2, "near simultaneous"),
              (0.2, 0.5, "+0.2 ~ +0.5"), (0.5, 1.0, "+0.5 ~ +1.0"),
-             (1.0, 98, "수신자 1초+ 먼저")]
+             (1.0, 98, "receiver 1 s+ first")]
     for lo, hi, name in bands:
         m = (margin >= lo) & (margin < hi)
         if m.sum() < 30:
             continue
         print(f"  {name:<20}{m.sum():>8,}{label[m].mean():>13.3f}"
               f"{raw[m].mean():>11.3f}{mech[m].mean():>9.3f}")
-    print("\n  '거의 동시' 행이 0.5 근처인지가 핵심.")
+    print("\n  The key is whether the 'near simultaneous' row sits near 0.5.")
 
     print(f"\n{'='*84}")
-    print("[2] 경기 단위 leave-one-out 등장성 캘리브레이션")
+    print("[2] Leave-one-match-out isotonic calibration")
     print("="*84)
     cal_raw = np.zeros_like(raw)
     cal_mech = np.zeros_like(mech)
@@ -293,23 +293,23 @@ def main() -> None:
         cal_raw[use] = apply_isotonic(xs, ys, raw[use])
         xs2, ys2 = isotonic(mech[fit], label[fit])
         cal_mech[use] = apply_isotonic(xs2, ys2, mech[use])
-    print(f"  {'':<26}{'중앙':>9}{'평균':>9}{'Brier':>9}{'개선':>9}")
+    print(f"  {'':<26}{'median':>9}{'mean':>9}{'Brier':>9}{'gain':>9}")
     b0 = brier(raw, label)
-    print(f"  {'하이브리드 raw':<24}{np.median(raw):>9.3f}{raw.mean():>9.3f}{b0:>9.4f}")
+    print(f"  {'hybrid raw':<24}{np.median(raw):>9.3f}{raw.mean():>9.3f}{b0:>9.4f}")
     b1 = brier(cal_raw, label)
-    print(f"  {'하이브리드 캘리브레이션':<24}{np.median(cal_raw):>9.3f}{cal_raw.mean():>9.3f}"
+    print(f"  {'hybrid calibrated':<24}{np.median(cal_raw):>9.3f}{cal_raw.mean():>9.3f}"
           f"{b1:>9.4f}{(b0-b1)/b0:>8.1%}")
     b2 = brier(mech, label)
     b3 = brier(cal_mech, label)
-    print(f"  {'역학 raw':<24}{np.median(mech):>9.3f}{mech.mean():>9.3f}{b2:>9.4f}")
-    print(f"  {'역학 캘리브레이션':<24}{np.median(cal_mech):>9.3f}{cal_mech.mean():>9.3f}"
+    print(f"  {'mechanistic raw':<24}{np.median(mech):>9.3f}{mech.mean():>9.3f}{b2:>9.4f}")
+    print(f"  {'mechanistic calibrated':<24}{np.median(cal_mech):>9.3f}{cal_mech.mean():>9.3f}"
           f"{b3:>9.4f}{(b2-b3)/b2:>8.1%}")
 
     print(f"\n{'='*84}")
-    print("[3] 캘리브레이션 맵: 하이브리드 raw 가 무엇으로 바뀌나")
+    print("[3] Calibration map: what hybrid raw turns into")
     print("="*84)
     xs, ys = isotonic(raw, label)
-    print(f"  {'raw 구간':<16}{'n':>9}{'실제':>9}{'캘리브레이션 후':>15}")
+    print(f"  {'raw band':<16}{'n':>9}{'actual':>9}{'calibrated':>15}")
     out_map = []
     for lo, hi in zip(np.arange(0, 1.0, 0.1), np.arange(0.1, 1.01, 0.1)):
         m = (raw >= lo) & (raw < hi)

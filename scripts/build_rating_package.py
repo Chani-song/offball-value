@@ -55,10 +55,15 @@ from offball_value.bundesliga import (FPS, find_bundesliga_files, infer_attackin
                                       load_bundesliga_frames, load_bundesliga_match_metadata)
 from diagnose_missed_onsets import read_xlsx, split_numbers
 
+# The game labels exactly as the team's rating and start sheets write them (Korean for "2v1" / "3v1"):
+# data values the code must match, so they are kept verbatim here and used by name below.
+GAME_2V1, GAME_3V1 = "2대1", "3대1"
+
 ROOT = Path(__file__).resolve().parents[1]
 D3 = ROOT / "data/processed/stage3"
-SOLVER = (("2대1", "passer2on1_results_agile_2m.csv", "passer2on1_states_agile06_final2m.json"),
-          ("3대1", "fixedpasser_results_agile_2m.csv", "fixedpasser_states_agile06_final2m.json"))
+# game names (Korean for 2v1 / 3v1) = the "detail" values in the scene key; kept as data
+SOLVER = ((GAME_2V1, "passer2on1_results_agile_2m.csv", "passer2on1_states_agile06_final2m.json"),
+          (GAME_3V1, "fixedpasser_results_agile_2m.csv", "fixedpasser_states_agile06_final2m.json"))
 PRE_S, POST_S, STEP = 3.0, 4.0, 2          # solver: 7 s around the onset, every 2nd frame (12.5 fps)
 CHANI_PRE_S, CHANI_POST_S = 8.0, 3.0       # chani: her annotation app's CLIP_BEFORE / CLIP_AFTER
 
@@ -187,8 +192,9 @@ def main() -> None:
                                 "name": player.short_name if player else "", "xy": xy})
             ball = [[round(sign * frames[f].ball.x, 2), round(sign * frames[f].ball.y, 2)]
                     if frames[f].ball is not None else None for f in ids]
+            # "zero" = the clock label shown on the rating page: time is counted from the shot or the run start
             payload.append({"code": s["code"], "t": [round((f - zero) / FPS, 2) for f in ids],
-                            "zero": "슛" if s["source"] == "chani" else "러너 출발",
+                            "zero": "shot" if s["source"] == "chani" else "runner starts",
                             "ball": ball, "players": players})
             name = lambda pid: meta.players[pid].short_name if pid in meta.players else pid
             keyrows.append({"code": s["code"], "source": s["source"], "detail": s["detail"], "match_id": match_id,
@@ -202,15 +208,15 @@ def main() -> None:
                             "chani_named_runners": "; ".join(map(name, s["named"][0])) if "named" in s else "",
                             "chani_named_defenders": "; ".join(map(name, s["named"][1])) if "named" in s else "",
                             "chani_named_beneficiaries": "; ".join(map(name, s["named"][2])) if "named" in s else ""})
-        print(f"  {match_id}: {len(mine)}장면", flush=True)
+        print(f"  {match_id}: {len(mine)} scenes", flush=True)
         del frames
     payload.sort(key=lambda p: p["code"])
     args.payload.parent.mkdir(parents=True, exist_ok=True)
     args.payload.write_text(json.dumps(payload, separators=(",", ":")))
     pd.DataFrame(keyrows).sort_values("code").to_csv(args.key, index=False)
     missing = [k["code"] for k in keyrows if not k["runners"] or not k["defenders"]]
-    print(f"장면 {len(payload)}개 → {args.payload} ({args.payload.stat().st_size / 1e6:.1f} MB)")
-    print(f"대응표 → {args.key}" + (f" · 러너나 수비 표시가 빠진 장면: {missing}" if missing else ""))
+    print(f"{len(payload)} scenes → {args.payload} ({args.payload.stat().st_size / 1e6:.1f} MB)")
+    print(f"key → {args.key}" + (f" · scenes missing a runner or defender mark: {missing}" if missing else ""))
 
 
 if __name__ == "__main__":

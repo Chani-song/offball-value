@@ -28,7 +28,7 @@ from fixedpasser.payoff import possession_value_all
 from fixedpasser.physics_pass import load_pass_model
 from fixedpasser.solve import game_from
 
-ROOT = Path(os.environ.get("OFFBALL_DATA_ROOT", "/scratch/bbmr/kseo1/offball-value"))
+ROOT = Path(os.environ.get("OFFBALL_DATA_ROOT", Path(__file__).resolve().parents[2]))
 STATES = ROOT / "data/processed/showcase_v1/figure_3v1/states_3v1_all.json"
 PHYSICS = json.loads((ROOT / "data/processed/physics_limits/agile_p999_nodelay.json").read_text())
 CONFIG = GameConfig(steps=2, step_seconds=0.6, physics_step=0.025)

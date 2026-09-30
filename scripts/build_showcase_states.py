@@ -36,7 +36,7 @@ starts are "release - 1.8 s", not run onsets.
 
 Usage (from this repository; data are read from OFFBALL_DATA_ROOT):
     PYTHONPATH=src:scripts:andrew-passer2on1:andrew-fixedpasser \\
-      .venv-delta/bin/python scripts/build_showcase_states.py \\
+      python scripts/build_showcase_states.py \\
       --starts <solver_starts.csv> --passer S36=<id>,-,-,<id>
 """
 
@@ -58,7 +58,11 @@ from filter_stage3_states import distance_to_triangle, inside, positions_at
 import fixedpasser.tracks as fp_tracks
 import passer2on1.tracks as p2_tracks
 
-DATA = Path(os.environ.get("OFFBALL_DATA_ROOT", "/scratch/bbmr/kseo1/offball-value"))
+# The game labels exactly as the team's rating and start sheets write them (Korean for "2v1" / "3v1"):
+# data values the code must match, so they are kept verbatim here and used by name below.
+GAME_2V1, GAME_3V1 = "2대1", "3대1"
+
+DATA = Path(os.environ.get("OFFBALL_DATA_ROOT", Path(__file__).resolve().parents[1]))
 STAGE3 = DATA / "data/processed/stage3"
 REF_2V1 = STAGE3 / "passer2on1_states_agile06_final2m.json"
 REF_3V1 = STAGE3 / "fixedpasser_states_agile06_final2m.json"
@@ -259,7 +263,7 @@ def main() -> None:
     matches = {}
     for m, s in sorted(starts.items()):
         matches[m] = Match(args.raw_dir, m, s)
-        print(f"  {m}: 프레임 {len(matches[m].frames)}", flush=True)
+        print(f"  {m}: frames {len(matches[m].frames)}", flush=True)
 
     # 1  the two rebuilds must equal the meeting study's states, field for field
     for ref, lim, build in ((check2, lim2, record_2v1), (check3, lim3, record_3v1)):
@@ -271,11 +275,11 @@ def main() -> None:
                "beneficiary": pv.get("beneficiary_id") or pv["carrier_id"]}
         ours = build(mt.payload(onset, team), ids, lim, ref["index"], pv)
         compare(f"{'2v1' if build is record_2v1 else '3v1'} index {ref['index']}", ours, ref)
-        print(f"  재구성 일치: {'2대1' if build is record_2v1 else '3대1'} index {ref['index']} "
+        print(f"  rebuild matches: {'2v1' if build is record_2v1 else '3v1'} index {ref['index']} "
               f"({pv['runner_name']} / {pv['defender_name']})", flush=True)
 
     # 2  the picked scenes
-    out = {"2대1": [], "3대1": []}
+    out = {GAME_2V1: [], GAME_3V1: []}   # keys = the starts CSV's "game" values (Korean for 2v1 / 3v1)
     report = []
     for r in picks:
         mt = matches[r["match_id"]]
@@ -292,7 +296,7 @@ def main() -> None:
                 "beneficiary_id": r["beneficiary_id"], "beneficiary_name": r["beneficiary_name"],
                 "carrier_id": r["carrier_id"], "carrier_name": r["carrier_name"], "note": r["note"]}
         game = r["game"]
-        if game == "2대1":
+        if game == GAME_2V1:
             if r["carrier_id"] != r["beneficiary_id"]:
                 raise SystemExit(f"{r['code']}: 2v1 needs the carrier to be the beneficiary")
             if r["code"] in per_instant:
@@ -308,11 +312,11 @@ def main() -> None:
         out[game].append(rec)
         d, who = isolation(payload, verts, in_game)
         name = lambda pid: mt.meta.players[pid].short_name if pid in mt.meta.players else pid
-        holders = ("→".join("공" if x == "-" else name(x) for x in per_instant[r["code"]])
+        holders = ("→".join("ball" if x == "-" else name(x) for x in per_instant[r["code"]])
                    if r["code"] in per_instant else name(ids["carrier"]))
         report.append((r["code"], game, rec, d, who, holders))
 
-    for game, name, ref in (("2대1", "passer2on1", ref2), ("3대1", "fixedpasser", ref3)):
+    for game, name, ref in ((GAME_2V1, "passer2on1", ref2), (GAME_3V1, "fixedpasser", ref3)):
         meta = {k: v for k, v in ref.items() if k not in ("states", "filters", "dropped", "source")}
         meta["background"] = {**meta["background"], "source_states": str(args.starts)}
         body = {"states": out[game], **meta,
@@ -322,13 +326,13 @@ def main() -> None:
                                                "3v1": f"{REF_3V1.name} index 654"}}}
         path = args.output / f"states_{name}.json"
         path.write_text(json.dumps(body, indent=1))
-        print(f"  {game} {len(out[game])}개 → {path}")
-    print("\n장면   게임  t0      볼 소유(패서)       release_steps           삼각형 2 m 안 (필터 참고)")
+        print(f"  {game} {len(out[game])} → {path}")
+    print("\nscene  game  t0      on the ball (passer) release_steps           within 2 m of triangle (filter, for reference)")
     for code, game, rec, d, who, holders in report:
         pv = rec["provenance"]
         steps = rec.get("release_steps", [True] * (STEPS + 1))
         print(f"  {code}  {game}  {pv['start_t']:+.2f}  {holders:<18}  {str(steps):<24}  "
-              f"{'걸림' if d <= BUFFER_M else '통과'} (가장 가까운 {d:.2f} m, {who})")
+              f"{'caught' if d <= BUFFER_M else 'passes'} (nearest {d:.2f} m, {who})")
 
 
 if __name__ == "__main__":

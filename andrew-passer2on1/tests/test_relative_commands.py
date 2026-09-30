@@ -23,7 +23,7 @@
                   same location; the andrew threat is direction-blind there
 
 Run:  PYTHONPATH=andrew-passer2on1:andrew-fixedpasser:src \\
-      .venv-delta/bin/python andrew-passer2on1/tests/test_relative_commands.py
+      python andrew-passer2on1/tests/test_relative_commands.py
 """
 
 from __future__ import annotations
@@ -98,7 +98,7 @@ def main() -> None:
           all(c[k] <= 5 ** k for c in counts for k in range(4)) and valid, str(counts))
     idx = 0
     for k in range(3):
-        idx = int(layers[2][k].successor[idx, 1])          # command 1 of the defender = 러너 차단
+        idx = int(layers[2][k].successor[idx, 1])          # command 1 of the defender = intercept the runner
     end = layers[2][3].position[idx]
     goal_point = r + rv * 1.8
     check("three turns of intercept close on the runner's 1.8 s point, goal-side of the start",
@@ -159,7 +159,7 @@ def main() -> None:
     check("epv_time: free in behind > marked at feet, same spot", free_in_behind > marked,
           f"{free_in_behind:.3f} vs {marked:.3f}")
     from passer2on1.payoff import epv_location
-    # a standing marker and a receiver on the spot: the room reduces to 준현's 1 - exp(-d/9)
+    # a standing marker and a receiver on the spot: the room reduces to Andrew's 1 - exp(-d/9)
     for dist in (1.0, 3.0, 6.0, 12.0):
         got = threat_epv_time(target, passer, (target + dist * u)[None, :], np.zeros((1, 2)), target, np.zeros(2), sc)
         room = 1 - np.exp(-dist / 9.0)

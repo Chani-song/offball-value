@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Showcase scenes: the rated scenes every rater scored 4 or 5, with at least one 5.
 
-The reviewer's rule (2026-09-28): keep 5/5, 5/4 and 4/5. On the ratings of 규혁
-and 찬의 that is 21 of the 75 (Chani strong 4, medium 12; solver 2v1 3, 3v1 2);
-준현 has not rated yet. Every CSV in data/processed/rating_v1/ratings/ is one
+The reviewer's rule (2026-09-28): keep 5/5, 5/4 and 4/5. On the ratings of Kyuhyeok
+and Chani that is 21 of the 75 (Chani strong 4, medium 12; solver 2v1 3, 3v1 2);
+Andrew has not rated yet. Every CSV in data/processed/rating_v1/ratings/ is one
 rater, so re-running after a third file arrives applies the rule to all three.
 
 Written to data/processed/showcase_v1/, to draw these scenes later in our own format:
@@ -38,9 +38,13 @@ from offball_value.bundesliga import (FPS, find_bundesliga_files, infer_attackin
 from build_rating_package import D3, SOLVER, clip
 from diagnose_missed_onsets import read_xlsx, split_numbers
 
+# The game labels exactly as the team's rating and start sheets write them (Korean for "2v1" / "3v1"):
+# data values the code must match, so they are kept verbatim here and used by name below.
+GAME_2V1, GAME_3V1 = "2대1", "3대1"
+
 ROOT = Path(__file__).resolve().parents[1]
 RATING = ROOT / "data/processed/rating_v1"
-V3 = {"2대1": "passer2on1_results_v3.csv", "3대1": "fixedpasser_results_v3.csv"}
+V3 = {GAME_2V1: "passer2on1_results_v3.csv", GAME_3V1: "fixedpasser_results_v3.csv"}  # keys = SOLVER game names (Korean 2v1 / 3v1)
 
 
 def parse_args() -> argparse.Namespace:
@@ -80,7 +84,7 @@ def main() -> None:
              for game, res, _ in SOLVER}
     v3 = {game: {(r["match_id"], int(r["onset"]), r["runner"], r["defender"]): r
                  for r in csv.DictReader((D3 / fn).open(encoding="utf-8"))} for game, fn in V3.items()}
-    print(f"평가자 {', '.join(raters)} · 5/5·5/4·4/5 장면 {len(codes)}개: {' '.join(codes)}")
+    print(f"raters {', '.join(raters)} · 5/5·5/4·4/5 scenes {len(codes)}: {' '.join(codes)}")
 
     (args.out / "tracking").mkdir(parents=True, exist_ok=True)
     (args.out / "solver").mkdir(parents=True, exist_ok=True)
@@ -188,7 +192,7 @@ def main() -> None:
             else:
                 row.update({"solver_index": "", "split_agile_2m": "", "split_v3": ""})
             out_rows.append(row)
-        print(f"  {match_id}: {len(mine)}장면", flush=True)
+        print(f"  {match_id}: {len(mine)} scenes", flush=True)
         del frames
 
     out_rows.sort(key=lambda r: r["code"])
@@ -196,7 +200,7 @@ def main() -> None:
         w = csv.DictWriter(fh, fieldnames=list(out_rows[0]))
         w.writeheader()
         w.writerows(out_rows)
-    print(f"장면 {len(out_rows)}개 → {args.out}")
+    print(f"{len(out_rows)} scenes → {args.out}")
 
 
 if __name__ == "__main__":

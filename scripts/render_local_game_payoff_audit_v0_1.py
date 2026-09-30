@@ -125,7 +125,7 @@ def parse_args() -> argparse.Namespace:
         "--derived-option-source",
         choices=("assignment_rule_v1", "coupled_r9", "payoff"),
         default="assignment_rule_v1",
-        help="수혜자 규칙. coupled_r9 는 라벨 검증에서 R1보다 나았다.",
+        help="Beneficiary rule. coupled_r9 did better than R1 in the label check.",
     )
     parser.add_argument("--ssac-tackle-rate", type=float, default=2.2)
     parser.add_argument("--ssac-tackle-radius", type=float, default=1.0)

@@ -210,7 +210,7 @@ def main() -> None:
                         frame_id,
                         str(defender["defender_name"]),
                         names.get(answer, answer),
-                        names.get(prediction, prediction or "(없음)"),
+                        names.get(prediction, prediction or "(none)"),
                     )
                 )
         table[f"{frame_id}/{defender['defender_name']}"] = [
@@ -220,24 +220,24 @@ def main() -> None:
         ]
 
     print(f"n = {total}\n")
-    print(f"  R6 (분리된 두 시계)  {hits['R6']}")
-    print(f"  R9 (결합된 한 시점)  {hits['R9']}\n")
+    print(f"  R6 (two separate clocks)  {hits['R6']}")
+    print(f"  R9 (one coupled instant)  {hits['R9']}\n")
 
     both = sum(1 for row in table.values() if row[0] == "O" and row[1] == "O")
     only6 = sum(1 for row in table.values() if row[0] == "O" and row[1] == "X")
     only9 = sum(1 for row in table.values() if row[0] == "X" and row[1] == "O")
     neither = sum(1 for row in table.values() if row[0] == "X" and row[1] == "X")
-    print(f"  대응: 둘 다 {both} / R6만 {only6} / R9만 {only9} / 둘 다 오답 {neither}\n")
+    print(f"  agreement: both {both} / R6 only {only6} / R9 only {only9} / both wrong {neither}\n")
 
-    print("  장면별 (R6, R9, 비운 면적)")
+    print("  per scene (R6, R9, vacated area)")
     for key, row in sorted(table.items()):
-        mark = "  <-- 다름" if row[0] != row[1] else ""
+        mark = "  <-- differs" if row[0] != row[1] else ""
         print(f"    {key:<40} {row[0]} {row[1]} {row[2]}{mark}")
 
     for name in ("R6", "R9"):
-        print(f"\n  {name} 오답:")
+        print(f"\n  {name} misses:")
         for frame_id, defender_name, answer, prediction in sorted(misses[name]):
-            print(f"    {frame_id}/{defender_name:<18} 정답={answer:<20} {name}={prediction}")
+            print(f"    {frame_id}/{defender_name:<18} answer={answer:<20} {name}={prediction}")
 
 
 if __name__ == "__main__":

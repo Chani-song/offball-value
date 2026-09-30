@@ -53,6 +53,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import math
 from pathlib import Path
 
@@ -71,7 +72,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--gate", type=Path,
                    default=Path("data/processed/pair_gate_v7.csv"))
     p.add_argument("--build", type=Path,
-                   default=Path("/work/hdd/bbmr/kseo1/offball-out/v7_r9_ssac"))
+                   default=Path(os.environ.get("OFFBALL_OUT_ROOT", Path(__file__).resolve().parents[1] / "out/runs")) / "v7_r9_ssac")
     p.add_argument("--output", type=Path,
                    default=Path("data/processed/stage3/carrier_beneficiary_states.json"))
     p.add_argument("--velocity-window-s", type=float, default=0.4)
@@ -215,22 +216,22 @@ def main() -> None:
                     "never bound upstream, where carrier speed is sampled from "
                     "0-3.0 m/s. On real tracking 23% of carriers exceed 5.6, and "
                     "holding to it would drop the counter-attacks as a class."),
-            "decided": "2026-09-22, with 서규혁",
+            "decided": "2026-09-22, with Kyuhyeok Seo",
             "override": args.note,
         },
     }, indent=1))
-    print(f"대상 {len(want)} → 상태 {len(states)} · 제외 {len(dropped)}")
+    print(f"targets {len(want)} → states {len(states)} · dropped {len(dropped)}")
     if dropped:
         reasons: dict[str, int] = {}
         for d in dropped:
             key = d["reason"].split("(")[0].strip()
             reasons[key] = reasons.get(key, 0) + 1
         for k, v in sorted(reasons.items(), key=lambda kv: -kv[1]):
-            print(f"   제외 사유: {k} — {v}건")
+            print(f"   drop reason: {k} — {v}")
     strata: dict[str, int] = {}
     for s in states:
         strata[s["stratum"]] = strata.get(s["stratum"], 0) + 1
-    print("   게이트 가지별:", strata)
+    print("   by gate branch:", strata)
     print(f"→ {args.output}")
 
 

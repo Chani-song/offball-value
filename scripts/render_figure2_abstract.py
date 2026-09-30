@@ -48,8 +48,8 @@ the solver's policy npz and the tracking.
 
 Usage:
     python scripts/render_figure2_abstract.py \\
-        --panels /work/hdd/bbmr/kseo1/offball-value/data/processed/showcase_v1/figure_multi/panels \\
-        --label S05-full --tracking /work/hdd/bbmr/kseo1/offball-value/data/processed/showcase_v1/tracking/S05.csv \\
+        --panels data/processed/showcase_v1/figure_multi/panels \\
+        --label S05-full --tracking data/processed/showcase_v1/tracking/S05.csv \\
         --output out/showcase_v1/figure_multi/S05_figure2_abstract.png
     (writes the .png at 600 dpi and a vector .pdf beside it, the face embedded)
 """

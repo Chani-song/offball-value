@@ -283,7 +283,7 @@ def _payload(row: pd.Series, frames, metadata, args: argparse.Namespace) -> dict
         "match_id": str(row["match_id"]),
         "match_label": (
             f"{metadata.home_team_name} vs {metadata.away_team_name}"
-            " · settled-possession pool (기준 시점 = 점유 종료, 슈팅 아님)"
+            " · settled-possession pool (reference time = end of possession, not the shot)"
         ),
         "onset_frame_id": onset,
         "runner_id": str(row["player_id"]),
@@ -390,9 +390,9 @@ def main() -> None:
         dismissals = load_bundesliga_sendings_off(files["events"], clock)
         if dismissals:
             print(
-                f"  {match_id}: 퇴장 {len(dismissals)}건 "
+                f"  {match_id}: {len(dismissals)} sending(s)-off "
                 f"{[frame_id for frame_id, _t, _p in dismissals]} "
-                f"→ 이후 기대 인원 {22 - len(dismissals)}명",
+                f"→ players expected afterwards {22 - len(dismissals)}",
                 flush=True,
             )
         detected = detect_run_onsets(

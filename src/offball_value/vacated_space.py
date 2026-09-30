@@ -2,24 +2,24 @@
 
 The reviewer's formulation (2026-09-08), in his words:
 
-  "수비수가 오프더볼 러너에 반응해서 움직이면 그 수비수의 influence area가
-   달라진다. 기존에 커버하던 area 중 일부에 대한 영향력이 줄어들고, 거기를
-   가장 잘 공략할 수 있는 사람이 수혜자다."
+  "When a defender moves in reaction to an off-ball runner, that defender's
+   influence area changes. His influence over part of the area he was
+   covering shrinks, and the beneficiary is whoever can best exploit it."
 
-and, on what "가장 잘 공략" means:
+and, on what "best exploit" means:
 
-  "가장 가까운 사람이 수혜자가 되어야 하는 건 아니다. X1이 제일 가깝더라도
-   본인 마킹 수비수가 그 지역을 같이 커버할 수 있으면 소용없고, X2가 마킹
-   수비수보다 그 지역으로 더 빠르게 가고 있거나 마킹 수비수가 아예 없으면
-   X2가 더 잘 공략한다."
+  "The nearest player does not have to be the beneficiary. Even if X1 is the
+   closest, it is no use if his own marker can cover that area as well; if
+   X2 is heading into that area faster than his marker, or has no marker at
+   all, X2 exploits it better."
 
 So the rule is two stages, both computed on the coverage field:
 
 1. VACATED REGION. Take the defender's coverage before the run and after a
    purely geometric reaction to it, and keep the cells where the DEFENDING
    TEAM's coverage actually drops. Using the team maximum (not this
-   defender alone) is what encodes "책임" — space a team-mate still holds is
-   not vacated at all.
+   defender alone) is what encodes "responsibility" — space a team-mate
+   still holds is not vacated at all.
 
 2. EXPLOITER. Score every attacker on that region by CONTESTED coverage:
    his own coverage of the region minus the best defender's coverage of it.
@@ -28,11 +28,12 @@ So the rule is two stages, both computed on the coverage field:
    velocity-oriented. Nearest-by-distance is used only to shortlist.
 
 COVERAGE MODEL. Deliberately NOT the full Fernández influence: the reviewer
-asked for "공 위치는 빼고 위치랑 속도 기반으로 커버하는 지역". In Fernández
-the ball enters only through the radius transform (4 -> 10 m with distance to
-ball), which also gives the ball CARRIER the smallest zone of anyone on the
-pitch — structurally unable to express "the carrier is driving at me". Here
-the radius is a fixed constant, so the geometry is purely position+velocity.
+asked for "the area covered based on position and velocity, leaving out
+the ball position". In Fernández the ball enters only through the radius
+transform (4 -> 10 m with distance to ball), which also gives the ball
+CARRIER the smallest zone of anyone on the pitch — structurally unable to
+express "the carrier is driving at me". Here the radius is a fixed
+constant, so the geometry is purely position+velocity.
 
 STATUS: developed after the round-2 blind test was scored. Round 1 is its
 development set; any round-2 number is a single declared post-hoc look.
@@ -124,10 +125,10 @@ def vacated_region_trail(
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Cumulative vacated region along the defender's whole reaction path.
 
-    The reviewer's image: "헨젤과 그레텔에 과자 흘리듯" — the space a
-    reacting defender opens is not one snapshot but everything he leaves
-    behind as he goes, widening with time. So the coverage loss is taken at
-    every sampled instant of the reaction and accumulated by running
+    The reviewer's image: "like Hansel and Gretel dropping crumbs" — the
+    space a reacting defender opens is not one snapshot but everything he
+    leaves behind as he goes, widening with time. So the coverage loss is
+    taken at every sampled instant of the reaction and accumulated by running
     maximum: a cell counts as vacated once it has been abandoned at any
     point, and the region grows along the trail.
     """
@@ -272,8 +273,8 @@ def rule_r5(
     """Beneficiary = who occupies the space AS it opens, over time.
 
     R4 scored attackers frozen at the onset instant, which cannot express
-    the reviewer's 61802 reading: "시간이 지남에 따라 Iyoha는 그 지역에서
-    멀어지고, Klarer는 더 가까워진다". A player 19 m away whose run is
+    the reviewer's 61802 reading: "as time passes, Iyoha moves away from
+    that area and Klarer gets closer". A player 19 m away whose run is
     pointed into the opening space beats one standing beside it and
     drifting out — but only if BOTH sides are advanced through time.
 

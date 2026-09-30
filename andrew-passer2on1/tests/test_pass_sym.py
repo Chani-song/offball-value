@@ -18,7 +18,7 @@
                  at that time; one who can stop on it still does
   5  loading     an A-sym JSON loads as PhysicsRaceSymPass through load_pass_model
 
-Run:  PYTHONPATH=andrew-passer2on1 .venv-delta/bin/python andrew-passer2on1/tests/test_pass_sym.py
+Run:  PYTHONPATH=andrew-passer2on1 python andrew-passer2on1/tests/test_pass_sym.py
 """
 
 from __future__ import annotations

@@ -33,7 +33,7 @@ import numpy as np
 import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[1]
-OFFBALL = {"sure": "확신", "unclear": "애매", "no": "아님"}
+OFFBALL = {"sure": "sure", "unclear": "unclear", "no": "no"}
 
 
 def parse_args() -> argparse.Namespace:
@@ -69,7 +69,7 @@ def main() -> None:
         versions = sorted(set(ratings["version"].astype(str)))
         if len(versions) > 1:
             raise SystemExit(f"CSVs from different page versions {versions}: scene codes differ between them")
-        print(f"페이지 버전 {versions[0]}")
+        print(f"page version {versions[0]}")
     raters = list(dict.fromkeys(ratings["rater"]))
     wide = ratings.pivot_table(index="scene", columns="rater", values="rating", aggfunc="last")
     unsure = ratings[ratings["unsure"]].groupby("scene")["rater"].apply(lambda s: ", ".join(s))
@@ -93,34 +93,36 @@ def main() -> None:
     out["range"] = scores.max(axis=1) - scores.min(axis=1)
     out["unsure_by"] = unsure.reindex(out.index).fillna("")
     out["notes"] = notes.reindex(out.index).fillna("")
-    out["group"] = out["source"].map({"chani": "찬의"}).fillna("솔버") + " " + out["detail"].astype(str)
+    # "group" is written to merged.csv, so its Korean labels stay as they are:
+    # "Chani" for source == "chani", "solver" otherwise, followed by the detail
+    out["group"] = out["source"].map({"chani": "Chani"}).fillna("solver") + " " + out["detail"].astype(str)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     out.reset_index().to_csv(args.output, index=False)
 
-    print(f"평가자 {len(raters)}명: {', '.join(raters)} · 장면 {len(out)}")
+    print(f"{len(raters)} raters: {', '.join(raters)} · {len(out)} scenes")
     for r in raters:
         d = ratings[ratings["rater"] == r]
         done = int((d["rating"].notna() | d["unsure"]).sum())
-        print(f"  {r}: {done}/{len(out)} (판단 불가 {int(d['unsure'].sum())}) · 오프더볼 답 {int(d['offball'].notna().sum())}")
+        print(f"  {r}: {done}/{len(out)} (can't judge {int(d['unsure'].sum())}) · off-ball answers {int(d['offball'].notna().sum())}")
     if len(raters) > 1:
-        print("\n평가자 간 일치 (함께 점수 매긴 장면의 순위 상관)")
+        print("\nInter-rater agreement (rank correlation on the scenes both scored)")
         for i, a in enumerate(raters):
             for b in raters[i + 1:]:
                 both = scores[[f"rating_{a}", f"rating_{b}"]].dropna()
                 rho = both.rank().corr().iloc[0, 1] if len(both) > 2 else float("nan")
-                print(f"  {a} – {b}: {rho:+.2f} ({len(both)}장면)")
-    print("\n출처별 평균 점수")
+                print(f"  {a} – {b}: {rho:+.2f} ({len(both)} scenes)")
+    print("\nMean score by source")
     for g, d in out.groupby("group"):
         split = " ".join(f"{lab} {int(d[f'offball_{v}'].sum())}" for v, lab in OFFBALL.items())
-        print(f"  {g:<14} {d['mean'].mean():.2f}  ({len(d)}장면, 평균 점수가 4 이상 {int((d['mean'] >= 4).sum())})"
-              f" · 오프더볼 답 {split}")
+        print(f"  {g:<14} {d['mean'].mean():.2f}  ({len(d)} scenes, mean score 4 or above {int((d['mean'] >= 4).sum())})"
+              f" · off-ball answers {split}")
     cand = out[out["n_rated"] >= 2].sort_values(["mean", "sd"], ascending=[False, True]).head(args.top)
-    print(f"\ntop {args.top} 후보 (점수 2개 이상, 평균 높은 순 · 같으면 의견이 모인 순)")
+    print(f"\ntop {args.top} candidates (at least 2 scores, highest mean first · ties: closest agreement first)")
     for code, r in cand.iterrows():
         sc = " ".join(f"{x:.0f}" if pd.notna(x) else "-" for x in r[[f'rating_{q}' for q in raters]])
-        print(f"  {code} 평균 {r['mean']:.2f} [{sc}] · {r['group']} · 러너 {r['runners']} / 수비 {r['defenders']}")
+        print(f"  {code} mean {r['mean']:.2f} [{sc}] · {r['group']} · runners {r['runners']} / defenders {r['defenders']}")
     dis = out[out["range"] >= 2].sort_values("range", ascending=False)
-    print(f"\n의견이 2점 이상 갈린 장면 {len(dis)}개 (먼저 토의): {', '.join(dis.index[:15])}")
+    print(f"\n{len(dis)} scenes where scores split by 2 or more points (discuss first): {', '.join(dis.index[:15])}")
     print(f"\n→ {args.output}")
 
 

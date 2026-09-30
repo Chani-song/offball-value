@@ -24,7 +24,7 @@ from passer2on1.game import background_survival
 from passer2on1.physics_pass import load_pass_model
 from passer2on1.solve import game_from
 
-ROOT = Path(os.environ.get("OFFBALL_DATA_ROOT", "/scratch/bbmr/kseo1/offball-value"))
+ROOT = Path(os.environ.get("OFFBALL_DATA_ROOT", Path(__file__).resolve().parents[2]))
 rec = next(r for r in json.loads((ROOT / "data/processed/showcase_v1/figure_2v1/states_2v1_all.json").read_text())["states"]
            if r["provenance"]["code"] == "S05")
 PHYSICS = json.loads((ROOT / "data/processed/physics_limits/agile_p999_nodelay.json").read_text())

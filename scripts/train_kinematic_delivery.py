@@ -212,25 +212,25 @@ def main() -> None:
     for match_id in match_ids:
         got = collect(match_id, args.raw_dir, xmodel, x360, config)
         rows.extend(got)
-        print(f"  [{match_id}] 패스 {len(got):,} · 누적 {len(rows):,}", flush=True)
+        print(f"  [{match_id}] passes {len(got):,} · total {len(rows):,}", flush=True)
 
     label = np.array([r["label"] for r in rows])
     match = np.array([r["match"] for r in rows])
-    print(f"\n패스 {len(rows):,}개 · 실제 성공률 {label.mean():.4f} · 경기 {len(set(match))}개")
+    print(f"\n{len(rows):,} passes · observed completion {label.mean():.4f} · {len(set(match))} matches")
 
     feature_sets = {
-        "운동학만": KINEMATIC,
-        "정적만(xpass360 와 같은 feature)": STATIC,
-        "운동학+정적": KINEMATIC + STATIC,
+        "kinematic only": KINEMATIC,
+        "static only (same features as xpass360)": STATIC,
+        "kinematic+static": KINEMATIC + STATIC,
     }
     out = {"passes": len(rows), "completion": float(label.mean()), "folds": {}, "models": {}}
 
     print(f"\n{'='*84}")
-    print("경기 단위 leave-one-out · 보류 폴드에서만 평가")
+    print("Leave-one-match-out · evaluated on held-out folds only")
     print("="*84)
-    print(f"  {'':<34}{'AUC':>9}{'Brier':>9}{'폴드별 AUC 표준편차':>20}")
+    print(f"  {'':<34}{'AUC':>9}{'Brier':>9}{'per-fold AUC SD':>20}")
 
-    for key, label_name in (("mech", "역학 raw"), ("hybrid", "하이브리드 raw"),
+    for key, label_name in (("mech", "mechanics raw"), ("hybrid", "hybrid raw"),
                             ("x360", "xpass360")):
         v = np.array([r[key] for r in rows])
         per = [auc(v[match == m], label[match == m]) for m in sorted(set(match))]
@@ -250,14 +250,14 @@ def main() -> None:
             model.fit(X[fit], label[fit])
             pred[use] = model.predict_proba(X[use])[:, 1]
             per.append(auc(pred[use], label[use]))
-        out["models"][f"학습: {name}"] = {"auc": auc(pred, label),
+        out["models"][f"trained: {name}"] = {"auc": auc(pred, label),
                                         "brier": brier(pred, label),
                                         "fold_auc": per}
-        print(f"  {'학습: ' + name:<32}{auc(pred, label):>9.3f}"
+        print(f"  {'trained: ' + name:<32}{auc(pred, label):>9.3f}"
               f"{brier(pred, label):>9.4f}{np.nanstd(per):>20.3f}")
 
-    print(f"\n  기저율만 찍는 예측기의 Brier: {label.mean()*(1-label.mean()):.4f}")
-    print("  (AUC 0.5 = 무작위. 폴드 표준편차가 크면 경기 6개로는 못 믿는다는 뜻)")
+    print(f"\n  Brier of a predictor that always outputs the base rate: {label.mean()*(1-label.mean()):.4f}")
+    print("  (AUC 0.5 = random. A large fold SD means six matches are too few to trust it)")
 
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)

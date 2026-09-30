@@ -107,27 +107,27 @@ def main() -> None:
                 if v is not None and v <= 12.0:
                     teammate_speed.append(v)
         del frames
-        print(f"  [{match_id}] 누적 캐리 표본 {len(carrier_speed):,}", flush=True)
+        print(f"  [{match_id}] carry samples so far {len(carrier_speed):,}", flush=True)
 
     c = np.array(carrier_speed)
     m = np.array(teammate_speed)
     print(f"\n{'='*72}")
-    print("공을 가진 선수 vs 같은 팀의 공 없는 선수 (0.2초 간격 표본)")
+    print("Player on the ball vs his teammates off the ball (samples 0.2 s apart)")
     print("="*72)
-    print(f"  {'':<22}{'n':>10}{'중앙':>8}{'평균':>8}{'90%':>8}{'99%':>8}{'최대':>8}")
-    for name, v in (("공 가진 선수", c), ("공 없는 동료", m)):
+    print(f"  {'':<22}{'n':>10}{'median':>8}{'mean':>8}{'90%':>8}{'99%':>8}{'max':>8}")
+    for name, v in (("on the ball", c), ("teammate off ball", m)):
         print(f"  {name:<20}{v.size:>10,}{np.median(v):>8.2f}{v.mean():>8.2f}"
               f"{np.percentile(v,90):>8.2f}{np.percentile(v,99):>8.2f}{v.max():>8.2f}")
-    print(f"\n  상위 속도 비율 (99%): {np.percentile(c,99)/np.percentile(m,99):.3f}")
-    print(f"  중앙 속도 비율:       {np.median(c)/max(np.median(m),1e-9):.3f}")
-    print(f"\n  현재 arrival model 의 최대 속도 가정: 9.00 m/s")
-    print(f"  공 가진 선수가 실제로 낸 속도의 99% 분위: {np.percentile(c,99):.2f} m/s")
+    print(f"\n  top-speed ratio (99%): {np.percentile(c,99)/np.percentile(m,99):.3f}")
+    print(f"  median-speed ratio:    {np.median(c)/max(np.median(m),1e-9):.3f}")
+    print(f"\n  max speed assumed by the current arrival model: 9.00 m/s")
+    print(f"  99th percentile of speed actually reached on the ball: {np.percentile(c,99):.2f} m/s")
 
     p_ = np.array(carrier_pressed)
     f_ = np.array(carrier_free)
-    print(f"\n  압박 여부별 (가장 가까운 수비수 3m 기준)")
-    print(f"    압박받음 n={p_.size:,} · 중앙 {np.median(p_):.2f} · 99% {np.percentile(p_,99):.2f}")
-    print(f"    자유    n={f_.size:,} · 중앙 {np.median(f_):.2f} · 99% {np.percentile(f_,99):.2f}")
+    print(f"\n  by pressure (nearest defender within 3 m)")
+    print(f"    pressed  n={p_.size:,} · median {np.median(p_):.2f} · 99% {np.percentile(p_,99):.2f}")
+    print(f"    free     n={f_.size:,} · median {np.median(f_):.2f} · 99% {np.percentile(f_,99):.2f}")
 
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)

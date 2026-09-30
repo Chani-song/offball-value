@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The abstract figure: real frames with each moment's minimax options drawn on them.
 
-One row of panels per solver (2026-09-28, 준현's suggestion). Each panel is a real
+One row of panels per solver (2026-09-28, Andrew's suggestion). Each panel is a real
 moment: every player where the tracking has him, the three players of the game
 ringed, their last second as a thin trail and their REAL next 0.6 s dotted to a
 dashed circle (where he really was). From each of the three, one arrow per
@@ -39,10 +39,11 @@ from matplotlib.path import Path as MPath
 
 FPS = 25
 ROLE_COLOR = {"runner": "#ff3b5c", "defender": "#22d3ee", "ball carrier": "#facc15", "beneficiary": "#facc15"}
-NAMES = {"멈추기": "stop", "계속": "keep going", "골문 쪽": "toward goal", "왼쪽 옆": "left", "오른쪽 옆": "right",
-         "볼 쪽": "toward ball", "옆으로": "sideways", "러너 차단": "cut off runner", "사이 지키기": "hold between",
-         "수혜자 쪽": "toward beneficiary", "러너 쪽": "toward runner", "멈추기(감속)": "slow down",
-         "forward": "forward", "back": "back", "left": "left", "right": "right", "stop": "stop"}
+# the solver's command names (stage3_read / agile_motion) and how the figure words them
+NAMES = {"stop": "stop", "keep going": "keep going", "toward goal": "toward goal", "left": "left", "right": "right",
+         "toward ball": "toward ball", "sideways": "sideways", "cut off runner": "cut off runner",
+         "hold between": "hold between", "toward beneficiary": "toward beneficiary", "toward runner": "toward runner",
+         "slow down": "slow down", "forward": "forward", "back": "back"}
 MIN_P = 0.02
 RING = 0.95         # m, the ring around each player of the game
 DOT = 0.55         # m, a player

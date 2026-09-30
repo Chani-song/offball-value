@@ -22,7 +22,7 @@ properties hold for any horizon and the smaller game builds in seconds.
 
 Run from the repository root:
       PYTHONPATH=andrew-fixedpasser:andrew-passer2on1 \\
-      .venv-delta/bin/python andrew-fixedpasser/tests/test_release_steps.py
+      python andrew-fixedpasser/tests/test_release_steps.py
 OFFBALL_DATA_ROOT points at the tree holding andrew/models and
 data/processed/stage3 when that is not this repository.
 """

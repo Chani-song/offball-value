@@ -1,55 +1,55 @@
-# 2대1: 수혜자 = 볼 소유자 — 설계안 (검토용, 2026-09-23)
+# 2v1: beneficiary = ball carrier — design (for review, 2026-09-23)
 
-## 이 폴더의 규칙
+## Rules for this folder
 
-- `andrew/`는 준현님 원본(커밋 e8b0a95). **수정하지 않는다.** 가져다 쓰기만 한다.
-- 이 폴더는 원본 위에서 **바꿀 부분만** 덮어쓴다.
-- 짝 폴더 `andrew-fixedpasser/`(3대1)와 공통 계산(배경 수비수 · 오프사이드 · xT)은 같은 값을 내야 하며, 테스트로 확인한다.
+- `andrew/` is Andrew's original (commit e8b0a95). **Do not modify it.** Import from it only.
+- This folder overrides **only the parts that change**, on top of the original.
+- The shared computations (background defenders · offside · xT) must give the same values as the sibling folder `andrew-fixedpasser/` (3v1); tests check this.
 
-## 대상
+## Scope
 
-게이트 + 주인공 규칙 통과 896조합 중 **R9 수혜자 = 볼 소유자**인 178조합 → 속도 상한 걸러 167.
-수비수의 딜레마: **볼 압박 갈까, 러너를 따라갈까.** 볼 소유자가 드리블로 이득을 보는 쪽이 수혜.
-준현님 원래 게임의 몸 구성 그대로: 볼 소유자(움직이며 결정) + 러너(리시버) + 반응 수비수.
+Of the 896 triples that pass the gate + protagonist rule, the 178 where **R9 beneficiary = ball carrier** → 167 after the speed-cap filter.
+The defender's dilemma: **press the ball, or follow the runner.** The benefit is the ball carrier gaining by dribbling.
+Same bodies as Andrew's original game: ball carrier (moves and decides) + runner (receiver) + reacting defender.
 
-2026-09-22~23에 이미 원본 그대로 두 번 풀었음 (1.2초 `stage3_carrier`, 3초 `stage3_carrier_3s`).
-이번 판의 차이는 아래 "바꾸는 것"뿐 — 그래서 **바뀐 효과를 바로 비교할 기준이 있다.**
+Already solved twice with the unchanged original on 2026-09-22/23 (1.2 s `stage3_carrier`, 3 s `stage3_carrier_3s`).
+This version differs only in "Changes" below — so **there is a baseline to compare the effect of the changes directly.**
 
-## 원본 그대로 쓰는 것
+## Used unchanged from the original
 
-이동 모델, 태클(반응 수비수 ↔ 볼 소유자), 공 보유, xPass 모델 가중치, 역방향 풀이, 정확성 검증, 저장.
+Motion model, tackles (reacting defender ↔ ball carrier), retention, xPass model weights, backward solve, correctness check, saving.
 
-## 바꾸는 것
+## Changes
 
-1. **게임 길이 3초** — 1초 × 3턴. 상태 수는 턴 수에만 달려 있어 비용 동일(측정: 장면당 33 CPU초).
-2. **배경 수비수** — 반응 수비수를 뺀 나머지 수비수 전원 + 골키퍼를 넣는다. **결정은 하지 않고
-   실제 트래킹 경로를 따라간다**(턴 k의 위치 = 런 시작 후 k초의 실제 위치). 시간의 함수일 뿐
-   상태가 아니라서 상태 수 그대로.
-3. **xPass에 수비수 전원** — 원래 여러 명을 받도록 설계되고 실제 데이터의 보이는 수비수 전원으로
-   학습된 모델. "패서에 가장 가까운 수비수"와 "리시버에 가장 가까운 수비수"를 배경 + 반응 수비수
-   중에서 고른다. (지금: 반응 수비수 한 명이 두 역할을 다 함.)
-4. **오프사이드 실제 규칙** — 배경 + 반응 수비수 중 **뒤에서 두 번째**가 라인. (지금: 반응 수비수 한 명.
-   측정: 러너가 한 명 기준으로만 오프사이드인 경우가 약 18%.)
-5. **xT를 수비수 전원 기준으로** — 준현님 `positional_threat`의 `room`과 `support_room`에서
-   "그 수비수와의 거리"를 "가장 가까운 수비수와의 거리"로. **준현님 식의 유일한 변경.** 나머지
-   계수(9 m, 0.2, 0.8, 0.55, 0.25)는 그대로.
-6. **볼 소유자 속도 상한 7.2 m/s** — 2026-09-22 결정 그대로 (원본 5.6은 합성 장면용 관례).
+1. **Game length 3 s** — 1 s × 3 turns. The state count depends only on the number of turns, so the cost is the same (measured: 33 CPU s per scene).
+2. **Background defenders** — add every defender except the reacting one, plus the goalkeeper. **They make no decisions and
+   follow their actual tracking paths** (position at turn k = actual position k s after run onset). They are a function of time only,
+   not part of the state, so the state count is unchanged.
+3. **All defenders in xPass** — the model was designed to take several defenders and was trained on all visible defenders
+   in real data. "Nearest defender to the passer" and "nearest defender to the receiver" are chosen from the background + reacting
+   defenders. (Now: the one reacting defender plays both roles.)
+4. **Real offside rule** — the line is the **second-last** of the background + reacting defenders. (Now: the one reacting defender.
+   Measured: the runner is offside only against that one defender in about 18% of cases.)
+5. **xT against all defenders** — in `room` and `support_room` of Andrew's `positional_threat`,
+   "distance to that defender" becomes "distance to the nearest defender". **The only change to Andrew's formula.** The other
+   coefficients (9 m, 0.2, 0.8, 0.55, 0.25) are unchanged.
+6. **Ball-carrier speed cap 7.2 m/s** — as decided on 2026-09-22 (the original 5.6 is a convention for synthetic scenes).
 
-## 그대로 두는 판단 (검토 요청)
+## Kept as is (review requested)
 
-- **태클 켬.** 이 게임에서 "볼 압박"은 딜레마의 한쪽 선택지 자체라, 붙으면 뺏을 수 있어야 한다.
-  태클은 반응 수비수 ↔ 볼 소유자만. 배경 수비수는 태클하지 않는다(결정을 안 하니까).
-- **공 보유 켬.** 수비수가 러너를 따라가면 볼 소유자가 몰고 가는 것 — 그게 이 경우의 수혜다.
+- **Tackles on.** In this game "press the ball" is itself one side of the dilemma, so a defender who gets close must be able to win the ball.
+  Tackles only between reacting defender ↔ ball carrier. Background defenders do not tackle (they make no decisions).
+- **Retention on.** If the defender follows the runner, the ball carrier carries the ball forward — that is the benefit in this case.
 
-## 검사 (전체 실행 전)
+## Checks (before the full run)
 
-1. 정확성 gap ≈ 0.
-2. **배경 수비수를 빼면** 원본 3초 결과(`stage3_carrier_3s`)와 **완전히 같아야** 함 — 새 코드가
-   원본을 망가뜨리지 않았다는 증거.
-3. 좌표: 솔버 시작 위치 = 실제 트래킹 (오차 0).
-4. 약 10장면 로그인 노드 → 페이지로 보여드림 → 전체 167 실행 허락.
+1. Correctness gap ≈ 0.
+2. **With background defenders removed**, results must be **identical** to the original 3 s run (`stage3_carrier_3s`) — evidence that the new code
+   did not break the original.
+3. Coordinates: solver start positions = actual tracking (zero error).
+4. About 10 scenes on the login node → shown on a page → approval for the full 167 run.
 
-## 알려진 한계
+## Known limitations
 
-- 배경 수비수는 실제로 간 길을 간다 — 반응 수비수가 다르게 움직였다면 그들도 달리 움직였을 것.
-- xT·xPass 가중치는 준현님 것 그대로. 준현님: "장면이 이상하면 xT·xPass 값 때문일 것."
+- Background defenders follow their actual paths — had the reacting defender moved differently, they would have moved differently too.
+- xT and xPass weights are Andrew's, unchanged. Andrew: "If a scene looks odd, it is likely down to the xT/xPass values."

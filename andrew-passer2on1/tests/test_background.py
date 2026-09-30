@@ -15,12 +15,13 @@ Constructed situations, each with a football expectation:
                the tracking at t = 0 exactly, and interpolation between frames
                at t = 1.0.
 
-Run:  PYTHONPATH=andrew-passer2on1 .venv-delta/bin/python andrew-passer2on1/tests/test_background.py
+Run:  PYTHONPATH=andrew-passer2on1 python andrew-passer2on1/tests/test_background.py
 """
 
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -37,7 +38,7 @@ from passer2on1.tracks import background_tracks
 ROOT = Path(__file__).resolve().parents[2]
 MODEL = ROOT / "andrew/models/experimental_pass.json"
 STATES = ROOT / "data/processed/stage3/carrier_beneficiary_states_v2.json"
-BUILD = Path("/work/hdd/bbmr/kseo1/offball-out/v7_r9_ssac")
+BUILD = Path(os.environ.get("OFFBALL_OUT_ROOT", Path(__file__).resolve().parents[2] / "out/runs")) / "v7_r9_ssac"
 
 
 def check(name, ok, detail=""):

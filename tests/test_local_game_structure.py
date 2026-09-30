@@ -94,7 +94,7 @@ class LocalGameStructureTests(unittest.TestCase):
     def test_audit_html_identifies_structural_not_final_value(self) -> None:
         html = render_structural_local_game_audit([])
         self.assertIn("Defender × affected-option structure", html)
-        self.assertIn("아직 <span class=\"formula\">P × G × A</span>", html)
+        self.assertIn("not yet a <span class=\"formula\">P × G × A</span>", html)
         self.assertIn("response-controls", html)
 
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Is the fitted B1-SB model usable by the solver? (structural checks only)
 
-  1  loading      B1SB_all.json loads with 준현's ExpectedPass.load, no proxy
+  1  loading      B1SB_all.json loads with Andrew's ExpectedPass.load, no proxy
                   opt-in, in the velocity schema
   2  independent  every training row is a StatsBomb match from the four men's
                   club competitions -- none of our DFL matches
@@ -9,7 +9,7 @@
                   probabilities in [0, 1], vectorised = one by one
   4  report       the transfer scores on our Bundesliga passes exist and are finite
 
-Run:  PYTHONPATH=andrew-passer2on1:src .venv-delta/bin/python \\
+Run:  PYTHONPATH=andrew-passer2on1:src python \\
       andrew-passer2on1/tests/test_pass_b1sb.py data/processed/pass_models
 """
 
@@ -38,7 +38,7 @@ def main() -> None:
     models = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "data/processed/pass_models"
     print("1  loading")
     model = ExpectedPass.load(models / "B1SB_all.json")
-    check("loads with 준현's loader, velocity schema", model.feature_set == "velocity")
+    check("loads with Andrew's loader, velocity schema", model.feature_set == "velocity")
 
     print("2  independent of our matches")
     comps, ids, n = set(), set(), 0

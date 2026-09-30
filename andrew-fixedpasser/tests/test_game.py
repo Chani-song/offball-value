@@ -21,12 +21,13 @@ any horizon and the smaller game builds in seconds. Exactness and positions use
 the real three-turn game.
 
 Run:  PYTHONPATH=andrew-fixedpasser:andrew-passer2on1 \\
-      .venv-delta/bin/python andrew-fixedpasser/tests/test_game.py
+      python andrew-fixedpasser/tests/test_game.py
 """
 
 from __future__ import annotations
 
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -48,7 +49,7 @@ from fixedpasser.rollout import rollout
 ROOT = Path(__file__).resolve().parents[2]
 MODEL = ROOT / "andrew/models/experimental_pass.json"
 STATES = ROOT / "data/processed/stage3/fixedpasser_states_all.json"
-BUILD = Path("/work/hdd/bbmr/kseo1/offball-out/v7_r9_ssac")
+BUILD = Path(os.environ.get("OFFBALL_OUT_ROOT", Path(__file__).resolve().parents[2] / "out/runs")) / "v7_r9_ssac"
 FULL = GameConfig(steps=3, step_seconds=1.0, physics_step=0.025)
 SMALL = GameConfig(steps=2, step_seconds=1.0, physics_step=0.025)
 

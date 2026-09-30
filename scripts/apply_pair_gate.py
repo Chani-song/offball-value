@@ -15,6 +15,7 @@ import argparse
 import collections
 import importlib.util
 import json
+import os
 from pathlib import Path
 
 import pandas as pd
@@ -27,7 +28,7 @@ from offball_value.pair_plausibility import (
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser()
     p.add_argument("--build", type=Path,
-                   default=Path("/work/hdd/bbmr/kseo1/offball-out/v7_r9_ssac"))
+                   default=Path(os.environ.get("OFFBALL_OUT_ROOT", Path(__file__).resolve().parents[1] / "out/runs")) / "v7_r9_ssac")
     p.add_argument("--output", type=Path,
                    default=Path("data/processed/pair_gate_v7.csv"))
     p.add_argument("--delta", type=float, default=3.0)
@@ -112,19 +113,19 @@ def main() -> None:
     kept = frame[frame["kept"]]
     per = kept.groupby(["match_id", "onset_frame_id", "runner_id"]).size()
     dist = collections.Counter(per.values)
-    print(f"후보 {len(frame)} → 유지 {len(kept)} ({len(kept)/len(frame):.0%}) · "
-          f"장면 {per.size} · 장면당 {len(kept)/per.size:.2f}")
-    print("장면당 수비수: " + " · ".join(f"{k}명 {dist[k]} ({dist[k]/per.size:.0%})"
+    print(f"candidates {len(frame)} → kept {len(kept)} ({len(kept)/len(frame):.0%}) · "
+          f"scenes {per.size} · per scene {len(kept)/per.size:.2f}")
+    print("defenders per scene: " + " · ".join(f"{k}: {dist[k]} ({dist[k]/per.size:.0%})"
                                      for k in sorted(dist)))
-    print("이유: " + " · ".join(f"{k} {v}" for k, v in
+    print("reasons: " + " · ".join(f"{k} {v}" for k, v in
                               kept["reason"].value_counts().items()))
-    print(f"라벨 {int(kept['labelled'].sum())}/{int(frame['labelled'].sum())} 유지")
+    print(f"labels kept {int(kept['labelled'].sum())}/{int(frame['labelled'].sum())}")
     fin = frame[frame["kept_final"]]
     sc = frame.drop_duplicates(["match_id", "onset_frame_id", "runner_id"])
     perf = fin.groupby(["match_id", "onset_frame_id", "runner_id"]).size()
-    print(f"\n+ 주인공 규칙(C): 장면 {int(sc['protagonist'].sum())}/{len(sc)} · "
-          f"조합 {len(kept)} → {len(fin)} · 장면당 {len(fin)/max(perf.size,1):.2f} · "
-          f"라벨 {int(fin['labelled'].sum())}/{int(frame['labelled'].sum())}")
+    print(f"\n+ protagonist rule (C): scenes {int(sc['protagonist'].sum())}/{len(sc)} · "
+          f"pairs {len(kept)} → {len(fin)} · per scene {len(fin)/max(perf.size,1):.2f} · "
+          f"labels {int(fin['labelled'].sum())}/{int(frame['labelled'].sum())}")
     print(f"→ {args.output}")
 
 

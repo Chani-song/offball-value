@@ -85,7 +85,7 @@ def main() -> None:
     args.output.mkdir(parents=True, exist_ok=True)
     meta = {"training": "our Bundesliga open-play passes, tracking labels, intended-at-kick targets",
             "passes_file": str(args.passes), "fit_by": "scripts/fit_pass_sym.py"}
-    print(f"패스 {len(rows):,} · 성공률 {y.mean():.4f} · 경기 {len(matches)}", flush=True)
+    print(f"passes {len(rows):,} · completion {y.mean():.4f} · matches {len(matches)}", flush=True)
 
     oof = {name: np.zeros(len(rows)) for name in CLASSES}
     for m in matches:
@@ -99,7 +99,7 @@ def main() -> None:
             oof[name][te] = model.probability_from_margins(*a_margins(model, rows_te).T)
             if name == "Asym":
                 (args.output / f"Asym_without_{m}.json").write_text(json.dumps(model.spec, indent=2) + "\n")
-        print(f"  폴드 {m}: 패스 {int(te.sum())}", flush=True)
+        print(f"  fold {m}: passes {int(te.sum())}", flush=True)
     a_all = fit("Asym", rows, y, {**meta, "trained_on": matches, "passes": len(rows)})
     (args.output / "Asym_all.json").write_text(json.dumps(a_all.spec, indent=2) + "\n")
     router = {"kind": "per_match", "default": "Asym_all.json",
@@ -129,25 +129,25 @@ def main() -> None:
               "changed_groups": groups_rep}
     (args.output / "report.json").write_text(json.dumps(result, ensure_ascii=False, indent=1) + "\n")
 
-    print(f"\n경기 밖 평가 · 기저율 Brier {y.mean() * (1 - y.mean()):.4f}")
-    print(f"  {'모델':<8}{'AUC':>7}{'Brier':>9}{'logloss':>9}{'예측평균':>9}")
+    print(f"\nOut-of-match evaluation · base-rate Brier {y.mean() * (1 - y.mean()):.4f}")
+    print(f"  {'model':<8}{'AUC':>7}{'Brier':>9}{'logloss':>9}{'mean pred':>9}")
     for rep in reps:
         print(f"  {rep['name']:<8}{rep['auc']:>7.3f}{rep['brier']:>9.4f}{rep['log_loss']:>9.4f}{rep['mean_predicted']:>9.3f}")
     if ref_a is not None:
-        print(f"  (A 재현: 기존 보고서 logloss {ref_a['log_loss']:.4f} → 이번 {reps[0]['log_loss']:.4f}"
-              f" · {'일치' if result['a_reproduces_reference'] else '불일치'})")
-    print("\n  길이 구간별 실제 / 예측")
-    print(f"  {'구간':<10}{'n':>5}{'실제':>7}{'A':>8}{'Asym':>8}")
+        print(f"  (A reproduced: earlier report logloss {ref_a['log_loss']:.4f} → this run {reps[0]['log_loss']:.4f}"
+              f" · {'match' if result['a_reproduces_reference'] else 'MISMATCH'})")
+    print("\n  Observed / predicted by length band")
+    print(f"  {'band':<10}{'n':>5}{'obs':>7}{'A':>8}{'Asym':>8}")
     for i, band in enumerate(reps[0]["bands"]):
         print(f"  {band['band']:<10}{band['n']:>5}{band['observed']:>7.3f}{band['predicted']:>8.3f}"
               f"{reps[1]['bands'][i]['predicted']:>8.3f}")
-    print("\n  규칙이 바뀐 패스들 (실제 성공률 · A 예측 · A-sym 예측)")
+    print("\n  Passes the rule changes (observed completion · A prediction · A-sym prediction)")
     for label, g in groups_rep.items():
         if not g["n"]:
-            print(f"  {label:<17} 0개"); continue
+            print(f"  {label:<17} 0"); continue
         extra = (f" · logloss A {g['log_loss_A']:.3f} → A-sym {g['log_loss_Asym']:.3f}" if "log_loss_A" in g else "")
-        print(f"  {label:<17} {g['n']:>4}개 · 실제 {g['observed']:.3f} · A {g['A']:.3f} · A-sym {g['Asym']:.3f}{extra}")
-    print(f"\nA-sym 전체 적합: 계수 {np.round(a_all.spec['coef'], 3).tolist()}")
+        print(f"  {label:<17} {g['n']:>4} · observed {g['observed']:.3f} · A {g['A']:.3f} · A-sym {g['Asym']:.3f}{extra}")
+    print(f"\nA-sym fit on all passes: coefficients {np.round(a_all.spec['coef'], 3).tolist()}")
     print(f"→ {args.output}")
 
 

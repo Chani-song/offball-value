@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Fit and compare the two pass-model candidates on our Bundesliga passes.
 
-  baseline  andrew/models/experimental_pass.json -- 준현's positions-only model,
+  baseline  andrew/models/experimental_pass.json -- Andrew's positions-only model,
             fitted on StatsBomb 360, unchanged. Scored on the same passes.
   B1        his own logistic on his own "velocity" feature set
             (expected_pass.pass_features, positions_only=False), refitted with
@@ -181,11 +181,16 @@ def probe(models: dict) -> list:
     c, cv = np.array([50.0, 34.0]), np.zeros(2)
     r, t = np.array([70.0, 34.0]), np.array([78.0, 34.0])
     out = []
-    for label, rv, dv in (("모두 정지", [0.0, 0.0], [0.0, 0.0]),
-                          ("러너 7 m/s 침투 · 수비 정지", [7.0, 0.0], [0.0, 0.0]),
-                          ("러너 7 m/s 침투 · 수비 반대로 3 m/s", [7.0, 0.0], [-3.0, 0.0])):
+    # The labels and the row key below ("situation") are written to report.json,
+    # and andrew-passer2on1/tests/test_pass_candidates.py reads them back, so they
+    # stay as they are. The three cases: everyone standing; runner at 7 m/s in
+    # behind, defender standing; runner at 7 m/s in behind, defender at 3 m/s the
+    # other way.
+    for label, rv, dv in (("everyone standing", [0.0, 0.0], [0.0, 0.0]),
+                          ("runner 7 m/s in behind · defender standing", [7.0, 0.0], [0.0, 0.0]),
+                          ("runner 7 m/s in behind · defender 3 m/s the other way", [7.0, 0.0], [-3.0, 0.0])):
         d = np.array([[71.0, 36.0]])
-        row = {"상황": label}
+        row = {"situation": label}
         for name, m in models.items():
             row[name] = float(m.predict(c, r, d, cv, np.array(rv), np.array([dv]), t, 0, 1))
         out.append(row)
@@ -200,7 +205,7 @@ def main() -> None:
     dist = np.array([r["pass_distance"] for r in rows])
     matches = sorted(set(groups))
     args.output.mkdir(parents=True, exist_ok=True)
-    print(f"패스 {len(rows):,} · 성공률 {y.mean():.4f} · 경기 {len(matches)}", flush=True)
+    print(f"passes {len(rows):,} · completion {y.mean():.4f} · matches {len(matches)}", flush=True)
 
     xb1 = b1_features(rows)
     assert xb1.shape[1] == len(FEATURE_SETS["velocity"])
@@ -225,7 +230,7 @@ def main() -> None:
             else:
                 model.spec["metadata"] = held
                 (args.output / f"A_without_{m}.json").write_text(json.dumps(model.spec, indent=2) + "\n")
-        print(f"  폴드 {m}: 패스 {te.sum()} · B1 C={c}", flush=True)
+        print(f"  fold {m}: passes {te.sum()} · B1 C={c}", flush=True)
 
     b1_all, c_all = fit_b1(xb1, y, groups)
     b1_all.metadata = {"kind": "fitted_logistic", "target_semantics": "intended_at_kick",
@@ -248,22 +253,22 @@ def main() -> None:
                                "B1": b1_all, "A": a_all})}
     (args.output / "report.json").write_text(json.dumps(results, ensure_ascii=False, indent=1) + "\n")
 
-    print(f"\n경기 밖 평가 (각 경기를 나머지 경기로 학습한 모델로 예측) · 기저율 Brier {y.mean() * (1 - y.mean()):.4f}")
-    print(f"  {'모델':<10}{'AUC':>7}{'Brier':>9}{'logloss':>9}{'예측평균':>9}")
+    print(f"\nOut-of-match evaluation (each match predicted by a model trained on the other matches) · base-rate Brier {y.mean() * (1 - y.mean()):.4f}")
+    print(f"  {'model':<10}{'AUC':>7}{'Brier':>9}{'logloss':>9}{'mean pred':>9}")
     for rep in results["out_of_match"]:
         print(f"  {rep['name']:<10}{rep['auc']:>7.3f}{rep['brier']:>9.4f}{rep['log_loss']:>9.4f}{rep['mean_predicted']:>9.3f}")
     if results["out_of_match"]:
-        print("\n  길이 구간별 실제 / 예측")
+        print("\n  actual / predicted by length band")
         names = [r["name"] for r in results["out_of_match"]]
-        print("  " + f"{'구간':<10}{'n':>5}{'실제':>7}" + "".join(f"{n:>10}" for n in names))
+        print("  " + f"{'band':<10}{'n':>5}{'actual':>7}" + "".join(f"{n:>10}" for n in names))
         for i, band in enumerate(results["out_of_match"][0]["bands"]):
             print("  " + f"{band['band']:<10}{band['n']:>5}{band['observed']:>7.3f}"
                   + "".join(f"{r['bands'][i]['predicted']:>10.3f}" for r in results["out_of_match"]))
-    print(f"\nA 전체 적합: 계수 {np.round(a_all.spec['coef'], 3).tolist()} · 공 속도 {a_all.spec['ball_speed']}")
-    print(f"B1 전체 적합: C={c_all}")
-    print("\n뒷공간 스루패스 시험 (러너 앞 8 m로 패스)")
+    print(f"\nA fitted on all: coef {np.round(a_all.spec['coef'], 3).tolist()} · ball speed {a_all.spec['ball_speed']}")
+    print(f"B1 fitted on all: C={c_all}")
+    print("\nThrough ball in behind (pass to 8 m ahead of the runner)")
     for row in results["probe"]:
-        print("  " + row["상황"] + " → " + " · ".join(f"{k} {v:.3f}" for k, v in row.items() if k != "상황"))
+        print("  " + row["situation"] + " → " + " · ".join(f"{k} {v:.3f}" for k, v in row.items() if k != "situation"))
     print(f"\n→ {args.output}")
 
 

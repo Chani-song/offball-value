@@ -23,7 +23,7 @@
   },
   "metadata": {
     "training": "our Bundesliga open-play passes, tracking labels, intended-at-kick targets",
-    "passes_file": "/scratch/bbmr/kseo1/offball-value/data/processed/pass_models/passes.jsonl",
+    "passes_file": "data/processed/pass_models/passes.jsonl",
     "passes": 1561,
     "held_out_match": "DFL-MAT-J03WMX",
     "trained_on": [

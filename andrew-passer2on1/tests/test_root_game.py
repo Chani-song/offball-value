@@ -22,7 +22,7 @@ import numpy as np
 from defensive_positioning.models import GameConfig
 from passer2on1.solve import solve_one
 
-ROOT = Path(os.environ.get("OFFBALL_DATA_ROOT", "/scratch/bbmr/kseo1/offball-value"))
+ROOT = Path(os.environ.get("OFFBALL_DATA_ROOT", Path(__file__).resolve().parents[2]))
 STATES = ROOT / "data/processed/showcase_v1/figure_2v1/states_2v1_all.json"
 MODEL = ROOT / "andrew/models/experimental_pass.json"
 PHYSICS = json.loads((ROOT / "data/processed/physics_limits/agile_p999_nodelay.json").read_text())

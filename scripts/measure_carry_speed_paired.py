@@ -110,12 +110,12 @@ def main() -> None:
                     continue              # must keep the ball for the whole window
                 pairs[horizon].append((max(pre), max(post)))
         del frames
-        print(f"  [{match_id}] 누적 {len(pairs[1.0]):,}", flush=True)
+        print(f"  [{match_id}] total so far {len(pairs[1.0]):,}", flush=True)
 
     print(f"\n{'='*76}")
-    print("공을 잡기 직전 vs 직후, 같은 선수의 최고 속도")
+    print("Same player's top speed just before vs just after getting the ball")
     print("="*76)
-    print(f"  {'구간':<10}{'n':>9}{'직전':>9}{'직후':>9}{'비율':>9}{'직후/직전 중앙':>16}")
+    print(f"  {'window':<10}{'n':>9}{'before':>9}{'after':>9}{'ratio':>9}{'median aft/bef':>16}")
     out = {}
     for horizon in HORIZONS:
         v = np.array(pairs[horizon])
@@ -131,9 +131,9 @@ def main() -> None:
               f"{np.percentile(post,99):>9.2f}"
               f"{np.percentile(post,99)/np.percentile(pre,99):>9.3f}"
               f"{np.median(ratio):>16.3f}")
-    print("\n  '비율' 은 99% 분위끼리, 마지막 열은 쌍별 비율의 중앙값.")
-    print("  1.0 에 가까우면 공을 잡는 것이 속도를 떨어뜨리지 않는다는 뜻.")
-    print("  주의: 받으려고 감속하는 경우가 섞여 '직후' 가 낮게 나오는 편향이 있다.")
+    print("\n  'ratio' compares the 99th percentiles; the last column is the median of the per-pair ratios.")
+    print("  Close to 1.0 means that getting the ball does not slow the player down.")
+    print("  Caveat: players slowing down to receive are mixed in, which biases 'after' low.")
 
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)

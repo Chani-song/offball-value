@@ -19,7 +19,7 @@
                    record which physics they used
 
 Run:  PYTHONPATH=andrew-passer2on1:andrew-fixedpasser:src \\
-      .venv-delta/bin/python andrew-passer2on1/tests/test_agile_motion.py
+      python andrew-passer2on1/tests/test_agile_motion.py
 """
 
 from __future__ import annotations

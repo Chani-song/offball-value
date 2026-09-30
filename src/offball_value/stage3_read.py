@@ -56,8 +56,8 @@ def name_move_targets(u, defender, targets) -> str:
     if tuple(u) == (0.0, 0.0):
         # a target velocity of zero: brake, not "stand" -- a running defender
         # keeps sliding the same way while he slows
-        return "멈추기(감속)"
-    best, score = "옆으로", 0.3
+        return "slow down"
+    best, score = "sideways", 0.3
     for name, tgt in targets:
         vx, vy = tgt[0] - defender[0], tgt[1] - defender[1]
         n = math.hypot(vx, vy)
@@ -69,8 +69,8 @@ def name_move_targets(u, defender, targets) -> str:
 
 
 def name_move(u, defender, carrier, runner, goal) -> str:
-    return name_move_targets(u, defender, (("볼 쪽", carrier), ("러너 쪽", runner),
-                                           ("골문 쪽", goal)))
+    return name_move_targets(u, defender, (("toward ball", carrier), ("toward runner", runner),
+                                           ("toward goal", goal)))
 
 
 def config_from_manifest(manifest: dict):
@@ -98,10 +98,10 @@ def targets_for(snapshot: dict, goal) -> tuple:
     3v1: the ball (scripted passer), the runner and the beneficiary are three.
     """
     if study_kind(snapshot) == "3v1":
-        return (("볼 쪽", snapshot["passer"]), ("러너 쪽", snapshot["runner"]),
-                ("수혜자 쪽", snapshot["beneficiary"]), ("골문 쪽", goal))
-    return (("볼 쪽", snapshot["carrier"]), ("러너 쪽", snapshot["receiver"]),
-            ("골문 쪽", goal))
+        return (("toward ball", snapshot["passer"]), ("toward runner", snapshot["runner"]),
+                ("toward beneficiary", snapshot["beneficiary"]), ("toward goal", goal))
+    return (("toward ball", snapshot["carrier"]), ("toward runner", snapshot["receiver"]),
+            ("toward goal", goal))
 
 
 def _goal(scenario: dict):

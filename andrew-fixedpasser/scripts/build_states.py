@@ -25,6 +25,7 @@ from __future__ import annotations
 import argparse
 import glob
 import json
+import os
 import math
 from pathlib import Path
 
@@ -42,7 +43,7 @@ def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser()
     p.add_argument("--gate", type=Path, default=ROOT / "data/processed/pair_gate_v7.csv")
     p.add_argument("--build", type=Path,
-                   default=Path("/work/hdd/bbmr/kseo1/offball-out/v7_r9_ssac"))
+                   default=Path(os.environ.get("OFFBALL_OUT_ROOT", Path(__file__).resolve().parents[2] / "out/runs")) / "v7_r9_ssac")
     p.add_argument("--onsets", default=str(ROOT / "data/processed/run_onset_v0_5/dir25/*/audit_selection.csv"))
     p.add_argument("--output", type=Path,
                    default=ROOT / "data/processed/stage3/fixedpasser_states.json")
@@ -173,8 +174,8 @@ def main() -> None:
     reasons: dict[str, int] = {}
     for d in dropped:
         reasons[d["reason"]] = reasons.get(d["reason"], 0) + 1
-    print(f"대상 {n_source}" + (f" → 속도 ≥ {args.min_run_speed} {len(want)}" if args.min_run_speed else "")
-          + f" → 상태 {len(states)} · 제외 {len(dropped)} {reasons}")
+    print(f"source {n_source}" + (f" → speed ≥ {args.min_run_speed} {len(want)}" if args.min_run_speed else "")
+          + f" → states {len(states)} · dropped {len(dropped)} {reasons}")
     print(f"→ {args.output}")
 
 

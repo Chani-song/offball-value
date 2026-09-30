@@ -5,7 +5,7 @@ Set 2026-09-30 from the team's feedback (a Helvetica face; restrained colours af
 white ground, blue / red players, thin grey pitch lines; thin arrows with small heads; the match's date,
 teams and clock in a corner). The earlier dark style is kept in scripts/archive_v1_dark/.
 
-Font: Helvetica is not installed on Delta (nor Arial or Liberation Sans). Nimbus Sans -- URW's
+Font: Helvetica is not installed on the cluster these figures were made on (nor Arial or Liberation Sans). Nimbus Sans -- URW's
 metric-compatible Helvetica clone, the face Ghostscript uses for Helvetica -- is loaded from its files
 by path, Regular and Bold; `use_font` refuses to run if matplotlib would resolve either weight to another
 file, and `check_text` refuses a figure with a glyph the face lacks (no silent fallback).

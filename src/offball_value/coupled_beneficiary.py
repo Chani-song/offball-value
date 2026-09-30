@@ -11,8 +11,9 @@ Nothing forces those to refer to the same instant. A player can top the
 occupation term at 0.5 s while his best Q sits at 2.9 s, by which time he
 may have left the space entirely. The reviewer's objection (2026-09-09):
 
-  "공간점유가 최적인 시점이랑 패스를 받을 수 있는 시점이 일치해야 하는건데,
-   그게 따로 돌아간다는거지? 그러면 안되잖아."
+  "The moment when space occupation is best and the moment when he can
+   receive the pass should be the same, but you're saying they run
+   separately? That can't be right."
 
 R9 forms the product inside the time loop instead:
 

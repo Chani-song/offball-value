@@ -384,22 +384,22 @@ def relative_commands(record: dict, config: GameConfig, kind: str) -> dict:
     from defensive_positioning.equilibrium_clips import scenario_from
     sc = scenario_from(record["scenario"])
     goal = tuple(tuple(goal_of(sc)) for _ in config.times)
-    stop = Command("멈추기", "stop")
-    cont = Command("계속", "continue")
-    to_goal = Command("골문 쪽", "toward", goal)
+    stop = Command("stop", "stop")
+    cont = Command("keep going", "continue")
+    to_goal = Command("toward goal", "toward", goal)
     d0 = np.asarray(sc.defender.position, dtype=float)
     if kind == "2v1":
         ball_track = _track(sc.carrier.position, sc.carrier.velocity, config, sc)
         runner = sc.receiver
         run_line = (tuple(runner.position), tuple(runner.velocity))
-        intercept = Command("러너 차단", "intercept", run_line)
+        intercept = Command("cut off runner", "intercept", run_line)
         carrier_cmds = (stop, cont, to_goal,
-                        Command("왼쪽 옆", "fixed", (0.0, float(sc.attack_direction))),
-                        Command("오른쪽 옆", "fixed", (0.0, -float(sc.attack_direction))))
-        runner_cmds = (stop, cont, to_goal, Command("볼 쪽", "toward", ball_track),
-                       Command("옆으로", "fixed", _lateral_away(runner.velocity, d0, runner.position, sc)))
-        defender_cmds = (stop, Command("볼 쪽", "toward", ball_track), intercept,
-                         Command("사이 지키기", "between", (ball_track, intercept)), to_goal)
+                        Command("left", "fixed", (0.0, float(sc.attack_direction))),
+                        Command("right", "fixed", (0.0, -float(sc.attack_direction))))
+        runner_cmds = (stop, cont, to_goal, Command("toward ball", "toward", ball_track),
+                       Command("sideways", "fixed", _lateral_away(runner.velocity, d0, runner.position, sc)))
+        defender_cmds = (stop, Command("toward ball", "toward", ball_track), intercept,
+                         Command("hold between", "between", (ball_track, intercept)), to_goal)
         return {"carrier": carrier_cmds, "receiver": runner_cmds, "defender": defender_cmds}
     if kind == "3v1":
         passer = np.asarray(record["passer"]["positions"], dtype=float)
@@ -408,14 +408,14 @@ def relative_commands(record: dict, config: GameConfig, kind: str) -> dict:
         ball_track = tuple(tuple(float(x) for x in passer[k]) for k in range(config.steps + 1))
         runner, bene = sc.carrier, sc.receiver
         run_line = (tuple(runner.position), tuple(runner.velocity))
-        intercept = Command("러너 차단", "intercept", run_line)
+        intercept = Command("cut off runner", "intercept", run_line)
         bene_track = _track(bene.position, bene.velocity, config, sc)
-        runner_cmds = (stop, cont, to_goal, Command("볼 쪽", "toward", ball_track),
-                       Command("옆으로", "fixed", _lateral_away(runner.velocity, d0, runner.position, sc)))
-        bene_cmds = (stop, cont, to_goal, Command("볼 쪽", "toward", ball_track),
-                     Command("옆으로", "fixed", _lateral_away(bene.velocity, d0, bene.position, sc)))
-        defender_cmds = (stop, intercept, Command("수혜자 쪽", "toward", bene_track),
-                         Command("사이 지키기", "between", (bene_track, intercept)), to_goal)
+        runner_cmds = (stop, cont, to_goal, Command("toward ball", "toward", ball_track),
+                       Command("sideways", "fixed", _lateral_away(runner.velocity, d0, runner.position, sc)))
+        bene_cmds = (stop, cont, to_goal, Command("toward ball", "toward", ball_track),
+                     Command("sideways", "fixed", _lateral_away(bene.velocity, d0, bene.position, sc)))
+        defender_cmds = (stop, intercept, Command("toward beneficiary", "toward", bene_track),
+                         Command("hold between", "between", (bene_track, intercept)), to_goal)
         return {"carrier": runner_cmds, "receiver": bene_cmds, "defender": defender_cmds}
     raise ValueError(f"unknown game kind {kind}")
 

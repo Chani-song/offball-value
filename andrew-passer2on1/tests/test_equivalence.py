@@ -14,12 +14,13 @@ Four levels, each bit for bit (np.array_equal, not allclose):
 Level 4 is the end-to-end check: whatever the new code does, removing the
 background gives back a number the untouched original already produced.
 
-Run:  PYTHONPATH=andrew-passer2on1 .venv-delta/bin/python andrew-passer2on1/tests/test_equivalence.py
+Run:  PYTHONPATH=andrew-passer2on1 python andrew-passer2on1/tests/test_equivalence.py
 """
 
 from __future__ import annotations
 
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -40,7 +41,7 @@ from passer2on1.payoff import (positional_threat_all, release_payoffs_with_backg
 ROOT = Path(__file__).resolve().parents[2]
 MODEL = ROOT / "andrew/models/experimental_pass.json"
 STATES = ROOT / "data/processed/stage3/carrier_beneficiary_states_v2.json"
-SOLVED = Path("/work/hdd/bbmr/kseo1/offball-out/stage3_carrier_3s")
+SOLVED = Path(os.environ.get("OFFBALL_OUT_ROOT", Path(__file__).resolve().parents[2] / "out/runs")) / "stage3_carrier_3s"
 CONFIG = GameConfig(steps=3, step_seconds=1.0, physics_step=0.025)
 
 

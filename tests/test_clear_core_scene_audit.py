@@ -39,10 +39,10 @@ class ClearCoreSceneAuditTest(unittest.TestCase):
 
     def test_html_has_actual_only_review_contract(self):
         html = render_clear_core_scene_audit([])
-        self.assertIn("관측된 실제 움직임만 검수", html)
-        self.assertIn("확정된 0개 장면", html)
-        self.assertIn("보류 장면은 이 공유용 데모에서 제외", html)
-        self.assertIn("파생 공격 옵션", html)
+        self.assertIn("Review observed actual motion only", html)
+        self.assertIn("0 scenes confirmed", html)
+        self.assertIn("Scenes on hold are excluded from this shared demo", html)
+        self.assertIn("Derived attacking option", html)
         self.assertIn("clear_core_local_game_v0_1_reviews.csv", html)
         self.assertIn("scenes[si].core_review", html)
         self.assertNotIn("Team derived", html.split("<script id=", 1)[0])

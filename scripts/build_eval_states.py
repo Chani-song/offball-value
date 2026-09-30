@@ -40,6 +40,10 @@ import numpy as np
 from build_showcase_states import (DATA, REF_2V1, REF_3V1, STEPS, STEP_S, Match, compare, record_2v1,
                                    record_3v1)
 
+# The game labels exactly as the team's rating and start sheets write them (Korean for "2v1" / "3v1"):
+# data values the code must match, so they are kept verbatim here and used by name below.
+GAME_2V1, GAME_3V1 = "2대1", "3대1"
+
 FPS = 25
 STEP_FRAMES = round(STEP_S * FPS)
 HALF_FRAMES = 4                    # ball speed over +-0.16 s, the window build_showcase_states.ball_track uses
@@ -74,10 +78,11 @@ def main() -> None:
     codes = args.codes.split(",")
     moments = [int(k) for k in args.moments.split(",")]
     rated = {r["code"]: r for r in csv.DictReader(RATED.open(encoding="utf-8"))}
-    ref = {"2대1": json.loads(REF_2V1.read_text()), "3대1": json.loads(REF_3V1.read_text())}
+    # the keys below (Korean for 2v1 / 3v1) are the rated sheet's "detail" values; kept as data
+    ref = {GAME_2V1: json.loads(REF_2V1.read_text()), GAME_3V1: json.loads(REF_3V1.read_text())}
     by_index = {k: {s["index"]: s for s in v["states"]} for k, v in ref.items()}
-    lim2 = {slot: (v["maximum_speed"], v["maximum_acceleration"]) for slot, v in ref["2대1"]["limits"]["applied"].items()}
-    a3 = ref["3대1"]["limits"]["all_strategic"]
+    lim2 = {slot: (v["maximum_speed"], v["maximum_acceleration"]) for slot, v in ref[GAME_2V1]["limits"]["applied"].items()}
+    a3 = ref[GAME_3V1]["limits"]["all_strategic"]
     lim3 = {slot: (a3["maximum_speed"], a3["maximum_acceleration"]) for slot in ("carrier", "receiver", "defender")}
 
     scenes = []
@@ -93,14 +98,14 @@ def main() -> None:
         starts.setdefault(pv["match_id"], []).extend(onset + STEP_FRAMES * k for k in range(STEPS + 3))
     matches = {m: Match(args.raw_dir, m, s) for m, s in sorted(starts.items())}
 
-    out, skipped = {"2대1": [], "3대1": []}, []
+    out, skipped = {GAME_2V1: [], GAME_3V1: []}, []
     for code, kind, index, pv in scenes:
         mt = matches[pv["match_id"]]
         onset = int(pv["onset_frame_id"])
         team = mt.frames[onset].players[pv["runner_id"]].team_id
         ids = {"runner": pv["runner_id"], "defender": pv["defender_id"], "carrier": pv["carrier_id"],
                "beneficiary": pv.get("beneficiary_id") or pv["carrier_id"]}
-        build, lim = (record_2v1, lim2) if kind == "2대1" else (record_3v1, lim3)
+        build, lim = (record_2v1, lim2) if kind == GAME_2V1 else (record_3v1, lim3)
         # 1  the onset rebuilt the imported way must be the pipeline's state
         compare(f"{code} ({kind} index {index})", build(mt.payload(onset, team), ids, lim, index, pv),
                 by_index[kind][index])
@@ -115,12 +120,12 @@ def main() -> None:
                     "pipeline_onset_frame_id": onset, "start_t": round(k * STEP_S, 2), "rated_code": code,
                     "holders": [[h, None if math.isnan(s) else round(s, 2)] for h, s in holders],
                     "beneficiary_id": ids["beneficiary"]}
-            if kind == "2대1" and h0 != ids["carrier"]:
+            if kind == GAME_2V1 and h0 != ids["carrier"]:
                 skipped.append((label, f"the carrier has not got the ball at the start (holder {h0}, "
                                        f"ball {holders[0][1]:.1f} m/s)"))
                 continue
             per_instant = None
-            if kind == "3대1":
+            if kind == GAME_3V1:
                 if h0 in (ids["runner"], ids["beneficiary"]):
                     skipped.append((label, "the ball is already with the runner or the beneficiary"))
                     continue
@@ -135,7 +140,7 @@ def main() -> None:
                     continue
             try:
                 payload = mt.payload(start, team)
-                rec = (build(payload, ids, lim, 0, prov) if kind == "2대1"
+                rec = (build(payload, ids, lim, 0, prov) if kind == GAME_2V1
                        else build(payload, ids, lim, 0, prov, per_instant))
             except SystemExit as exc:          # the builder's own checks: off the pitch, over the speed limit
                 skipped.append((label, str(exc)))
@@ -143,7 +148,7 @@ def main() -> None:
             out[kind].append(rec)
 
     args.output.mkdir(parents=True, exist_ok=True)
-    for kind, name in (("2대1", "passer2on1"), ("3대1", "fixedpasser")):
+    for kind, name in ((GAME_2V1, "passer2on1"), (GAME_3V1, "fixedpasser")):
         for i, rec in enumerate(out[kind]):
             rec["index"] = i
         meta = {k: v for k, v in ref[kind].items() if k not in ("states", "filters", "dropped", "source")}

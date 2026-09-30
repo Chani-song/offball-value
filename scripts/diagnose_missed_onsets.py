@@ -116,7 +116,7 @@ def main() -> None:
     tol = 3.0 * FPS
 
     targets = join[join["labelled"] & join["effect"].isin(args.effects)]
-    print(f"{'/'.join(args.effects)} 레이블 {len(targets)}개\n")
+    print(f"{len(targets)} {'/'.join(args.effects)} labels\n")
 
     work: dict[str, list[dict]] = {}
     stats = {"phase_missing": 0, "onset_present": 0, "to_check": 0}
@@ -144,9 +144,9 @@ def main() -> None:
             {"clip_id": r["clip_id"], "shot_frame_id": int(frame), "effect": r["effect"]}
         )
 
-    print(f"phase 미포착         {stats['phase_missing']}")
-    print(f"phase 안에 onset 있음 {stats['onset_present']}")
-    print(f"→ 진단 대상          {stats['to_check']}\n")
+    print(f"phase not captured     {stats['phase_missing']}")
+    print(f"onset inside the phase {stats['onset_present']}")
+    print(f"→ to diagnose          {stats['to_check']}\n")
 
     base = RunOnsetConfig()
     out: list[dict] = []
@@ -164,19 +164,19 @@ def main() -> None:
             hi = item["shot_frame_id"] + int(args.post_seconds * FPS)
             wanted.update(range(lo, hi + 1))
         frames = load_bundesliga_frames(files["positions"], sorted(wanted))
-        print(f"=== {match_id} ({len(items)}장면, 프레임 {len(frames)}) ===", flush=True)
+        print(f"=== {match_id} ({len(items)} scenes, {len(frames)} frames) ===", flush=True)
 
         for item in items:
             rec = ann.get(item["clip_id"])
             if rec is None:
-                print(f"  {item['clip_id']}: 주석 없음")
+                print(f"  {item['clip_id']}: no annotation")
                 continue
             team_id = name_to_team.get(str(rec["team"]).strip())
             if team_id is None:
-                print(f"  {item['clip_id']}: 팀명 '{rec['team']}' 매칭 실패")
+                print(f"  {item['clip_id']}: team name '{rec['team']}' not matched")
                 out.append({**item, "status": "team_unmatched"})
                 continue
-            # 검증: 찬의님이 적은 슈터가 그 팀에 있는가
+            # Check: is the shooter Chani recorded on that team?
             shooter = str(rec.get("shooter", "")).strip()
             squad = {p.short_name for p in meta.players.values() if p.team_id == team_id}
             shooter_ok = shooter in squad
@@ -190,7 +190,7 @@ def main() -> None:
                 if player is None:
                     out.append({**item, "shirt": shirt, "status": "shirt_unmatched",
                                 "shooter_ok": shooter_ok})
-                    print(f"  {item['clip_id']} 등번호 {shirt}: 매칭 실패")
+                    print(f"  {item['clip_id']} shirt {shirt}: not matched")
                     continue
                 track = [
                     (f, frames[f].players[player.player_id].x, frames[f].players[player.player_id].y)
@@ -222,12 +222,12 @@ def main() -> None:
                             break
                     row[f"unlock_{field}"] = unlocked
                 out.append(row)
-                mark = "✓검출" if baseline else "✗미검출"
+                mark = "✓detected" if baseline else "✗missed"
                 unlocks = {k.replace("unlock_", ""): v for k, v in row.items()
                            if k.startswith("unlock_") and v is not None}
                 print(f"  {item['clip_id']} [{item['effect']}] {player.short_name}(#{shirt}) "
-                      f"{mark}  해제조건={unlocks or '없음'}"
-                      + ("" if shooter_ok else "  ⚠슈터 검증실패"))
+                      f"{mark}  unlocked by={unlocks or 'none'}"
+                      + ("" if shooter_ok else "  ⚠shooter check failed"))
         del frames
 
     frame = pd.DataFrame(out)
@@ -236,24 +236,24 @@ def main() -> None:
 
     print("\n" + "=" * 66)
     if "status" in frame:
-        print("상태:", dict(frame["status"].value_counts()))
+        print("status:", dict(frame["status"].value_counts()))
     if "shooter_ok" in frame:
         bad = frame[frame["shooter_ok"] == False]  # noqa: E712
-        print(f"슈터 이름 검증 실패: {len(bad)}/{len(frame)}")
+        print(f"shooter name check failed: {len(bad)}/{len(frame)}")
     missed = frame[frame.get("status") == "missed"] if "status" in frame else frame.iloc[:0]
     if len(missed):
-        print(f"\n기준 설정으로 미검출: {len(missed)}건. 어느 임계값을 낮추면 잡히나:")
+        print(f"\nmissed with the baseline settings: {len(missed)}. Which threshold, lowered, catches them:")
         for field in SWEEP:
             col = f"unlock_{field}"
             if col not in missed:
                 continue
             n = missed[col].notna().sum()
             if n:
-                print(f"  {field:36} {n:>2}건 해제  "
-                      f"(필요값 중앙값 {missed[col].median():.2f}, 기준 {SWEEP[field][0]})")
+                print(f"  {field:36} {n:>2} unlocked  "
+                      f"(median value needed {missed[col].median():.2f}, baseline {SWEEP[field][0]})")
         none_unlocked = missed[[f"unlock_{f}" for f in SWEEP]].isna().all(axis=1).sum()
-        print(f"  어느 하나로도 안 풀리는 것: {none_unlocked}건")
-    print(f"\n저장: {args.output}")
+        print(f"  not unlocked by any single one: {none_unlocked}")
+    print(f"\nsaved: {args.output}")
 
 
 if __name__ == "__main__":

@@ -3,20 +3,20 @@
 Arrived at with the reviewer on 2026-09-08. In his words the beneficiary of
 an off-ball run is found like this:
 
-  수비수가 오프더볼 러너에 반응해서 움직이면, 기존에 커버하던 area 중
-  일부에 대한 영향력이 줄어든다. 거기를 가장 잘 공략할 수 있는 사람이
-  수혜자다.
+  When a defender moves in reaction to an off-ball runner, his influence
+  over part of the area he was covering shrinks. The beneficiary is
+  whoever can best exploit it.
 
 with three refinements he made while reading the rule's own misses:
 
 1. The vacated region ACCUMULATES along the defender's whole reaction path
-   ("헨젤과 그레텔에 과자 흘리듯"), not at a single instant.
+   ("like Hansel and Gretel dropping crumbs"), not at a single instant.
 2. Both sides advance through TIME. Scoring attackers frozen at the onset
-   instant cannot express "Iyoha는 그 지역에서 멀어지고 Klarer는 더
-   가까워진다" — the observation that took the rule from 16 to 20.
+   instant cannot express "Iyoha moves away from that area and Klarer gets
+   closer" — the observation that took the rule from 16 to 20.
 3. Occupying space is not enough: the beneficiary must be able to RECEIVE
-   there and be dangerous there. "볼과의 거리가 가까워서 패스를 받을 확률이
-   높고 ... 골대를 정면으로 보고 있다." That is Q = P x G x A.
+   there and be dangerous there. "Close to the ball, so a high chance of
+   receiving the pass ... and facing the goal head-on." That is Q = P x G x A.
 
 So R6 = (occupation of the vacated trail, over time) x Q.
 
@@ -94,11 +94,11 @@ def rule_r7(
 
     R6 scores attackers on where they actually went, so a team-mate who
     reads the run badly scores zero and the run itself is credited with
-    nothing. The reviewer's objection (2026-09-08): "수혜자 후보들이
-    바보같이 움직여서 ... 이 둘 다 너무 똑똑해서 잘 공략하는 움직임을
-    가져간다면, 그때 가장 위협적인 사람이 수혜자가 되어야 하는 것
-    아니냐". The run created the chance; failing to take it is a separate
-    fact.
+    nothing. The reviewer's objection (2026-09-08): "the beneficiary
+    candidates moved stupidly ... if both of them were smart enough to make
+    the movement that exploits it well, shouldn't the most threatening one
+    then be the beneficiary?". The run created the chance; failing to take
+    it is a separate fact.
 
     That also restores symmetry: the defender is already simulated at his
     best available response and Q is already counterfactual ("if the pass

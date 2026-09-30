@@ -20,8 +20,8 @@ import numpy as np
 
 from passer2on1.physics_pass import load_pass_model
 
-ROOT = Path(os.environ.get("OFFBALL_DATA_ROOT", "/scratch/bbmr/kseo1/offball-value"))
-BEFORE = Path("/work/hdd/bbmr/kseo1/offball-out/backups/physics_pass_before_commitment_20260929.py")
+ROOT = Path(os.environ.get("OFFBALL_DATA_ROOT", Path(__file__).resolve().parents[2]))
+BEFORE = Path(os.environ.get("OFFBALL_OUT_ROOT", Path(__file__).resolve().parents[2] / "out/runs")) / "backups/physics_pass_before_commitment_20260929.py"
 MODELS = {"A": ROOT / "data/processed/pass_models/A_all.json",
           "A-sym": ROOT / "data/processed/pass_models_sym/Asym_all.json"}
 failures = []

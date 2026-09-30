@@ -132,11 +132,11 @@ def main() -> None:
         for match in json.loads(path.read_text(encoding="utf-8")):
             meta_by_id[str(match["match_id"])] = match
     keep_only = {c.strip() for c in args.competitions.split(",") if c.strip()}
-    print(f"three-sixty 파일 {len(matches)}개", flush=True)
+    print(f"{len(matches)} three-sixty files", flush=True)
     if keep_only:
-        print(f"  대회 제한: {sorted(keep_only)}")
+        print(f"  competitions restricted to: {sorted(keep_only)}")
     if not args.include_women:
-        print(f"  여자 대회 제외: {list(WOMEN_COMPETITIONS)}")
+        print(f"  women's competitions excluded: {list(WOMEN_COMPETITIONS)}")
 
     X, y, fold = [], [], []
     n_pass = n_paired = 0
@@ -189,7 +189,7 @@ def main() -> None:
             y.append(label)
             fold.append(index % 5)
         if (index + 1) % 100 == 0:
-            print(f"  {index+1}/{len(matches)} · 표본 {len(X):,}", flush=True)
+            print(f"  {index+1}/{len(matches)} · samples {len(X):,}", flush=True)
 
     X = np.stack(X)
     y = np.asarray(y, dtype=float)
@@ -199,19 +199,21 @@ def main() -> None:
         keep_idx = [i for i, n in enumerate(all_names) if n not in DROP_FEATURES]
         X = X[:, keep_idx]
         all_names = [all_names[i] for i in keep_idx]
-        print(f"제외한 feature: {list(DROP_FEATURES)}")
+        print(f"dropped features: {list(DROP_FEATURES)}")
     n_static = sum(1 for n in all_names if n in FEATURE_NAMES_360)
-    print(f"\n오픈플레이 패스 {n_pass:,} · 직전 프레임 짝지어짐 {n_paired:,} "
-          f"({n_paired/max(n_pass,1):.1%}) · 학습 표본 {len(X):,}")
-    print(f"성공률 {y.mean():.4f}")
+    print(f"\nopen-play passes {n_pass:,} · paired with the previous frame {n_paired:,} "
+          f"({n_paired/max(n_pass,1):.1%}) · training samples {len(X):,}")
+    print(f"completion rate {y.mean():.4f}")
 
     print(f"\n{'='*84}")
-    print("5겹 교차검증 (경기 단위 분할) · 보류 폴드에서만 평가")
+    print("5-fold cross-validation (split by match) · scored on held-out folds only")
     print("="*84)
-    print(f"  {'':<28}{'AUC':>9}{'Brier':>10}{'폴드 표준편차':>16}")
+    print(f"  {'':<28}{'AUC':>9}{'Brier':>10}{'fold std':>16}")
     results = {}
-    for name, cols in (("정적만 (현행 xpass360)", list(range(n_static))),
-                       ("정적 + 운동학", list(range(X.shape[1])))):
+    # These names are the "results" keys in training_report.json, so they stay
+    # as they are: "static only (current xpass360)" and "static + kinematic".
+    for name, cols in (("static only (current xpass360)", list(range(n_static))),
+                       ("static + kinematic", list(range(X.shape[1])))):
         pred = np.zeros(len(X))
         per = []
         for f in sorted(set(fold)):
@@ -225,12 +227,12 @@ def main() -> None:
         a, b = auc(pred, y), float(np.mean((pred - y) ** 2))
         results[name] = {"auc": a, "brier": b, "fold_auc": per}
         print(f"  {name:<26}{a:>9.4f}{b:>10.4f}{np.std(per):>16.4f}")
-    print(f"\n  기저율 Brier {y.mean()*(1-y.mean()):.4f}")
-    d = results["정적 + 운동학"]["auc"] - results["정적만 (현행 xpass360)"]["auc"]
-    print(f"  운동학이 더하는 AUC: {d:+.4f}"
-          f"  (폴드 표준편차 {np.std(results['정적 + 운동학']['fold_auc']):.4f})")
+    print(f"\n  base-rate Brier {y.mean()*(1-y.mean()):.4f}")
+    d = results["static + kinematic"]["auc"] - results["static only (current xpass360)"]["auc"]
+    print(f"  AUC added by kinematics: {d:+.4f}"
+          f"  (fold std {np.std(results['static + kinematic']['fold_auc']):.4f})")
 
-    print("\n전체 데이터로 최종 모델 적합 중 ...", flush=True)
+    print("\nfitting the final model on all data ...", flush=True)
     final = HistGradientBoostingClassifier(
         max_depth=None, max_iter=300, learning_rate=0.08,
         min_samples_leaf=50, l2_regularization=1.0, random_state=0)

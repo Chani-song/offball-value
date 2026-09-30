@@ -152,7 +152,7 @@ def track(frames, pid, lo, hi):
 def stage_solver(match_id, onset, runner):
     """Where a stage-2 triple goes in the agile stage-3 inputs."""
     out = []
-    for game, src in (("2대1", "passer2on1_states_agile06.json"), ("3대1", "fixedpasser_states_agile06_all.json")):
+    for game, src in (("2v1", "passer2on1_states_agile06.json"), ("3v1", "fixedpasser_states_agile06_all.json")):
         states = json.loads((D3 / src).read_text())["states"]
         idx = [s["index"] for s in states if s["provenance"]["match_id"] == match_id
                and int(s["provenance"]["onset_frame_id"]) == onset and s["provenance"]["runner_id"] == runner]
@@ -162,7 +162,7 @@ def stage_solver(match_id, onset, runner):
         kept = {s["index"] for s in final["states"]}
         why = {d["index"]: d["reason"] for d in final["filters"]["dropped"]}
         for i in idx:
-            out.append(f"{game} state {i}: " + ("남음 (삼각형 2 m까지 통과)" if i in kept else f"탈락 — {why.get(i, '?')}"))
+            out.append(f"{game} state {i}: " + ("kept (passes the triangle filter up to 2 m)" if i in kept else f"dropped — {why.get(i, '?')}"))
     return out
 
 
@@ -209,16 +209,16 @@ def main() -> None:
             if ph is None:
                 before = P[(P["team_id"] == team) & (P["possession_end_frame_id"] < shot)]
                 gap = (shot - int(before["possession_end_frame_id"].max())) / FPS if len(before) else float("nan")
-                s0 = f"✗ 국면 없음 — 같은 팀 마지막 국면이 슛 {gap:.1f}초 전에 끝남 (아래 1단계는 슛 전 {NO_PHASE_WINDOW_S:g}초 창으로 시험)"
+                s0 = f"✗ no phase — the same team's last phase ended {gap:.1f} s before the shot (stage 1 below is tested on the {NO_PHASE_WINDOW_S:g} s window before the shot)"
             else:
-                s0 = (f"✓ 국면 {(hi - lo) / FPS:.1f}초 (시작 {(shot - lo) / FPS:.1f}초 전, "
-                      f"끝 사유 {ph['boundary_reason']})")
-            print(f"\n{r.clip_id} [{r.effect}] 슈터 {rec['shooter']} · 오프더볼 {rec['offball_attackers']} · "
-                  f"수혜자 {rec['space_beneficiaries']}\n  0단계: {s0}")
+                s0 = (f"✓ phase {(hi - lo) / FPS:.1f} s (starts {(shot - lo) / FPS:.1f} s before the shot, "
+                      f"end reason {ph['boundary_reason']})")
+            print(f"\n{r.clip_id} [{r.effect}] shooter {rec['shooter']} · off-ball {rec['offball_attackers']} · "
+                  f"beneficiaries {rec['space_beneficiaries']}\n  stage 0: {s0}")
             for shirt in split_numbers(rec.get("offball_attackers", "")):
                 p = by_shirt.get((team, shirt))
                 if p is None:
-                    print(f"  #{shirt}: 등번호 매칭 실패")
+                    print(f"  #{shirt}: shirt number not matched")
                     continue
                 pid, name = p.player_id, p.short_name
                 row = {"clip_id": r.clip_id, "effect": r.effect, "shirt": shirt, "player": name,
@@ -232,24 +232,24 @@ def main() -> None:
                     for c in C.itertuples():
                         sel = selected[(selected["match_id"] == match_id) & (selected["frame_id"] == c.frame_id)
                                        & (selected["player_id"] == pid)]
-                        where = ("선택됨 (588 안)" if len(sel) else
-                                 "제외: 이미 검토한 장면" if truthy(c.excluded_reviewed) else
-                                 f"제외: 안정 점유 아님 ({c.settled_rejection_reasons})" if not truthy(c.settled_possession) else
-                                 "제외: 주 후보 아님" if not truthy(c.primary_candidate) else "제외: 사유 불명")
-                        lines.append(f"후보 있음 @{c.frame_id} (슛 {(shot - c.frame_id) / FPS:.1f}초 전, "
-                                     f"{c.onset_labels}, 런 속도 {c.post_mean_speed_mps:.1f}) → {where}")
+                        where = ("selected (in the 588)" if len(sel) else
+                                 "excluded: already reviewed" if truthy(c.excluded_reviewed) else
+                                 f"excluded: not settled possession ({c.settled_rejection_reasons})" if not truthy(c.settled_possession) else
+                                 "excluded: not the primary candidate" if not truthy(c.primary_candidate) else "excluded: reason unknown")
+                        lines.append(f"candidate found @{c.frame_id} ({(shot - c.frame_id) / FPS:.1f} s before the shot, "
+                                     f"{c.onset_labels}, run speed {c.post_mean_speed_mps:.1f}) → {where}")
                         if len(sel):
                             G = gatecsv[(gatecsv["match_id"] == match_id) & (gatecsv["onset_frame_id"] == c.frame_id)
                                         & (gatecsv["runner_id"] == pid)]
                             for g in G.itertuples():
-                                lines.append(f"    2단계 수비 {g.defender_name}: "
-                                             + ("통과" if truthy(g.kept_final) else "탈락 (주인공 규칙)" if truthy(g.kept) else "탈락 (쌍 게이트)")
-                                             + (f", 수혜자 {g.beneficiary_name}" if truthy(g.kept_final) else ""))
+                                lines.append(f"    stage 2 defender {g.defender_name}: "
+                                             + ("passed" if truthy(g.kept_final) else "dropped (protagonist rule)" if truthy(g.kept) else "dropped (pair gate)")
+                                             + (f", beneficiary {g.beneficiary_name}" if truthy(g.kept_final) else ""))
                             solver = stage_solver(match_id, int(c.frame_id), pid)
                             for s in solver:
-                                lines.append("    솔버 입력: " + s)
+                                lines.append("    solver input: " + s)
                             if G["kept_final"].map(truthy).any() and not solver:
-                                lines.append("    솔버 입력: 상태 파일에 없음 (시작 상태 단계에서 제외: 경기장 밖 또는 속도 상한)")
+                                lines.append("    solver input: not in the state files (dropped at the start-state step: off the pitch or over the speed limit)")
                     row["stage1"] = "candidate"
                 elif not kin:
                     unlock = {}
@@ -258,17 +258,17 @@ def main() -> None:
                             if detect_kinematic_run_onsets(fs, xs, ys, replace(cfg, **{field: v})):
                                 unlock[field] = v
                                 break
-                    lines.append(f"✗ 1단계-a 감지 규칙: 런이 감지되지 않음 (추적 {len(fs)}프레임). "
-                                 f"하나만 풀면 잡히는 조건: {unlock or '없음 (넷 중 하나를 풀어도 안 잡힘)'}")
+                    lines.append(f"✗ stage 1-a detection rule: no run detected ({len(fs)} tracked frames). "
+                                 f"single relaxation that catches it: {unlock or 'none (relaxing any one of the four does not catch it)'}")
                     row["stage1"] = "not_detected"
                     row["unlock"] = json.dumps(unlock)
                 else:
                     for k in kin:
                         g = gate(frames, int(k.frame_id), pid, meta, cfg, expected)
-                        lines.append(f"1단계-a 감지됨 @{k.frame_id} (슛 {(shot - k.frame_id) / FPS:.1f}초 전, "
-                                     f"{'/'.join(k.labels)}) → 1단계-b 상황 조건: "
-                                     + (("통과 (국면이 없어 후보가 만들어지지 않음)" if ph is None
-                                         else "통과 — 그런데 후보 목록에 없음 (설명 안 됨)")
+                        lines.append(f"stage 1-a detected @{k.frame_id} ({(shot - k.frame_id) / FPS:.1f} s before the shot, "
+                                     f"{'/'.join(k.labels)}) → stage 1-b context gates: "
+                                     + (("passed (no phase, so no candidate is built)" if ph is None
+                                         else "passed — but not in the candidate list (unexplained)")
                                         if g == "passes_context" else f"✗ {g}"))
                     row["stage1"] = "context_gate"
                 print(f"  #{shirt} {name}:")

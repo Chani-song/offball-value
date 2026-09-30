@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 
 from passer2on1.tracks import background_tracks
@@ -26,7 +27,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--states", type=Path,
                    default=ROOT / "data/processed/stage3/carrier_beneficiary_states_v2.json")
     p.add_argument("--build", type=Path,
-                   default=Path("/work/hdd/bbmr/kseo1/offball-out/v7_r9_ssac"))
+                   default=Path(os.environ.get("OFFBALL_OUT_ROOT", Path(__file__).resolve().parents[2] / "out/runs")) / "v7_r9_ssac")
     p.add_argument("--output", type=Path,
                    default=ROOT / "data/processed/stage3/passer2on1_states.json")
     p.add_argument("--steps", type=int, default=3)

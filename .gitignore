@@ -19,9 +19,12 @@ data/processed/physics_limits/*
 relatedworks/
 .DS_Store
 
-# offball-value on Delta
-.venv-delta/
+# other local environments
+.venv-*/
 logs/
 out/
-# 준현님 솔버는 별도 저장소(andrewkang12345/mit_ssac2027): ./andrew 에 따로 clone
+# Andrew's solver lives in a separate repository (andrewkang12345/mit_ssac2027): clone it into ./andrew
 andrew/
+
+# annotation sheets are data, not code
+chani/

@@ -1,80 +1,80 @@
-# 3대1 고정 패서 — 설계안 (검토용, 2026-09-23 갱신)
+# 3v1 fixed passer — design (for review, updated 2026-09-23)
 
-## 이 폴더의 규칙
+## Rules for this folder
 
-- `andrew/`는 준현님 원본(커밋 e8b0a95). **수정하지 않는다.** 가져다 쓰기만 한다.
-- 이 폴더는 원본 위에서 **바꿀 부분만** 덮어쓴다.
-- 짝 폴더 `andrew-passer2on1/`(2대1)와 공통 계산(배경 수비수 · 오프사이드 · xT)은 같은 값을 내야 하며, 테스트로 확인한다.
+- `andrew/` is Andrew's original (commit e8b0a95). **Do not modify it.** Import from it only.
+- This folder overrides **only the parts that change**, on top of the original.
+- The shared computations (background defenders · offside · xT) must give the same values as the sibling folder `andrew-passer2on1/` (2v1); tests check this.
 
-## 대상
+## Scope
 
-게이트 + 주인공 규칙 통과 896조합 중 **R9 수혜자 ≠ 볼 소유자**인 **718조합 (464장면)**.
-수비수의 딜레마: **러너를 따라갈까, 수혜자를 지킬까.** 볼 소유자는 고민 대상이 아니라
-둘 중 비는 쪽으로 패스할 사람. 준현님 합의: "3대1이지만 패서는 다른 이동 불가능, 패스만 가능.
-패스 옵션 수를 매순간 유지."
+Of the 896 triples that pass the gate + protagonist rule, the **718 triples (464 scenes)** where **R9 beneficiary ≠ ball carrier**.
+The defender's dilemma: **follow the runner, or guard the beneficiary.** The ball carrier is not part of the dilemma;
+he is the one who passes to whichever of the two is left open. Agreed with Andrew: "3v1, but the passer cannot move otherwise, only pass.
+Keep the number of pass options at every moment."
 
-## 핵심 아이디어: 몸 칸만 바꾼다
+## Key idea: swap only the body slots
 
-준현님 솔버는 **움직이는 몸 세 칸**의 곱으로 상태를 만들 뿐, 칸에 누가 들어가는지는 모른다.
-`matrices()`, `masks()`, 풀이, 검증, 저장은 세 칸 위에서만 돈다.
+Andrew's solver builds the state as a product of **three moving body slots**; it does not know who fills each slot.
+`matrices()`, `masks()`, solving, verification and saving run on the three slots only.
 
-| 칸 | 원본 2대1 | 3대1 |
+| Slot | Original 2v1 | 3v1 |
 |---|---|---|
-| `carrier` | 볼 소유자 | **러너** (결정) |
-| `receiver` | 리시버 | **수혜자** (결정) |
-| `defender` | 수비수 | **반응 수비수** (결정) |
-| 칸 밖 | — | **패서** + **나머지 수비수 전원 + 골키퍼** (결정 없음, 실제 경로) |
+| `carrier` | ball carrier | **runner** (decides) |
+| `receiver` | receiver | **beneficiary** (decides) |
+| `defender` | defender | **reacting defender** (decides) |
+| outside the slots | — | **passer** + **all other defenders + goalkeeper** (no decisions, actual tracks) |
 
-`FiniteGame`을 상속해 **생성자만** 새로 쓴다. 나머지는 물려받는다.
+Subclass `FiniteGame` and rewrite **only the constructor**. Everything else is inherited.
 
-## 원본 그대로 쓰는 것
+## Used unchanged from the original
 
-이동 모델, xPass 모델 가중치, 한 리시버에 대한 18종 패스 계산의 틀, 역방향 풀이, 정확성 검증, 저장.
+Motion model, xPass model weights, the framework for the 18 pass types to one receiver, backward solve, correctness check, saving.
 
-## 결정된 것 (2026-09-23)
+## Decided (2026-09-23)
 
-1. **3초** — 1초 × 3턴.
-2. **패서는 실제로 간 길을 따라간다 (B안)** — 턴 k의 패서 위치·속도 = 런 시작 후 k초의 실제 값.
-   결정은 하지 않는다. 실제 볼 소유자는 3초에 중앙값 7.4 m 움직이므로(36%는 10 m 이상)
-   제자리 고정보다 패스 출발점이 현실과 맞다. 상태 수·비용 동일.
-3. **배경 수비수** — 반응 수비수 외 전원 + 골키퍼, 실제 경로, 결정 없음.
-4. **패스**: 매 턴 모든 상태에서 패서→러너 18종 + 패서→수혜자 18종 = 36종 중 최선.
-   패스가 동시 이동보다 먼저라 최선만 남기는 게 정확(준현님 코드 주석). 누구에게 · 어떤 패스였는지 기록.
-   → "매 턴 패스 선택지 유지" 충족. 공격 행동 = 러너 5 × 수혜자 5 + 패스 1 = **26칸 그대로**.
-5. **xPass에 수비수 전원** — 원래 설계대로. "패서/리시버에 가장 가까운 수비수"를 배경 + 반응 수비수 중에서.
-   측정: 수혜자에게 가장 가까운 수비수가 반응 수비수가 아닌 경우 71%.
-6. **오프사이드 실제 규칙** — 뒤에서 두 번째. 측정: 한 명 기준으로만 오프사이드 약 18%.
-7. **xT를 수비수 전원 기준으로** — `room`, `support_room`의 거리를 "가장 가까운 수비수"로.
-   준현님 식의 유일한 변경, 계수는 그대로.
-8. **태클 끔** — 결정 없는 패서 옆에 서면 공짜로 뺏는 해가 생길 위험. 반응 수비수는 압박수가 아님(게이트).
-9. **공 보유 끔** — 3초 끝 보유 가치 0 → 공격은 3초 안에 반드시 패스(가장 좋은 때에).
-   "패서는 둘 중 하나로 무조건 패스한다고 수비수는 생각."
+1. **3 s** — 1 s × 3 turns.
+2. **The passer follows his actual path (option B)** — passer position/velocity at turn k = the actual values k s after run onset.
+   He makes no decisions. Real ball carriers move a median 7.4 m in 3 s (36% move 10 m or more), so the pass
+   origin matches reality better than holding him in place. Same state count and cost.
+3. **Background defenders** — everyone except the reacting defender, plus the goalkeeper; actual tracks, no decisions.
+4. **Passes**: every turn, in every state, the best of 18 passer→runner + 18 passer→beneficiary = 36 pass types.
+   The pass comes before the simultaneous move, so keeping only the best is exact (Andrew's code comment). Record to whom and which pass.
+   → meets "keep the pass options every turn". Attacking actions = runner 5 × beneficiary 5 + pass 1 = **26, unchanged**.
+5. **All defenders in xPass** — as originally designed. "Nearest defender to the passer/receiver" is taken from the background + reacting defenders.
+   Measured: the defender nearest the beneficiary is not the reacting defender in 71% of cases.
+6. **Real offside rule** — second-last defender. Measured: about 18% are offside only when judged against the one defender.
+7. **xT against all defenders** — the distance in `room` and `support_room` becomes the distance to "the nearest defender".
+   The only change to Andrew's formula; coefficients unchanged.
+8. **Tackles off** — otherwise a solution may appear where the defender stands next to the non-deciding passer and wins the ball for free. The reacting defender is not the presser (gate).
+9. **Retention off** — retention value 0 at the end of 3 s → the attack must pass within 3 s (at the best moment).
+   "The defender assumes the passer will certainly pass to one of the two."
 
-## 새로 만드는 것
+## New code
 
-- `FixedPasserScenario`: 패서 경로, 러너, 수혜자, 반응 수비수, 배경 수비수 경로, 경기장, 공격 방향.
-- `FixedPasserGame(FiniteGame)`: 생성자 — 세 칸 `build_layers`, 36종 패스, 생존 1, 보유 0.
-- 샘플 재생: 원본은 패스 목표를 항상 `receiver` 칸에서 계산해 러너에게 간 패스를 틀리게 그림 → 자체 버전.
-- 실행기: 우리 `run_stage3.py`와 같은 산출물 → 결과표·페이지 코드가 그대로 읽음.
-- 입력 변환: `pair_gate_v7.csv`의 `kept_final` & 수혜자 ≠ 볼 소유자.
+- `FixedPasserScenario`: passer track, runner, beneficiary, reacting defender, background defender tracks, pitch, attack direction.
+- `FixedPasserGame(FiniteGame)`: constructor — `build_layers` for the three slots, 36 pass types, survival 1, retention 0.
+- Sample playback: the original always computes the pass target from the `receiver` slot, so it draws passes to the runner wrongly → own version.
+- Runner script: same outputs as our `run_stage3.py` → the results table and page code read them unchanged.
+- Input conversion: `kept_final` in `pair_gate_v7.csv` & beneficiary ≠ ball carrier.
 
-## 크기와 비용
+## Size and cost
 
-상태 수 상한 `5^9 ≈ 197만` 그대로. 공격 행동 26칸 그대로. 패스 계산 2배 + 수비수 전원 탐색 →
-장면당 약 50~70 CPU초 예상 → 718조합 약 **10~14 SU**. 전체 실행 전에 따로 허락받음.
+State-count bound `5^9 ≈ 1.97 M` unchanged. 26 attacking actions unchanged. Twice the pass computation + search over all defenders →
+about 50-70 CPU s per scene expected → about **10-14 SU** for the 718 triples. Separate approval before the full run.
 
-## 검사 (전체 실행 전)
+## Checks (before the full run)
 
-1. 정확성 gap ≈ 0.
-2. **대칭**: 러너와 수혜자 칸을 맞바꿔도 게임 값이 같다.
-3. **축소**: 수혜자로 가는 패스를 전부 막으면 수비수가 러너 쪽으로 확정한다.
-4. 수비수가 볼 쪽으로 새지 않는다.
-5. 좌표: 솔버 시작 위치 = 실제 트래킹 (오차 0). 방향 명령은 공격 방향 기준(`× attack_direction`).
-6. 약 10장면 로그인 노드 → 페이지로 보여드림 → 전체 718 실행 허락.
+1. Correctness gap ≈ 0.
+2. **Symmetry**: swapping the runner and beneficiary slots leaves the game value unchanged.
+3. **Reduction**: with every pass to the beneficiary blocked, the defender commits to the runner.
+4. The defender does not drift toward the ball.
+5. Coordinates: solver start positions = actual tracking (zero error). Direction commands are relative to the attack direction (`× attack_direction`).
+6. About 10 scenes on the login node → shown on a page → approval for the full 718 run.
 
-## 알려진 한계
+## Known limitations
 
-- 패서·배경 수비수는 실제로 간 길을 간다 — 반응 수비수가 다르게 움직였다면 그들도 달리 움직였을 것.
-  실제 볼 소유자가 3초 안에 이미 패스했다면 그 뒤 위치는 의미가 약하다.
-- xT·xPass 가중치는 준현님 것 그대로. 준현님: "장면이 이상하면 xT·xPass 값 때문일 것."
-- 공 보유를 끄면 "패스는 반드시 나간다"는 조건부 질문이 된다 — 의도한 것.
+- The passer and background defenders follow their actual paths — had the reacting defender moved differently, they would have moved differently too.
+  If the real ball carrier had already passed within the 3 s, his later positions mean little.
+- xT and xPass weights are Andrew's, unchanged. Andrew: "If a scene looks odd, it is likely down to the xT/xPass values."
+- With retention off, the question becomes conditional on "a pass is certainly made" — intended.
