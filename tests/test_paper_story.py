@@ -511,8 +511,8 @@ class StoryUiTests(unittest.TestCase):
             self.assertIn(f'data-mode="{mode}"', self.markup, mode)
         # each one states the question it answers, not just its name
         for question in ("What happened?", "What else could the player have done?",
-                         "How good was the observed action?",
-                         "What does the equilibrium recommend?"):
+                         "How good was the observed decision?",
+                         "What does the strategic equilibrium recommend?"):
             self.assertIn(question, self.markup, question)
 
     def test_the_mode_bar_sits_above_the_layer_switches(self):
@@ -889,3 +889,214 @@ class MetricFormattingTests(unittest.TestCase):
         story = (SITE / "js" / "story.js").read_text()
         self.assertIn("Number.isInteger(value) ? String(value) : value.toFixed(3)",
                       story)
+
+
+class MultiPassArtifactTests(unittest.TestCase):
+    """Reading a solver run from kyuhyeok-dev@d1bbbb4 onward.
+
+    That commit gives every pass candidate its own attack column
+    (``multi_pass.MultiPassGame``: ``attack_columns = actions**2 + n_pass``),
+    so a run's attack policy is no longer ``actions**2 + 1`` long and its last
+    entry is one candidate among many. No such artifact exists locally yet, so
+    the layout is pinned here against the schema the solver writes -- the
+    alternative is finding out when the first real run lands.
+    """
+
+    #: A 2-direction game with 3 pass candidates: 4 move columns, then 3 passes.
+    STATE = {
+        "index": 7, "stratum": "eval", "value": 0.61,
+        "scenario": {"pitch_length": 105.0, "pitch_width": 68.0, "attack_direction": 1,
+                     "carrier": {"position": [60.0, 34.0], "velocity": [1.0, 0.0]},
+                     "receiver": {"position": [70.0, 40.0], "velocity": [2.0, 0.0]},
+                     "defender": {"position": [72.0, 36.0], "velocity": [0.0, 1.0]}},
+        "certificate": {"lower": 0.61, "upper": 0.61, "gap": 0.0},
+        "multi_pass": True,
+        "pass_candidates": ["runner:ground:along 8 lateral 0 goalward 0",
+                            "runner:ground:along 4 lateral -4 goalward 0",
+                            "runner:ground:along 0 lateral 0 goalward 4"],
+        "root_attack": [0.10, 0.05, 0.05, 0.20, 0.35, 0.15, 0.10],
+        "root_defender": [0.7, 0.3],
+        "modal_line": [{"step": 0, "time": 0.0, "value": 0.61,
+                        "defender_pure_loss": 0.042,
+                        "defender_policy": [0.7, 0.3],
+                        "defender_values": [0.61, 0.61],
+                        "carrier_slot_values": [0.55, 0.61],
+                        "receiver_slot_values": [0.58, 0.61],
+                        "release_value": None, "release_probability": 0.60,
+                        "chosen_defender": 0, "chosen_attack": 4, "event": "move"}],
+        "root_game": {"matrix": [[0.6, 0.5, 0.7], [0.4, 0.8, 0.6]],
+                      "defender_legal": [True, True],
+                      "attack_legal": [True, True, True],
+                      "columns": ["move 0 0", "move 0 1", "runner:ground:along 8 lateral 0 goalward 0"]},
+        "rollouts": [],
+    }
+
+    def _write(self, root):
+        import json
+
+        (root / "states").mkdir(parents=True)
+        (root / "manifest.json").write_text(json.dumps(
+            {"created_utc": "2026-09-30T00:00:00Z",
+             "config": {"steps": 3, "step_seconds": 0.6,
+                        "directions": [[1.0, 0.0], [0.0, 1.0]]}}))
+        (root / "states" / "state_007.json").write_text(json.dumps(self.STATE))
+
+    def _state(self):
+        import tempfile
+
+        from demo_viz.solver.adapter import load_state
+
+        self._tmp = tempfile.TemporaryDirectory()
+        root = Path(self._tmp.name)
+        self._write(root)
+        return load_state(root, 7)
+
+    def test_the_pass_columns_are_not_read_as_moves(self):
+        state = self._state()
+        self.assertTrue(state.multi_pass)
+        self.assertEqual(4, state.move_columns)
+        self.assertEqual(7, len(state.root_attack))
+
+    def test_pass_probability_is_the_sum_over_candidates_not_the_last_entry(self):
+        """The bug this guards: 0.10 reported where the truth is 0.60."""
+
+        state = self._state()
+        self.assertAlmostEqual(0.15 + 0.10 + 0.35, state.release_probability, places=9)
+        self.assertNotAlmostEqual(state.root_attack[-1], state.release_probability)
+
+    def test_the_likeliest_action_is_the_candidate_the_solver_named(self):
+        state = self._state()
+        best = state.most_likely_attack()
+        self.assertEqual("release", best["kind"])
+        self.assertAlmostEqual(0.35, best["probability"])
+        self.assertEqual("runner:ground:along 8 lateral 0 goalward 0", best["candidate"])
+        self.assertEqual(0, best["candidate_index"])
+
+    def test_the_equilibrium_extras_survive_into_the_payload(self):
+        payload = self._state().to_payload()
+        self.assertEqual(4, payload["move_columns"])
+        self.assertEqual(3, len(payload["pass_candidates"]))
+        self.assertAlmostEqual(0.042, payload["modal_line"][0]["defender_pure_loss"])
+        self.assertEqual(["move 0 0", "move 0 1",
+                          "runner:ground:along 8 lateral 0 goalward 0"],
+                         payload["root_game"]["columns"])
+
+    def test_a_multi_pass_run_writes_no_rollouts_and_that_is_not_an_error(self):
+        state = self._state()
+        self.assertEqual((), state.trajectories)
+        self.assertTrue(state.to_payload()["available"])
+
+    def test_the_legacy_layout_still_reads_the_old_way(self):
+        import json
+
+        from demo_viz.solver.adapter import load_state
+
+        for path in sorted((WEB_DATA / "solver").glob("*.json")):
+            raw = json.loads(path.read_text())
+            if not raw.get("available"):
+                continue
+            self.assertFalse(raw.get("multi_pass", False))
+            n = len(raw["directions"])
+            self.assertEqual(n * n + 1, len(raw["root_attack"]))
+            self.assertAlmostEqual(raw["root_attack"][-1], raw["release_probability"],
+                                   places=9)
+
+    def test_the_browser_reads_the_boundary_from_the_payload(self):
+        policy = (SITE / "js" / "policy.js").read_text()
+        block = policy[policy.index("export function attackRows"):]
+        block = block[:block.index("\n/**")]
+        self.assertIn("state.move_columns", block)
+        self.assertIn("pass_candidates", block)
+        self.assertNotIn("index === n * n", block,
+                         "the release boundary is data, not a constant")
+
+
+class SelectorLabelTests(unittest.TestCase):
+    """Section 13: the selector reads as football, not as a database key."""
+
+    def setUp(self):
+        self.source = (SITE / "js" / "showcase.js").read_text()
+        self.block = self.source[self.source.index("export function selectorLabel"):]
+        self.block = self.block[:self.block.index("\n/**")]
+
+    def test_the_fixture_is_the_fallback_when_no_title_is_curated(self):
+        self.assertIn("scene.story_title || fixture", self.block)
+        self.assertIn("scene.match", self.block)
+
+    def test_the_technical_id_is_always_kept(self):
+        self.assertIn("scene.showcase_id", self.block)
+
+    def test_nothing_generates_a_title(self):
+        for banned in ("template", "`The ", "join(\" pulls \")"):
+            self.assertNotIn(banned, self.block, banned)
+
+
+class CaseStudyLineTests(unittest.TestCase):
+    """Section 6: a case-study sentence, but never invented prose."""
+
+    def setUp(self):
+        self.app = (SITE / "js" / "app.js").read_text()
+        self.block = self.app[self.app.index("function renderCaseStudy"):]
+        self.block = self.block[:self.block.index("\nfunction ")]
+
+    def test_it_prefers_a_curated_summary_and_falls_back_to_the_reviewer(self):
+        self.assertIn("curated?.story_summary", self.block)
+        self.assertIn("curated?.annotation", self.block)
+
+    def test_a_reviewer_note_is_shown_as_a_quotation(self):
+        """Quoted text is visibly someone's words, not the interface's."""
+
+        self.assertIn("\\u201c", self.block)
+        self.assertIn("quoted", self.block)
+        self.assertIn("verbatim", self.block)
+
+    def test_no_tactical_sentence_is_assembled_anywhere(self):
+        """Checked against code only: the comment above renderCaseStudy names
+        such a sentence in order to forbid it."""
+
+        import re
+
+        code = re.sub(r"/\*.*?\*/", "", self.app, flags=re.S)
+        code = "\n".join(line.split("//")[0] for line in code.splitlines())
+        for banned in ("pulls the defender", "drags the", "creates space for",
+                       " away from ", "tactical"):
+            self.assertNotIn(banned, code.lower(), banned)
+
+
+class AdvancedControlTests(unittest.TestCase):
+    """Section 15: the research toggles are kept, but not in the reviewer's face."""
+
+    def setUp(self):
+        self.markup = (SITE / "index.html").read_text()
+        self.app = (SITE / "js" / "app.js").read_text()
+
+    def _row(self, marker):
+        start = self.markup.index(marker)
+        return self.markup[start:self.markup.index("</div>", start)]
+
+    def test_the_first_control_row_is_short(self):
+        row = self._row('<div class="layers">')
+        visible = row.count("data-layer=")
+        self.assertLessEqual(visible, 6,
+                             f"{visible} always-visible toggles is a forest")
+
+    def test_the_research_layers_are_kept_not_deleted(self):
+        for layer in ("candidates", "lane", "paths", "reach", "solver", "passes"):
+            self.assertIn(f'data-layer="{layer}"', self.markup, layer)
+
+    def test_the_advanced_panel_starts_collapsed(self):
+        body = self.markup[self.markup.index('id="adv-body"'):][:40]
+        self.assertIn("hidden", body)
+
+    def test_a_layer_a_mode_switched_on_is_named_while_collapsed(self):
+        """Otherwise the pitch changes with no visible cause."""
+
+        block = self.app[self.app.index("function renderAdvanced"):]
+        block = block[:block.index("\n/**")]
+        self.assertIn("adv-hint", block)
+        self.assertIn("state.advancedOpen || !on.length", block)
+
+    def test_a_default_on_layer_is_not_announced_as_a_change(self):
+        self.assertIn("ADVANCED_DEFAULT_ON", self.app)
+        block = self.app[self.app.index("const ADVANCED_DEFAULT_ON"):][:120]
+        self.assertIn("candidates", block)

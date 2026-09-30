@@ -94,12 +94,14 @@ export function filtered(scenes, filter) {
 
 /** One concise line for the selector: "S05 · 5/5 · Human-reviewed". */
 export function selectorLabel(scene) {
-  // A curated story title names the case study when one has been written;
-  // until then the id and the review badge are the label, unchanged. Nothing
-  // generates a title, so an uncurated scene never acquires a fabricated one.
-  const parts = [scene.story_title
-    ? `${scene.showcase_id} · ${scene.story_title}`
-    : scene.showcase_id];
+  // A curated story title names the case study when one has been written.
+  // Until then the fixture does: "S20 · Leverkusen vs Bochum" reads as a
+  // football match, where "S20" alone reads as a database key. Nothing
+  // generates a title, so an uncurated scene never acquires a fabricated one --
+  // it falls back to metadata it already has.
+  const fixture = (scene.match || "").split("·")[0].trim();
+  const head = scene.story_title || fixture;
+  const parts = [head ? `${scene.showcase_id} · ${head}` : scene.showcase_id];
   const rating = topRating(scene);
   if (rating) parts.push(rating);
   parts.push(PROVENANCE_LABEL[scene.provenance] || scene.provenance);

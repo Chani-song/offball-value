@@ -1,7 +1,7 @@
 // Wiring: scene loading, the role dock, drag and drop, overlays, playback.
 
 import { InfluenceCache, velocityAt } from "./influence.js";
-import { P, ROLE_COLOUR, ROLE_LABEL, ROLE_SIDE } from "./palette.js";
+import { LAYER_LABEL, P, ROLE_COLOUR, ROLE_LABEL, ROLE_SIDE } from "./palette.js";
 import { Pitch } from "./pitch.js";
 import { autoTriplet, rankBeneficiaries, rankDefenders } from "./ranking.js";
 import { drawChart } from "./chart.js";
@@ -90,6 +90,7 @@ const state = {
   storyRole: "runner",       // runner | passer | defender
   story: null,               // the paper-story contract payload for this scene
   solverView: "policy",      // policy | actual | overlay
+  advancedOpen: false,       // the Advanced layer disclosure
 };
 
 // ---------------------------------------------------------------------------
@@ -392,6 +393,7 @@ function render() {
   renderChart(swap, freeze);
   renderCandidates(freeze, slot);
   renderAnalysis(index, slot, threat, fan);
+  renderAdvanced();
   renderTicks();
   renderEvalStrip(index);
   $("readout").textContent = `${scene.times[index] >= 0 ? "+" : ""}${scene.times[index].toFixed(2)} s`;
@@ -661,6 +663,7 @@ function renderAnalysis(index, slot, threat, fan) {
       entries.push(["Solver scenario", curated.solver.scenario_type]);
     }
     if (brief) entries.length = 1;
+    renderCaseStudy(curated, brief);
     rows($("an-scene-rows"), entries);
     const note = $("an-scene-note");
     if (state.showcaseRolesApplied === false) {
@@ -776,8 +779,8 @@ const MODE_SECTIONS = {
 const MODE_TITLE = {
   observed: "What happened",
   counterfactual: "What else was possible",
-  evaluation: "How good the observed action was",
-  game_solution: "What the equilibrium recommends",
+  evaluation: "How good the observed decision was",
+  game_solution: "What the strategic equilibrium recommends",
 };
 
 const STORY_ROLE_LABEL = { runner: "Runner", passer: "Passer", defender: "Defender" };
@@ -865,6 +868,28 @@ function renderStoryRoles() {
     button.setAttribute("aria-pressed", String(state.storyRole === role));
     node.append(button);
   }
+}
+
+/**
+ * The one-line case study, in Observed mode.
+ *
+ * A curated `story_summary` when one has been written; otherwise the
+ * reviewer's own note, verbatim and attributed. Nothing here writes tactical
+ * prose: a sentence like "the runner pulls the defender away" is a claim, and
+ * the only warrant for it in this repository is a person having said so.
+ */
+function renderCaseStudy(curated, brief) {
+  const node = $("an-casestudy");
+  if (!node) return;
+  const summary = curated?.story_summary?.trim();
+  const note = curated?.annotation?.trim();
+  const text = summary || note;
+  node.hidden = brief || !text;
+  if (node.hidden) return;
+  node.textContent = summary ? summary : `\u201c${note}\u201d`;
+  node.className = summary ? "casestudy" : "casestudy quoted";
+  node.title = summary ? "Curated case-study summary"
+    : "The reviewer's own note on this scene, shown verbatim";
 }
 
 function renderDecision(index) {
@@ -1834,8 +1859,38 @@ function bindControls() {
   bindStory();
 }
 
+/** Advanced layers: collapsed, but never silently active. */
+const ADVANCED_LAYERS = ["candidates", "lane", "paths", "reach", "solver", "passes"];
+
+//: Advanced layers that start on. The header hint exists so a layer a *mode*
+//: switched on is not invisible; naming one that has been on since load would
+//: make the default state look like something had been changed.
+const ADVANCED_DEFAULT_ON = new Set(["candidates"]);
+
+function renderAdvanced() {
+  const body = $("adv-body");
+  const toggle = $("adv-toggle");
+  if (!body || !toggle) return;
+  body.hidden = !state.advancedOpen;
+  $("adv-chev").textContent = state.advancedOpen ? "\u25be" : "\u25b8";
+  toggle.setAttribute("aria-expanded", String(state.advancedOpen));
+  // a mode can switch one of these on; the header says so while it is closed,
+  // otherwise the pitch would change with no visible cause
+  const on = ADVANCED_LAYERS
+    .filter((name) => state.layers.has(name) && !ADVANCED_DEFAULT_ON.has(name))
+    .map((name) => LAYER_LABEL[name] || name);
+  $("adv-hint").textContent = state.advancedOpen || !on.length ? "" : on.join(" · ");
+}
+
 /** The four story modes, the story-role picker, and the solver view. */
 function bindStory() {
+  const advanced = $("adv-toggle");
+  if (advanced) {
+    advanced.addEventListener("click", () => {
+      state.advancedOpen = !state.advancedOpen;
+      renderAdvanced();
+    });
+  }
   for (const button of document.querySelectorAll("#story-modes .mode")) {
     button.addEventListener("click", () => setMode(button.dataset.mode));
   }

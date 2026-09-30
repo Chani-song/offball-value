@@ -671,3 +671,63 @@ outside the copied site folder and a test asserts the built site contains one
 HTML file.
 
 375 tests pass. Initial load 204 KB, total 8.03 MB.
+
+---
+
+# Integration + polish pass (2026-09-30), `origin/kyuhyeok-dev` @ `e84553a`
+
+## The audit
+
+Four new commits, ~5,659 insertions, mostly code. **No evaluation metric
+appeared.** The abstract's evaluation *inputs* now exist — a named pass action
+set (`run_passes`), passes as their own attack columns (`multi_pass`), the
+opening payoff table (`solve.root_game`, its docstring says *"for the
+evaluation metrics"*), per-decision action values, and evaluation states at
+each scene's real 0 / 0.6 / 1.2 s moments. Nothing consumes them.
+`similarity`, `relative_rank` and `observed_action` have zero matches at
+`e84553a`. Full trace: `PAPER_STORY_TRACE.md` §6.
+
+One genuinely new quantity worth the team's attention: **`defender_pure_loss`**
+(`solve.modal_line`) — what a defender who must commit to one command gives up
+against a replying attack, over the mixed value. *"A true dilemma has it > 0."*
+It is a dilemma measure, and it is **not** static-vs-responsive: it compares a
+committed defender with a mixing one, not a held opponent with a responding one.
+
+## What was integrated
+
+**The solver state schema changed, and our reader would have got it wrong.** A
+`--multi-pass` run writes `root_attack` of length `actions**2 + n_pass`, so its
+last entry is one candidate rather than *the* release, and `rollouts` is empty.
+The adapter and `policy.js` previously assumed `actions**2 + 1`: the first
+candidate would have been labelled "release" and every column after it
+mis-decoded as a move, while the pass probability would have read one
+candidate's share as the whole. Both now read `move_columns` and
+`pass_candidates` off the artifact, and carry `modal_line` and `root_game`
+through. `MultiPassArtifactTests` pins both layouts against the schema the
+solver writes; no artifact exists locally, which is why this was fixed before
+one lands rather than after.
+
+`payoff.py` also changed (an optional EPV/xT terminal threat). The two
+functions this demo executes are byte-identical at `c6423d4`, at `e84553a` and
+in the vendored copy, so **no number on screen moved**. The whole-file vendoring
+test could no longer pass — the new file needs relative imports and a CSV — so
+it was replaced by two stricter checks: byte-identity against the pinned
+revision, plus a live check that `positional_threat_all` and `offside_flags`
+still match the branch tip, plus a check that those two are the entire import
+surface.
+
+## What was polished
+
+| | before | after |
+| --- | --- | --- |
+| Controls | 11 checkboxes in one row | 5 story toggles; the rest under a collapsed **Advanced**, which names any layer a mode switched on |
+| Case-study selector | `S20 · 5/5 · Human-reviewed` | `S20 · VfL Bochum 1848 vs Bayer 04 Leverkusen · 5/5 · Human-reviewed` |
+| Scene section | rows only | a case-study line: the curated `story_summary`, else the **reviewer's own note in quotation marks**, attributed |
+| Mode subtitles | "observed action", "the equilibrium" | "observed decision", "the strategic equilibrium" |
+| Ray explorer | "Explore pass model" | "Explore action value", under Advanced |
+
+Nothing writes tactical prose. A sentence like *"the runner pulls the defender
+away"* is a claim, and the only warrant for one here is a person having said
+so — a test asserts no such sentence is assembled anywhere.
+
+414 tests. Initial load 241 KB (up 4 KB), Pages build 8.13 MB.

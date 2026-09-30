@@ -222,3 +222,79 @@ All ten, unchanged: `observed_action`, feasible actions for evaluation, the
 static/responsive pair on one scale, `observed_action_rank`, `relative_rank`,
 `similarity_to_optimal`, observed-action regret, frame-level player evaluation,
 clip-level aggregation, exploitability.
+
+---
+
+## 6. Re-audit at `e84553a` (2026-09-30)
+
+`c6423d4..e84553a` is four commits, ~5,659 insertions, and unlike the previous
+range it is mostly **code**. The conclusion of §2 is unchanged — the metric
+layer is still not implemented — but the substrate underneath it changed a lot,
+and so did the solver's state schema.
+
+    d1bbbb4  solver: pass candidates as columns against a committed defender,
+             background tackles, horizon option, opening payoff table
+    e7fc5d9  pass model A-sym and measured player limits
+    eb4a790  abstract scenes: showcase/evaluation state builders, panel extraction
+    e84553a  deploy: the abstract's runs (Figure 2 panels, evaluation set)
+
+### Newly real, and relevant to the demo
+
+| What | Where | Why it matters here |
+| --- | --- | --- |
+| **A feasible action set for the passer** | `run_passes.py` — pass targets along the receiver's run, `along -4..12 m × lateral -4/0/4`, plus toward goal | row 3b of the mapping stops being hypothetical: the solver now has a named pass action set |
+| **Passes as columns** | `multi_pass.MultiPassGame` — `attack_columns = actions**2 + n_pass`, each pass priced after the defender has carried out his command for `reaction_s` (0.2 s) | passes can be mixed with moves and with each other; the attack policy is no longer `actions**2 + 1` long |
+| **The opening payoff table** | `solve.root_game` — `[defender command, attack column]` with the continuation solved, plus `defender_legal`, `attack_legal`, `columns` | its own docstring: *"for the evaluation metrics"*; `eval_v1.sbatch`: *"for the static-vs-responsive numbers"* |
+| **Per-decision action values** | `solve.modal_line` — `defender_values`, `carrier_slot_values`, `receiver_slot_values`, `release_value` | what each body's options are worth at each decision |
+| **`defender_pure_loss`** | `solve.modal_line` — `matrix.max(axis=1).min() - value`, floored at 0 | **a dilemma measure**: what a defender who must commit to one command gives up against a replying attack, over the mixed value. *"A true dilemma has it > 0."* Surfaced per role as `stakes` in `stage3_read.modal_path` |
+| **Evaluation moments** | `scripts/build_eval_states.py` — each pipeline scene's real 0 / 0.6 / 1.2 s moments, rebuilt from raw tracking and checked field for field against the stage-3 states | the frames a frame-level evaluation would be computed at |
+| **Figure panels** | `scripts/extract_panel_policy.py` — each command's endpoint, path, aim, equilibrium probability; pass probability and target; the game value | `eval_v1.sbatch`: *"for the observed-action matching"* |
+
+### Still not implemented
+
+The **inputs** to the abstract's evaluation are now built. The **metrics** are
+not. `build_eval_states.py` states the intent plainly — *"The abstract's
+evaluation solves a fresh game at every 0.6 s real moment of a scene and
+compares what the players did with the game's optimum"* — but no code performs
+that comparison.
+
+Searched across `src/`, `scripts/` and `andrew-*/` at `e84553a`:
+`similarity`, `relative_rank` and `observed_action` have **zero matches**. The
+only `percentile` and `regret` hits inside the four new commits are physical:
+ball-speed clipping in `physics_pass.py` and acceleration percentiles in
+`measure_accelerations.py`. Nothing consumes `root_game` except the solver that
+writes it and its own tests.
+
+So all ten remain unimplemented: observed-action matching, feasible actions
+*for evaluation*, the static/responsive pair as computed numbers,
+`observed_action_rank`, `relative_rank`, `similarity_to_optimal`,
+observed-action regret, frame-level player evaluation, clip aggregation,
+exploitability.
+
+**`defender_pure_loss` is not static-vs-responsive.** It compares a *committed*
+defender with a *mixing* defender, both against a best-replying attack. The
+abstract's axis is whether the opponent can react to the player's action at
+all. Different comparison; do not substitute one for the other.
+
+### The state schema changed — and our reader had to change with it
+
+A run solved with `--multi-pass` writes:
+
+* `root_attack` of length `actions**2 + len(pass_candidates)`, so **the last
+  entry is one candidate, not "the release"**;
+* `pass_candidates`, `multi_pass`, `commands`, `passes`, `threat`, `terminal`,
+  `pass_reaction_s`, `background_tackles`;
+* `modal_line` and `root_game`;
+* `rollouts: []` — the modal line replaces sampled rollouts.
+
+`demo_viz/solver/adapter.py` and `web/site/js/policy.js` previously assumed the
+`actions**2 + 1` layout. On a multi-pass artifact that would have reported one
+candidate's probability as the whole pass probability and mis-decoded every
+column after it as a move. Both now read the boundary and the candidate names
+from the artifact; `tests/test_paper_story.py::MultiPassArtifactTests` pins both
+layouts. No such artifact exists locally yet, which is why this was fixed before
+one arrives rather than after.
+
+`payoff.py` also changed — an optional EPV/xT terminal threat. The two functions
+this demo executes, `positional_threat_all` and `offside_flags`, are **byte-identical**
+at `c6423d4`, at `e84553a` and in our vendored copy, so no number on screen moves.

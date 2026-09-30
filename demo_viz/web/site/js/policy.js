@@ -41,15 +41,23 @@ export function defenderRows(state) {
  *
  * `markov.py` encodes an attacking action over `len(directions) ** 2 + 1`
  * entries: the carrier's command times the receiver's command, then release as
- * the final entry.
+ * the final entry. Since kyuhyeok-dev@d1bbbb4 a run may instead give every pass
+ * candidate its own column, so there are `move_columns + pass_candidates.length`
+ * entries and the tail is many passes rather than one release. The boundary and
+ * the candidate names are read from the payload; assuming `n * n` would label
+ * the first candidate "release" and mis-decode every one after it as a move.
  */
 export function attackRows(state) {
   const directions = state?.directions || [];
   const n = directions.length;
+  const moves = Number.isInteger(state?.move_columns) ? state.move_columns : n * n;
+  const candidates = state?.pass_candidates || [];
   return (state?.root_attack || []).map((probability, index) => {
-    if (index === n * n) {
-      return { index, probability, label: "release the ball", kind: "release",
-               vector: null };
+    if (index >= moves) {
+      const which = index - moves;
+      return { index, probability, kind: "release", vector: null,
+               // the solver names its own candidates; nothing here invents one
+               label: candidates[which] || "release the ball" };
     }
     const carry = Math.floor(index / n);
     const run = index % n;

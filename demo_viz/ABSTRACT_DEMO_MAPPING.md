@@ -1,5 +1,12 @@
 # Abstract → demo traceability
 
+> **Re-audited 2026-09-30 against `origin/kyuhyeok-dev` @ `e84553a`** (four
+> commits of real solver work). The evaluation metrics are still unimplemented,
+> so no status flips to live — but rows 3b and 9 gained real machinery, and a
+> new dilemma measure (`defender_pure_loss`) appeared that the abstract's story
+> step 2 wants. `PAPER_STORY_TRACE.md` §6. The note below refers to the
+> previous audit and is kept for history.
+>
 > **Re-verified 2026-09-29 against `origin/kyuhyeok-dev` @ `c6423d4`** (the
 > previous audit base `3c9965b` was stale by one commit). That commit adds
 > fitted coefficients for pass model A and changes no code, so **every status
@@ -25,7 +32,7 @@ interface change. `KYUHYEOK_UPDATE_INTEGRATION.md` is the checklist.
 | 1 | Responsive counterfactuals rather than holding opponents fixed | Game solution mode (equilibrium policy + modal-policy illustration) | `markov.solve_markov_game`, `stage3_read.modal_path` | **blocked** |
 | 2 | Frame-by-frame evaluation of every relevant player | Evaluation mode → frame strip, synced to playback | contract `Series`; no producer | **slot live** |
 | 3 | Feasible counterfactual actions — runner | Kinematic reachable area | `action_space.solve_endpoint_motion` | **live** (labelled as the endpoint-motion model, not the pipeline steering model) |
-| 3b | Feasible counterfactual actions — passer | Counterfactual mode → `solver_release_actions` | `models.DEFAULT_PASSES`, `solver_release_targets` | **blocked** (needs a state with stage-3 semantics) |
+| 3b | Feasible counterfactual actions — passer | Counterfactual mode → `solver_release_actions` | `run_passes.py` (along the receiver's run, −4..12 m × lateral −4/0/4, plus toward goal); previously `models.DEFAULT_PASSES` | **blocked** (needs a solved state) — but the action set is now a real, named one, and `multi_pass` gives each candidate its own column |
 | 3c | Feasible counterfactual actions — defender | 5 compass moves | `stage3_read.SOLVER_DIRS`, `world_direction` | **blocked** |
 | 4 | Game-theoretic / Nash solution | Game solution view | `markov.solve_markov_game` + `certificate` | **blocked** |
 | 5 | Comparing observed actions against feasible counterfactuals | Solver policy / Actual movement / Overlay | `modal_path` vs scene tracks | **blocked** (both halves exist; only the solved half is missing) |
@@ -33,6 +40,7 @@ interface change. `KYUHYEOK_UPDATE_INTEGRATION.md` is the checklist.
 | 6b | Similarity to the optimal action | Evaluation mode → `similarity_to_optimal`, `optimal_action` | contract `Metric` / `ActionRef`; no producer | **slot live** |
 | 7 | Aggregation of frame-level evaluations across a clip | Clip summary cards, per story role | contract `ClipSummary`; aggregation supplied per metric | **slot live** |
 | 8 | Static vs responsive counterfactual comparison | Counterfactual mode → paired cards, each with its own `semantics` | contract `CounterfactualSide`; no single-scale comparison exists | **slot live** (see trace §2) |
+| 8b | *The dilemma the run creates* (not an abstract row; new upstream) | Game solution → per-decision stakes, once an artifact exists | `solve.modal_line:defender_pure_loss`, surfaced per role by `stage3_read.modal_path` | **blocked** on an artifact; the quantity is implemented and certified |
 | 9 | Pure and mixed equilibrium behaviour | Game solution → weighted policy bars, support counts, pure/mixed | `policy.js` decode + `split_by_step(below=0.8)`, `fsplit0` | **blocked** for a tracked scene; **live** against a real reference state (`story_harness.html`) |
 | 10 | Pass/xT-like models are interchangeable components | Action value details, demoted below the story | `payoff.release_payoffs_with_background` | **live** — and now demonstrably so: `c6423d4` shares a fitted drop-in alternative (pass model A, `physics_race_logit`, *"the interface is ExpectedPass.predict's"*) with leave-one-match-out cross-fitting |
 

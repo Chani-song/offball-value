@@ -286,20 +286,76 @@ class SolverActionTests(unittest.TestCase):
 
 
 class VendoredPayoffTests(unittest.TestCase):
-    """The vendored payoff must stay diffable against the branch it came from."""
+    """The vendored payoff: pinned to a revision, and tracked against the tip.
 
-    def test_it_is_byte_identical_to_kyuhyeok_dev(self):
+    Until ``kyuhyeok-dev@d1bbbb4`` the whole file was vendored byte for byte.
+    That commit gave ``payoff.py`` an optional EPV/xT terminal threat, which
+    brought relative imports (``.agile_motion``, ``.physics_pass``,
+    ``.run_passes``) and a ``data/static/EPV_grid.csv`` dependency. A standalone
+    module beside this package cannot carry those, so whole-file vendoring
+    stopped there.
+
+    What replaces it is two checks, and together they are stricter than the one
+    they replace: the file is still a verbatim copy of a named revision, **and**
+    the two functions the demo actually executes are checked against the live
+    branch tip. If either drifts, the demo's numbers are about to change and
+    this fails.
+    """
+
+    #: The upstream revision this file is a verbatim copy of.
+    PINNED = "c6423d4"
+    UPSTREAM = "andrew-passer2on1/passer2on1/payoff.py"
+    #: Exactly what demo_viz/solver_native/release.py imports from it.
+    USED = ("positional_threat_all", "offside_flags")
+
+    def _show(self, ref):
         import subprocess
 
-        out = subprocess.run(
-            ["git", "show",
-             "origin/kyuhyeok-dev:andrew-passer2on1/passer2on1/payoff.py"],
-            cwd=REPO_ROOT, capture_output=True, text=True)
+        out = subprocess.run(["git", "show", f"{ref}:{self.UPSTREAM}"],
+                             cwd=REPO_ROOT, capture_output=True, text=True)
         if out.returncode != 0:
-            self.skipTest("origin/kyuhyeok-dev not available")
+            self.skipTest(f"{ref} not available")
+        return out.stdout
+
+    @staticmethod
+    def _functions(text):
+        import ast
+
+        lines = text.splitlines()
+        return {node.name: "\n".join(lines[node.lineno - 1:node.end_lineno])
+                for node in ast.parse(text).body
+                if isinstance(node, ast.FunctionDef)}
+
+    def test_it_is_byte_identical_to_the_revision_it_was_copied_from(self):
         local = (REPO_ROOT / "demo_viz" / "solver_native"
                  / "_passer2on1_payoff.py").read_text()
-        self.assertEqual(out.stdout, local)
+        self.assertEqual(self._show(self.PINNED), local,
+                         f"the vendored copy no longer matches {self.PINNED}; "
+                         "re-pin it deliberately, do not edit it in place")
+
+    def test_the_functions_the_demo_executes_still_match_the_branch_tip(self):
+        """The check that guards the numbers on screen."""
+
+        local = self._functions((REPO_ROOT / "demo_viz" / "solver_native"
+                                 / "_passer2on1_payoff.py").read_text())
+        tip = self._functions(self._show("origin/kyuhyeok-dev"))
+        for name in self.USED:
+            self.assertIn(name, tip, f"{name} vanished upstream")
+            self.assertEqual(tip[name], local[name],
+                             f"{name} changed upstream: the demo's release "
+                             "chain would now differ from the research code")
+
+    def test_release_py_imports_nothing_else_from_it(self):
+        """So the two checked functions really are the whole surface."""
+
+        import ast
+
+        source = (REPO_ROOT / "demo_viz" / "solver_native" / "release.py").read_text()
+        imported = set()
+        for node in ast.walk(ast.parse(source)):
+            if isinstance(node, ast.ImportFrom) and node.module == "_passer2on1_payoff":
+                imported |= {a.name for a in node.names}
+        self.assertEqual(set(self.USED), imported)
 
 
 class PublicUiTests(unittest.TestCase):
@@ -356,8 +412,15 @@ class PublicUiTests(unittest.TestCase):
             self.assertNotIn(banned, block.lower(), banned)
 
     def test_the_explorer_is_not_called_candidate_passes(self):
-        self.assertIn("Explore pass model", self.markup)
-        self.assertNotIn("> Candidate passes", self.markup)
+        """The rays are the demo's own geometry, and the label must not imply
+        the solver proposed them."""
+
+        self.assertIn("Explore action value", self.markup)
+        for banned in ("> Candidate passes", "Candidate passes",
+                       "Suggested passes", "Best passes"):
+            self.assertNotIn(banned, self.markup, banned)
+        palette = (self.site / "js" / "palette.js").read_text()
+        self.assertNotIn("Candidate passes", palette)
 
     def test_a_missing_receiver_asks_for_one_rather_than_guessing(self):
         release = (self.site / "js" / "release.js").read_text()

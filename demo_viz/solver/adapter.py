@@ -134,17 +134,41 @@ class SolverState:
     provenance: SolverProvenance
     available: bool = True
     speed_caps: dict[str, float] = field(default_factory=dict)
+    #: Since kyuhyeok-dev@d1bbbb4 a run may give every pass candidate its own
+    #: attack column instead of a single "release". Then the attack policy is
+    #: ``len(directions)**2 + len(pass_candidates)`` long, and the last entry is
+    #: one pass among many rather than *the* release. Both layouts are read.
+    multi_pass: bool = False
+    pass_candidates: tuple[str, ...] = ()
+    #: Per-decision equilibrium record (``solve.modal_line``): action values for
+    #: each body, and ``defender_pure_loss`` -- what a defender who must commit
+    #: to one command gives up against a replying attack, over the mixed value.
+    modal_line: tuple[dict, ...] = ()
+    #: The opening payoff table as the solver saw it (``solve.root_game``).
+    root_game: dict | None = None
 
     # -- reading the root policy ------------------------------------------
     @property
-    def release_probability(self) -> float:
-        """Probability the attack releases the ball at the root.
+    def move_columns(self) -> int:
+        """How many of the attack columns are joint moves."""
 
-        ``markov.py`` encodes an attack action ``a`` over ``len(directions)**2
-        + 1`` entries, where the last one is release.
+        return len(self.directions) ** 2
+
+    @property
+    def release_probability(self) -> float:
+        """Total probability the attack plays a pass at the root.
+
+        ``markov.py`` encodes an attack action over ``len(directions)**2 + 1``
+        entries with release last. A multi-pass run
+        (``multi_pass.MultiPassGame``) replaces that one column with one per
+        candidate, so the pass probability is the sum over all of them -- taking
+        the last entry alone would report one candidate as if it were every
+        pass.
         """
 
-        return float(self.root_attack[-1]) if self.root_attack else 0.0
+        if not self.root_attack:
+            return 0.0
+        return float(sum(self.root_attack[self.move_columns:]))
 
     def most_likely_attack(self) -> dict[str, Any]:
         """The root attacking action with the largest probability.
@@ -158,8 +182,13 @@ class SolverState:
         best = max(range(len(self.root_attack)), key=lambda i: self.root_attack[i])
         probability = float(self.root_attack[best])
         actions = len(self.directions)
-        if best == actions * actions:
-            return {"kind": "release", "probability": probability}
+        if best >= actions * actions:
+            # the solver names its own candidates; nothing here invents a label
+            which = best - actions * actions
+            name = (self.pass_candidates[which]
+                    if which < len(self.pass_candidates) else None)
+            return {"kind": "release", "probability": probability,
+                    "candidate": name, "candidate_index": which}
         carry, run = divmod(best, actions)
         return {
             "kind": "move",
@@ -208,6 +237,11 @@ class SolverState:
             "step_seconds": self.step_seconds,
             "steps": self.steps,
             "is_mixed": self.is_mixed,
+            "multi_pass": self.multi_pass,
+            "pass_candidates": list(self.pass_candidates),
+            "move_columns": self.move_columns,
+            "modal_line": [dict(m) for m in self.modal_line],
+            "root_game": self.root_game,
             "release_probability": self.release_probability,
             "most_likely_attack": self.most_likely_attack(),
             "most_likely_defence": self.most_likely_defence(),
@@ -335,6 +369,10 @@ def load_state(
         step_seconds=float(config.get("step_seconds", 0.0)),
         steps=int(config.get("steps", 0)),
         trajectories=tuple(_trajectory(r, pitch) for r in record.get("rollouts", ())),
+        multi_pass=bool(record.get("multi_pass", False)),
+        pass_candidates=tuple(str(c) for c in (record.get("pass_candidates") or ())),
+        modal_line=tuple(record.get("modal_line") or ()),
+        root_game=record.get("root_game"),
         provenance=SolverProvenance(
             repository=repository,
             commit=commit,

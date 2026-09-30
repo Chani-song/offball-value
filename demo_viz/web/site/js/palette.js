@@ -42,7 +42,7 @@ export const LAYER_LABEL = {
   labels: "Player numbers",
   candidates: "Suggested players",
   paths: "Player movements",
-  passes: "Candidate passes",
+  passes: "Explore action value",
   reach: "Kinematic reachable area",
   solver: "Solver solution",
 };

@@ -65,11 +65,11 @@
       </button>
       <button class="mode" data-mode="evaluation" role="tab" aria-selected="false">
         <span class="mode-t">Evaluation</span>
-        <span class="mode-q">How good was the observed action?</span>
+        <span class="mode-q">How good was the observed decision?</span>
       </button>
       <button class="mode" data-mode="game_solution" role="tab" aria-selected="false">
         <span class="mode-t">Game solution</span>
-        <span class="mode-q">What does the equilibrium recommend?</span>
+        <span class="mode-q">What does the strategic equilibrium recommend?</span>
       </button>
     </nav>
     <div class="scene-head">
@@ -111,18 +111,27 @@
       <label class="check"><input type="checkbox" data-layer="wake" checked> Space map</label>
       <label class="check"><input type="checkbox" data-layer="ghost" checked> Defender if stayed</label>
       <label class="check"><input type="checkbox" data-layer="labels" checked> Player numbers</label>
-      <label class="check"><input type="checkbox" data-layer="candidates" checked> Suggested players</label>
-      <label class="check"><input type="checkbox" data-layer="lane"> Passing lane</label>
-      <label class="check"><input type="checkbox" data-layer="paths"> Player movements</label>
-      <label class="check"><input type="checkbox" data-layer="passes"> Explore pass model</label>
-      <label class="check"><input type="checkbox" data-layer="reach"> Kinematic reachable area</label>
-      <label class="check"><input type="checkbox" data-layer="solver"> Solver solution</label>
-      <span id="passes-note" class="muted" hidden></span>
       <select id="wake-mode" class="mini"
               title="Available space and Space created follow the picked roles and describe the off-ball effect.">
         <option value="space">Available space</option>
         <option value="gain">Space created</option>
       </select>
+    </div>
+    <div class="advanced">
+      <button class="disclosure sub" id="adv-toggle" aria-expanded="false">
+        <span class="chev" id="adv-chev">▸</span>
+        <span class="label">Advanced</span>
+        <span class="muted" id="adv-hint"></span>
+      </button>
+      <div class="layers adv-body" id="adv-body" hidden>
+        <label class="check"><input type="checkbox" data-layer="candidates" checked> Suggested players</label>
+        <label class="check"><input type="checkbox" data-layer="lane"> Passing lane</label>
+        <label class="check"><input type="checkbox" data-layer="paths"> Player movements</label>
+        <label class="check"><input type="checkbox" data-layer="reach"> Kinematic reachable area</label>
+        <label class="check"><input type="checkbox" data-layer="solver"> Solver solution</label>
+        <label class="check"><input type="checkbox" data-layer="passes"> Explore action value</label>
+        <span id="passes-note" class="muted" hidden></span>
+      </div>
     </div>
   </section>
 
@@ -168,6 +177,7 @@
       <div id="analysis-body">
         <section class="an-section" id="an-scene" hidden>
           <h4>Scene</h4>
+          <p class="casestudy" id="an-casestudy" hidden></p>
           <dl id="an-scene-rows"></dl>
           <div class="an-note" id="an-scene-note" hidden></div>
         </section>

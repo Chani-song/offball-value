@@ -15,10 +15,11 @@ adapter boundary has leaked and that is the bug to fix first.
 
 | | |
 | --- | --- |
-| Last audited `origin/kyuhyeok-dev` | **`c6423d4`** (2026-09-28 13:15 -0500) |
-| Previous baseline | `3c9965b` (2026-09-25) |
-| Between them | one commit: fitted pass-model-A coefficients, no code |
-| Evaluation layer at `c6423d4` | **still unimplemented** — all ten quantities |
+| Last audited `origin/kyuhyeok-dev` | **`e84553a`** (2026-09-30 01:15 -0500) |
+| Previous baseline | `c6423d4` (2026-09-28) |
+| Between them | four commits: multi-pass solver, run-pass action set, opening payoff table, evaluation-set builders, A-sym pass model |
+| Evaluation layer at `e84553a` | **still unimplemented** — all ten quantities. The inputs are built; nothing computes the comparison |
+| Solver state schema | **changed** — see "Reading a multi-pass artifact" below |
 
 Step 1 below exists because the local remote-tracking ref was stale once
 already. **Always `git fetch origin --prune` before comparing**, and record the
@@ -181,3 +182,50 @@ Ship it with a `definition_version` that says so and leave the rest pending.
 A partially populated Evaluation panel is fine — each field states its own
 availability. What is not fine is a placeholder number: `Metric` raises rather
 than construct one, so this cannot happen by accident.
+
+
+---
+
+## Reading a multi-pass artifact (`d1bbbb4` onward)
+
+A run solved with `--multi-pass` is not shaped like the meeting-era runs, and
+the difference is silent rather than loud. Both layouts are now read, but know
+what changed:
+
+| | meeting-era | `--multi-pass` |
+| --- | --- | --- |
+| `root_attack` length | `actions**2 + 1` | `actions**2 + len(pass_candidates)` |
+| last entry | *the* release | **one candidate among many** |
+| pass probability | `root_attack[-1]` | **sum over the tail** |
+| `rollouts` | four sampled | `[]` — `modal_line` replaces them |
+| new fields | — | `pass_candidates`, `multi_pass`, `modal_line`, `root_game`, `commands`, `passes`, `threat`, `terminal`, `pass_reaction_s`, `background_tackles` |
+
+`demo_viz/solver/adapter.py` detects `multi_pass`, sums the tail for the pass
+probability, and names the likeliest pass with the solver's own candidate
+string. `web/site/js/policy.js` reads `move_columns` and `pass_candidates` off
+the payload rather than assuming `n * n`.
+`tests/test_paper_story.py::MultiPassArtifactTests` pins both layouts.
+
+**When the first real multi-pass artifact arrives**, check three things before
+believing the screen: the pass probability against the artifact's own
+`modal_line[0].release_probability`; that `pass_candidates` and
+`root_game.columns` agree on the tail; and that the horizon and `step_seconds`
+match what `PASS_MODEL_TRACE.md` describes.
+
+## What would unblock the evaluation layer
+
+Not an export. `eval_v1.sbatch` already produces the inputs and says what they
+are for — *"the opening payoff table (solve.root_game) for the
+static-vs-responsive numbers"* and *"read into a panel … for the
+observed-action matching"*. What is missing is the code that consumes them:
+
+1. **observed-action matching** — project the real tracking at a moment onto
+   the panel's command endpoints / pass targets. Supply
+   `projection_distance_m` and `confidence`; the schema already carries both.
+2. **a rank / similarity / regret definition** over `root_game.matrix` columns.
+3. **a static/responsive pair on one scale.** `defender_pure_loss` is *not*
+   it — it compares a committed defender with a mixing one, not a held opponent
+   with a responding one.
+
+Once those exist, the route is unchanged: implement `EvaluationSource`, set
+`OFFBALL_EVALUATION_SOURCE`, re-export, rebuild.
