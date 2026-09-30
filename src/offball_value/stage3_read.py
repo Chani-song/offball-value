@@ -26,7 +26,8 @@ import math
 
 import numpy as np
 
-from .agile_motion import ANDREW, describe, layers_for
+from .agile_motion import ANDREW, command_direction, command_names, describe, layers_for, relative_commands
+from .run_passes import passes_named, target_of
 
 SOLVER_DIRS = ((0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (-1.0, 0.0), (0.0, -1.0))
 
@@ -70,6 +71,19 @@ def name_move_targets(u, defender, targets) -> str:
 def name_move(u, defender, carrier, runner, goal) -> str:
     return name_move_targets(u, defender, (("볼 쪽", carrier), ("러너 쪽", runner),
                                            ("골문 쪽", goal)))
+
+
+def config_from_manifest(manifest: dict):
+    """The solved study's GameConfig, pass set included (run passes since 2026-09-27)."""
+    from defensive_positioning.models import GameConfig
+    return GameConfig(**{k: v for k, v in manifest["config"].items()
+                         if k in ("steps", "step_seconds", "physics_step")},
+                      passes=passes_named(manifest.get("passes", "andrew")))
+
+
+def commands_for(record: dict, config, manifest: dict, kind: str):
+    """The study's relative command sets for one starting record, or None for the compass."""
+    return relative_commands(record, config, kind) if manifest.get("commands") == "relative" else None
 
 
 def study_kind(snapshot: dict) -> str:
@@ -160,6 +174,14 @@ def check_layers(layers, z, config) -> None:
                                f"policy {tuple(saved)} at step {k}: wrong physics?")
 
 
+def check_commands(state: dict, commands) -> None:
+    """The layers must be rebuilt with the command sets the solve used."""
+    solved_with = state.get("commands", "compass")
+    rebuilt = command_names(commands) or "compass"
+    if solved_with != rebuilt:
+        raise RuntimeError(f"solved with commands {solved_with}, rebuilding with {rebuilt}")
+
+
 def check_physics(state: dict, layers, physics) -> None:
     """The layers must be rebuilt with the physics the solve used. Two checks:
     the physics recorded in the solved state (outputs from before the field
@@ -185,7 +207,7 @@ def check_physics(state: dict, layers, physics) -> None:
             index = tuple(int(layers[s][k].successor[index[s], cmd[key]]) for s, key in enumerate(keys))
 
 
-def decision_path(state: dict, policy_npz, config, physics=None) -> dict:
+def decision_path(state: dict, policy_npz, config, physics=None, commands=None) -> dict:
     """The defender's policy at every decision point of the representative play.
 
     The saved policies hold an answer for every state; the play visits a few.
@@ -199,8 +221,9 @@ def decision_path(state: dict, policy_npz, config, physics=None) -> dict:
 
     scenario = state["scenario"]
     sc = scenario_from(scenario)
-    layers = layers_for(sc, config, physics)
+    layers = layers_for(sc, config, physics, commands)
     check_physics(state, layers, physics)
+    check_commands(state, commands)
     roll = representative_rollout(state)
     kind = study_kind(roll[0])
     slot_keys = (("runner", "beneficiary", "defender") if kind == "3v1"
@@ -235,7 +258,7 @@ def decision_path(state: dict, policy_npz, config, physics=None) -> dict:
             "max_split": max((p["split"] for p in points), default=0.0)}
 
 
-def modal_path(state: dict, policy_npz, config, passer_track=None, physics=None) -> dict:
+def modal_path(state: dict, policy_npz, config, passer_track=None, physics=None, commands=None) -> dict:
     """The most likely line of play: at every decision both sides take the
     action their equilibrium policy weights most.
 
@@ -253,9 +276,12 @@ def modal_path(state: dict, policy_npz, config, passer_track=None, physics=None)
 
     scenario = state["scenario"]
     sc = scenario_from(scenario)
-    layers = layers_for(sc, config, physics)
+    layers = layers_for(sc, config, physics, commands)
     check_physics(state, layers, physics)
+    check_commands(state, commands)
     kind = study_kind(state["rollouts"][0][0])
+    stakes_by_step = {m["step"]: m for m in state.get("modal_line", [])}
+    defender_cmds = (commands or {}).get("defender")
     actions = len(config.directions)
     passes = config.passes
     points, snaps, index = [], [], (0, 0, 0)
@@ -281,16 +307,34 @@ def modal_path(state: dict, policy_npz, config, passer_track=None, physics=None)
                     end = ("no_pass" if kind == "3v1" else "retain", None)
                 break
             dpol, apol = z[f"defender_{k}"][index], z[f"attack_{k}"][index]
-            ch = choices_at(dpol, snap, scenario)
+            if defender_cmds is not None:
+                # relative commands name themselves; their directions come from this state
+                d_pos, d_vel = layers[2][k].position[index[2]], layers[2][k].velocity[index[2]]
+                ch = sorted([(int(i), defender_cmds[i].name, float(p)) for i, p in enumerate(dpol) if p >= 0.01],
+                            key=lambda t: -t[2])
+                directions = [command_direction(c, d_pos, d_vel, k, config, sc, sc.defender.maximum_speed).tolist()
+                              for c in defender_cmds]
+            else:
+                ch = choices_at(dpol, snap, scenario)
+                directions = [list(world_direction(i, int(scenario["attack_direction"]))) for i in range(len(dpol))]
             agg = merged(ch)
             defend = int(np.argmax(dpol))
             attack = int(np.argmax(apol))
+            m = stakes_by_step.get(k)
+            stakes = None
+            if m is not None:
+                cs, rs = m["carrier_slot_values"], m["receiver_slot_values"]
+                stakes = {"defender": m["defender_pure_loss"],
+                          ("runner" if kind == "3v1" else "carrier"): max(cs) - min(cs),
+                          ("beneficiary" if kind == "3v1" else "runner"): max(rs) - min(rs)}
             points.append({"step": k, "t": snap["time"],
                            "choices": [(int(i), n, round(p, 4)) for i, n, p in ch],
                            "merged": [(n, round(p, 4)) for n, p in agg],
                            "split": 1.0 - agg[0][1] if agg else 0.0,
                            "chosen": int(defend),
                            "chosen_name": next((n for i, n, _ in ch if i == defend), "?"),
+                           "directions": [[round(x, 4) for x in u] for u in directions],
+                           "stakes": stakes,
                            "release_probability": round(float(apol[-1]), 4)})
             if attack == actions ** 2 and code >= 0:
                 end = ("release", code)
@@ -304,8 +348,11 @@ def modal_path(state: dict, policy_npz, config, passer_track=None, physics=None)
     if end[0] == "release":
         who = ("runner", "beneficiary")[end[1] // len(passes)] if kind == "3v1" else "runner"
         choice = passes[end[1] % len(passes)]
-        receiver_pos = last[who] if kind == "3v1" else last["receiver"]
-        out_end.update(to=who, family=choice.family,
-                       target=choice.target(receiver_pos, int(scenario["attack_direction"])).tolist())
+        slot = (0 if who == "runner" else 1) if kind == "3v1" else 1
+        k_end = len(snaps) - 1
+        receiver_pos = layers[slot][k_end].position[index[slot]]
+        receiver_vel = layers[slot][k_end].velocity[index[slot]]
+        target = target_of(choice, receiver_pos, int(scenario["attack_direction"]), receiver_vel, sc)
+        out_end.update(to=who, family=choice.family, target=np.asarray(target).tolist())
     return {"kind": kind, "points": points, "end": out_end, "rollout": snaps,
             "max_split": max((p["split"] for p in points), default=0.0), "line": "modal"}
