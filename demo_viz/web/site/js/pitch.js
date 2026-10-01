@@ -527,6 +527,36 @@ export class Pitch {
     });
   }
 
+  /**
+   * What really happened in the next `seconds`, the way Figure 2 draws it:
+   * a thin grey dotted line to a hollow marker (`render_figure2_abstract`:
+   * "the real next 0.6 s of the three (tracking): thin grey dotted line to
+   * his marker, hollow").
+   */
+  drawRealMoves(scene, bodies, index, seconds = 0.6) {
+    const span = Math.max(1, Math.round(seconds * scene.fps));
+    for (const [playerId, solverRole] of Object.entries(bodies || {})) {
+      const player = scene.byId.get(playerId);
+      if (!player) continue;
+      const points = [];
+      for (let i = index; i <= Math.min(index + span, scene.n_frames - 1); i += 1) {
+        const position = playerAt(scene, player, i);
+        if (position) points.push(position);
+      }
+      if (points.length < 2) continue;
+      this.add("paths", "path", {
+        d: points.map(([x, y], i) => `${i ? "L" : "M"}${x} ${y}`).join(" "),
+        fill: "none", stroke: this.theme.text2, "stroke-width": 0.18,
+        "stroke-dasharray": "0.05 0.55", "stroke-linecap": "round", opacity: 0.95,
+      });
+      const [x, y] = points[points.length - 1];
+      const radius = 1.55 * Math.max(this.k, 0.62);
+      this.add("paths", "g", {}).appendChild(roleMarker(x, y, radius, solverRole, {
+        fill: "none", stroke: this.theme.text2, "stroke-width": 0.22,
+      }));
+    }
+  }
+
   drawPaths(scene) {
     for (const player of scene.players) {
       if (player.gk) continue;
@@ -625,7 +655,7 @@ function circle(cx, cy, r, attrs) {
   return node;
 }
 
-function hexToRgb(hex) {
+export function hexToRgb(hex) {
   const value = hex.replace("#", "");
   return [
     parseInt(value.slice(0, 2), 16),

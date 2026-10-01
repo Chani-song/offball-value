@@ -80,6 +80,10 @@
         <button class="seg is-on" data-view="full">Full pitch</button>
         <button class="seg" data-view="focus">Focus</button>
       </div>
+      <div class="segmented" id="moment-pick" role="group" aria-label="Solved moment" hidden></div>
+      <label class="check" id="field-control" hidden>
+        <input type="checkbox" id="field-on"> Defender field
+      </label>
       <div class="segmented" id="solver-view" role="group" aria-label="Solver view" hidden>
         <button class="seg is-on" data-solverview="policy">Solver policy</button>
         <button class="seg" data-solverview="actual">Actual movement</button>
@@ -104,6 +108,10 @@
       </div>
       <div id="eval-plot"></div>
       <p class="empty" id="eval-empty" hidden></p>
+    </div>
+    <div class="comparebar" id="compare-bar" hidden>
+      <span class="cmp-what" id="compare-what"></span>
+      <button class="btn small" id="compare-reset">Reset</button>
     </div>
     <div class="showlayers" id="show-layers" hidden>
       <button class="disclosure sub" id="show-layers-toggle" aria-expanded="false">
@@ -211,6 +219,11 @@
           <dl id="an-cf-rows"></dl>
           <div class="cfpair" id="cf-pair"></div>
           <dl id="an-cf-change"></dl>
+        </section>
+        <section class="an-section" id="an-evidence" hidden>
+          <h4>Evidence</h4>
+          <dl id="an-evidence-rows"></dl>
+          <p class="empty" id="an-evidence-note" hidden></p>
         </section>
         <section class="an-section" id="an-evaluation" hidden>
           <h4>Player evaluation</h4>

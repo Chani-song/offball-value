@@ -52,7 +52,7 @@ def build(out: Path, data_dir: Path = WEB_DATA, clean: bool = True,
         showcase = HERE.parent / "data" / "submission_showcase.json"
         if showcase.exists():
             shutil.copy2(showcase, target / "submission_showcase.json")
-        extras = ["solver", "release", "story"]
+        extras = ["solver", "release", "story", "compare"]
         if include_legacy_obso:
             extras.append("obso")
         for extra in extras:
@@ -67,7 +67,7 @@ def build(out: Path, data_dir: Path = WEB_DATA, clean: bool = True,
 #: opened, so counting them in the first load would overstate it.
 ON_DEMAND = ("js/policy.js", "js/evalstrip.js", "js/figure.js",
              "js/arrows.js", "js/obso.js", "js/release.js",
-             "js/ranking.js", "js/chart.js")
+             "js/ranking.js", "js/chart.js", "js/compare.js", "js/grid.js")
 
 
 def report(out: Path) -> str:
@@ -87,12 +87,14 @@ def report(out: Path) -> str:
               and not name.startswith("data/obso/")
               and not name.startswith("data/solver/")
               and not name.startswith("data/release/")
-              and not name.startswith("data/story/")]
+              and not name.startswith("data/story/")
+              and not name.startswith("data/compare/")]
     obso = [(name, size) for name, size in rows if name.startswith("data/obso/")]
     solver = [(name, size) for name, size in rows if name.startswith("data/solver/")]
     release = [(name, size) for name, size in rows if name.startswith("data/release/")]
     story = [(name, size) for name, size in rows if name.startswith("data/story/")
              and not name.endswith("contract.json")]
+    compare = [(name, size) for name, size in rows if name.startswith("data/compare/")]
     index = sum(size for name, size in rows
                 if name.endswith("data/index.json")
                 or name.endswith("submission_showcase.json")
@@ -116,6 +118,8 @@ def report(out: Path) -> str:
         f"story       {len(story)} files, {sum(s for _, s in story) / 1024:.0f} KB "
         f"total, {(sum(s for _, s in story) / max(len(story), 1)) / 1024:.0f} KB each "
         f"(paper-story contract, one at a time with the scene)",
+        f"compare     {len(compare)} files, {sum(s for _, s in compare) / 1024:.0f} KB "
+        f"total (tracking evidence, only when Dilemma compares players)",
         f"release     {len(release)} files, {sum(s for _, s in release) / 1024 / 1024:.2f} MB "
         f"total, {(sum(s for _, s in release) / max(len(release), 1)) / 1024:.0f} KB each "
         f"(only when the pass-model explorer is used)",

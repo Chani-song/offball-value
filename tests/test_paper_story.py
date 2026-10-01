@@ -839,7 +839,20 @@ class LazyComponentTests(unittest.TestCase):
         # pay part of it -- the showcase has no hints card and no chart, so it
         # fetches neither. Raise this only with a reason, and prefer deferring
         # a mode-specific module over raising it.
-        self.assertLess(initial, 288 * 1024,
+        # 2026-10-01, the two scientific modes: Dilemma's candidate comparison
+        # and Nash's moment picker. The evidence reader (compare.js) and the
+        # defender-grid reader (grid.js) are both on demand -- Dilemma fetches
+        # the first only when it opens, and the second stays dormant until the
+        # three grid files exist. What is left is the wiring, which runs before
+        # the first paint. Raise this only with a reason, and prefer deferring
+        # a mode-specific module over raising it.
+        # The shell now carries two interfaces, and the scientific modes' own
+        # readers are all on demand: policy, evaluation strip, figure
+        # conventions, arrow language, OBSO, pass model, rankings, chart,
+        # tracking evidence and the defender grid. What is left runs before
+        # the first paint. Prefer deferring a mode-specific module to raising
+        # this; if it has to rise again, say which module could not be moved.
+        self.assertLess(initial, 302 * 1024,
                         f"initial load is {initial / 1024:.1f} KB")
 
 
@@ -1275,13 +1288,113 @@ class PublicCopyTests(unittest.TestCase):
             self.assertIn(word, source)
 
     def test_the_showcase_does_not_repoint_the_cast_on_a_click(self):
-        """The curated story and the panel beside it cannot disagree."""
+        """Selection is not editing.
+
+        A click in the showcase may open a comparison; it may never reach
+        `state.selection`, because the curated cast is what every solver and
+        evaluation number is keyed to.
+        """
 
         block = self.app[self.app.index("function beginDrag"):]
-        self.assertIn("!dragged.moved && !isPublic()", block)
+        block = block[:block.index("function markDropTargets")]
+        public = block[block.index("!dragged.moved && isPublic()"):]
+        public = public[:public.index("} else if")]
+        self.assertIn("compareWith(", public)
+        self.assertNotIn("state.selection", public)
+        self.assertNotIn("state.inspect", public)
+
+    def test_a_comparison_never_writes_to_the_curated_cast(self):
+        block = self.app[self.app.index("function compareWith"):]
+        block = block[:block.index("\n/** Back to the curated play")]
+        self.assertNotIn("state.selection.", block)
+        self.assertIn("state.compare =", block)
+
+    def test_leaving_dilemma_returns_to_the_curated_play(self):
+        block = self.app[self.app.index("function setMode"):]
+        block = block[:block.index("\n/**")]
+        self.assertIn('if (mode !== "counterfactual") state.compare = null;', block)
 
     def test_the_explorer_keeps_its_own_words(self):
         for name in ("Observed", "Counterfactual", "Evaluation", "Game solution"):
             self.assertIn(f'"{name}"', self.app, name)
         self.assertIn("MODE_SECTIONS", self.app)
         self.assertIn('"an-source"', self.app)
+
+
+class ScientificModeTests(unittest.TestCase):
+    """Sections 4-10: the two contributions, without their jargon."""
+
+    def setUp(self):
+        self.app = (SITE / "js" / "app.js").read_text()
+        self.markup = (SITE / "index.html").read_text()
+
+    def test_the_dilemma_shows_three_quantities_and_not_the_heuristic_score(self):
+        block = self.app[self.app.index("function renderEvidence"):]
+        block = block[:block.index("\n/**")]
+        for label in ("Marking distance", "Reaction", "Space created"):
+            self.assertIn(f'"{label}"', block, label)
+        # the 0.55/0.45 blend is the app's own weighting, not a research output
+        self.assertNotIn("score", block)
+
+    def test_the_evidence_is_read_not_recomputed(self):
+        """Marking distance and reaction come from the export, not the browser."""
+
+        compare = (SITE / "js" / "compare.js").read_text()
+        for banned in ("Math.hypot", "Math.cos", "velocity"):
+            self.assertNotIn(banned, compare, banned)
+        source = (REPO_ROOT / "demo_viz" / "web" / "export_compare.py").read_text()
+        self.assertIn("marking_series", source)
+        self.assertIn("defender_reaction_index", source)
+
+    def test_the_moment_picker_offers_only_solved_moments(self):
+        block = self.app[self.app.index("function renderMoments"):]
+        block = block[:block.index("\n/**")]
+        self.assertIn("data.panels", block)
+        self.assertIn("panel.dt.toFixed(1)", block)
+
+    def test_the_defender_field_control_is_hidden_without_data(self):
+        """No dead public control: absent grids mean no checkbox at all."""
+
+        block = self.app[self.app.index("function renderDefenderField"):]
+        block = block[:block.index("\n/**")]
+        self.assertIn('control.hidden = !grids', block)
+        self.assertIn("if (!grids || !state.field) return;", block)
+
+    def test_a_partly_covered_field_is_not_drawn(self):
+        block = self.app[self.app.index("function gridsFor"):]
+        block = block[:block.index("\n/**")]
+        self.assertIn("grids.every(Boolean)", block)
+
+    def test_the_grid_reader_uses_the_upstream_definitions(self):
+        grid = (SITE / "js" / "grid.js").read_text()
+        self.assertIn("better start for the defender", grid)
+        self.assertIn('"#B8AE9C"', grid)                  # BG_HIGH
+        self.assertIn('"#FF0000"', grid)                  # --flow-color
+        self.assertIn("alpha: 0.2", grid)                 # --flow-alpha
+        # the move field is the probability-weighted 0.6 s displacement
+        block = grid[grid.index("export function movePoints"):]
+        block = block[:block.index("\n}")]
+        self.assertIn("command.prob * (command.end[0] - x)", block)
+
+    def test_the_actual_move_follows_the_figures_convention(self):
+        pitch = (SITE / "js" / "pitch.js").read_text()
+        block = pitch[pitch.index("drawRealMoves("):]
+        block = block[:block.index("\n  draw")]
+        self.assertIn("stroke-dasharray", block)
+        self.assertIn('fill: "none"', block)              # a hollow marker
+
+    def test_the_static_comparison_is_shown_whole(self):
+        """Section 14: both values and the overstatement, not just the ratio."""
+
+        block = self.app[self.app.index("function renderBundleRows"):]
+        block = block[:block.index("\n/**")] if "\n/**" in block else block
+        for label in ("Attack, defender frozen", "Attack, defender answers",
+                      "Overstated by"):
+            self.assertIn(f'"{label}"', block, label)
+
+    def test_no_selection_checks_block_exists(self):
+        """S05 fails the isolation filter, so nothing may imply it was extracted."""
+
+        for banned in ("Selection checks", "isolation", "passes the filter",
+                       "extraction"):
+            self.assertNotIn(banned, self.markup, banned)

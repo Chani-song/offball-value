@@ -536,3 +536,111 @@ Runner" beside "Runner · #10 D. Ginczek". In the showcase a click now changes
 nothing (the cast is curated and there is no picker), and the clicked-player
 block is not part of the public panel at all. The explorer keeps click-to-pick,
 where reassigning the cast is the point.
+
+## 12. The defender-start grids: what to drop in (2026-10-01)
+
+`js/grid.js` reads them and nothing else does. It is dormant today — the
+`Defender field` control is hidden unless every moment resolves — and lights up
+when the files exist. The field is **never** reconstructed from the figure PNG.
+
+**Upstream produces them** with `jobs/solve_defender_grid.sbatch`, which runs
+`build_defender_grid.py` → the 2v1 solver → `extract_defender_grid.py` and
+writes, for `CODE` in `S05`, `S05@0.6`, `S05@1.2`:
+
+```
+data/processed/showcase_v1/defender_grid_S05/grid_${CODE}_1m_full.json
+```
+
+Those paths are confirmed from the sbatch at `origin/kyuhyeok-dev@b5f26cb`.
+They are not committed (`.gitignore:8` excludes `data/processed/*`), are not in
+the 2026-09-30 bundle, and are not on this machine.
+
+**Where the demo wants them:** `demo_viz/web_data/grid/S05_0.0.json`,
+`S05_0.6.json`, `S05_1.2.json` — the same files, renamed by moment.
+
+**The schema `grid.js` reads**, which is what `extract_defender_grid.py` writes:
+
+```json
+{ "points": [ { "status": "solved",
+                "observed": false,
+                "defender_start": [x, y],
+                "value": 0.6209,
+                "defender": [ { "prob": 0.39, "end": [x, y] }, ... ] } ] }
+```
+
+Only `status`, `defender_start`, `value` and `defender[].{prob,end}` are read.
+Points that are not `"solved"` are skipped, as upstream skips them.
+
+**The two derived fields, exactly as upstream derives them:**
+
+| | from | upstream |
+| --- | --- | --- |
+| background shade | `point.value` at `point.defender_start` | `render_figure2_abstract.value_grid` |
+| move field | `Σ prob × (end − start)` over his commands | `render_defender_flow_moments.moves` |
+
+Shading runs `#F7F7F7` → `#B8AE9C` with **darker = lower value = a better start
+for the defender**, and the figure's own key is `darker: better start for the
+defender`. The flow is `--flow-color` `#FF0000` at `--flow-alpha` 0.2.
+
+## 13. Why there is no "Selection checks" block (2026-10-01)
+
+The abstract's extraction has two scene-level filters
+(`scripts/filter_stage3_states.py`). Evaluated for S05 with upstream's own
+`distance_to_triangle` and `inside`, on bundle tracking whose positions match
+the panels to 0.0000 m:
+
+| filter | threshold | S05 | verdict |
+| --- | --- | --- | --- |
+| run quality (mean run speed over 0.8 s after onset) | ≥ 3.8 m/s | **not applicable** | — |
+| isolation (nearest outsider to the carrier/runner/defender triangle, at 0.0 / 0.6 / 1.2 / 1.8 s) | ≥ 2.0 m | **1.81 m** (Benedikt Gimber, at 0.0 s) | **FAIL** |
+
+Run quality does not apply because, as `build_showcase_states.py` says, these
+starts are "release − 1.8 s", not run onsets.
+
+Across the seven showcase scenes with solved panels: S13, S15, S20, S36 and S44
+pass the isolation filter; **S05 (1.81 m) and S34 (1.19 m) fail it**.
+
+This is not a defect. Upstream applies neither filter to these scenes —
+`build_showcase_states.py` calls the isolation filter *"Reported, not applied"*
+— **because the showcase scenes were picked by hand**, and a hand-picked scene
+the filter would have dropped is still in the set by design.
+
+So the showcase shows **no selection-checks block**, and nothing in it says or
+implies that a play was extracted automatically. Dilemma asks "Why is this a
+dilemma?" and answers with tracking evidence about the play; `compare.js` and
+`export_compare.py` both say so in their headers.
+
+## 14. Dilemma's "Compare players" (2026-10-01)
+
+Three quantities, all repository computations, none of them a selection rule.
+
+| shown as | computed by | formula | unit | better |
+| --- | --- | --- | --- | --- |
+| Marking distance | `dynamic_marking.marking_sample` → `weighted_error_m` | `\|defender − goal-side target\| + 2.0 × wrong-side displacement`, meaned from the run's onset | m | lower |
+| Reaction | `role_logic.defender_reaction_index` | the repository's kinematic onset detector, else speed ≥ 1.5 m/s and pursuit alignment ≥ 0.30 held for 0.40 s | s after the run starts | lower |
+| Space created | `goal_weighted_influence.target_residual_influence` | residual space now, minus the same with the defender held to his onset position | m² | higher |
+
+The first two are exported by `demo_viz/web/export_compare.py` into
+`data/compare/<scene>.json`, because the browser does not implement those two
+modules; the third is the influence cache's own number, which
+`tests/test_demo_viz_app.py` pins against the repository to 1e-12.
+
+**Not shown:** `role_logic.rank_defenders`'s `score`. It is
+`0.55·max(pursuit,0) + 0.45·clip(1 − d/25)`, and the 0.55/0.45 is the app's own
+weighting — `ranking.js` calls the whole thing "a transparent heuristic, not a
+learned model of defensive intent". Marking distance and reaction say the same
+thing in metres and seconds, from a repository module.
+
+**Reaction reads "already pursuing", not "0.0 s"**, when the pursuit rule's
+condition was already true as the run began. Zero there would claim a reaction
+the tracking never shows starting.
+
+**Selection is not editing.** A comparison lives in `state.compare` and is
+never written to `state.selection`, so no equilibrium, rank, regret or
+evaluation number can move with it — those exist only for the curated cast.
+Leaving Dilemma clears it, and `Reset` clears it in place. Three tests hold
+that line.
+
+For S05 the curated defender is also the tightest marker of the runner
+(5.8 m against 8.1 m for the next-nearest, #8 Thalhammer), which is the
+evidence the mode exists to show.

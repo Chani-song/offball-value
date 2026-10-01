@@ -97,6 +97,32 @@ function arrowsLib() {
   return null;
 }
 
+let compareModule = null;
+let compareLoading = false;
+
+/** The tracking-evidence reader, fetched when Dilemma first needs it. */
+function compareLib() {
+  if (compareModule) return compareModule;
+  if (!compareLoading) {
+    compareLoading = true;
+    import("./compare.js").then((module) => { compareModule = module; render(); });
+  }
+  return null;
+}
+
+let gridModule = null;
+let gridLoading = false;
+
+/** The defender-grid reader. Dormant until the three moment files exist. */
+function gridLib() {
+  if (gridModule) return gridModule;
+  if (!gridLoading) {
+    gridLoading = true;
+    import("./grid.js").then((module) => { gridModule = module; render(); });
+  }
+  return null;
+}
+
 let rankingModule = null;
 let rankingLoading = false;
 
@@ -183,6 +209,13 @@ const state = {
   inspect: null,             // player id under the last click, for the panel
   endpoint: null,            // index of the selected candidate ray
   reach: null,               // { playerId, frame, mask } memo for one frame
+  // Dilemma's "Compare players": a temporary overlay on the curated cast.
+  // It never writes to state.selection, so the curated triplet -- and every
+  // solver and evaluation number keyed to it -- cannot move.
+  compare: null,             // { defender } | { teammate } | null
+  compareData: null,         // { sceneId, payload } from data/compare
+  field: false,              // Figure 2's defender-start shading and move field
+  grids: null,               // { code, moments: Map<dt, grid|null> } once asked
   solver: null,              // { sceneId, state } once the solver layer is used
   showcase: null,            // curated scenes, or null when the build has none
   collection: "showcase",    // "showcase" | "explorer"
@@ -440,8 +473,12 @@ function render() {
   pitch.clearDynamic();
 
   let hints = [];
+  const compared = state.compare?.defender || state.compare?.teammate;
+  if (compared) hints = [compared];
   const ranking = isPublic() ? null : rankingLib();
-  if (ranking && selection.runner && !selection.defenders.length) {
+  if (compared) {
+    // the comparison owns the hint ring while it is open
+  } else if (ranking && selection.runner && !selection.defenders.length) {
     hints = ranking.rankDefenders(scene, selection.runner, freeze)
       .slice(0, 4).map((r) => r.id);
   } else if (ranking && selection.runner && selection.defenders.length
@@ -470,8 +507,15 @@ function render() {
     pitch.drawField(cache.grid, null, scene);
   }
 
-  if (state.layers.has("paths")
-      || (state.mode === "game_solution" && state.solverView !== "policy")) {
+  // the defender field is Figure 2's background: under the players, over the
+  // pitch lines, and only where the grids exist
+  renderDefenderField(index);
+  const realMoves = state.mode === "game_solution" && state.solverView !== "policy";
+  if (realMoves && isPublic()) {
+    // the paper's convention: the three bodies' real next 0.6 s, grey dotted
+    // to a hollow marker -- not every player's whole-clip path
+    pitch.drawRealMoves(scene, solverRolesAt(index), index, 0.6);
+  } else if (state.layers.has("paths") || realMoves) {
     pitch.drawPaths(scene);
   }
   renderReach(index);
@@ -517,6 +561,8 @@ function render() {
   renderCandidates(freeze, slot);
   renderAnalysis(index, slot, threat, fan);
   renderAdvanced();
+  renderMoments();
+  renderCompareBar();
   renderTicks();
   renderEvalStrip(index);
   $("readout").textContent = `${scene.times[index] >= 0 ? "+" : ""}${scene.times[index].toFixed(2)} s`;
@@ -873,6 +919,7 @@ function renderAnalysis(index, slot, threat, fan) {
 
   // ---- the rest of the paper story ----
   renderDecision(index);
+  renderEvidence(slot);
   renderCounterfactual();
   renderEvaluation();
   renderClipSummary();
@@ -915,7 +962,7 @@ const MODE_SECTIONS = {
  */
 const PUBLIC_SECTIONS = {
   observed: [],
-  counterfactual: ["an-decision", "an-counterfactual"],
+  counterfactual: ["an-counterfactual", "an-evidence"],
   evaluation: ["an-decision", "an-evaluation"],
   game_solution: ["an-solver"],
 };
@@ -1007,7 +1054,72 @@ function setMode(mode, quiet = false) {
   setLayer("reach", mode === "counterfactual" && state.collection !== "showcase");
   setLayer("solver", mode === "game_solution");
   $("solver-view").hidden = mode !== "game_solution";
+  // a comparison belongs to Dilemma: leaving it returns to the curated play,
+  // because nothing outside Dilemma has numbers for anyone else
+  if (mode !== "counterfactual") state.compare = null;
+  renderMoments();
   if (!quiet) render();
+}
+
+/**
+ * The solved moments, as a picker -- 0.0 s, 0.6 s, 1.2 s for most scenes.
+ *
+ * They are the moments the bundle actually solved, read off the panels. There
+ * is nothing between them to show: the evaluation solves a fresh game at each
+ * real moment and none in between.
+ */
+/** "Comparing Thalhammer · Reset", shown only while a comparison is open. */
+function renderCompareBar() {
+  const bar = $("compare-bar");
+  if (!bar) return;
+  const other = state.compare?.defender || state.compare?.teammate || null;
+  const on = isPublic() && state.mode === "counterfactual" && Boolean(other);
+  bar.hidden = !on;
+  if (!on) return;
+  const player = state.scene?.byId.get(other);
+  $("compare-what").textContent = player
+    ? `Comparing ${surnameOf(player)}` : "Comparing";
+}
+
+function renderMoments() {
+  const node = $("moment-pick");
+  if (!node) return;
+  const data = solverFor();
+  const panels = data?.kind === "bundle_panels" ? data.panels || [] : [];
+  const on = isPublic() && state.mode === "game_solution" && panels.length > 0;
+  node.hidden = !on;
+  node.replaceChildren();
+  if (!on) return;
+  // which one is on follows the playhead, so the picker and the arrows can
+  // never disagree about which moment is being shown
+  const current = panelAt(data, state.frame)?.panel;
+  for (const panel of panels) {
+    const button = document.createElement("button");
+    button.className = `seg${panel === current ? " is-on" : ""}`;
+    button.type = "button";
+    button.textContent = `${panel.dt.toFixed(1)} s`;
+    button.addEventListener("click", () => {
+      // the playhead goes to that solved frame: the arrows and the bodies are
+      // one moment, never a mixture of two
+      const frame = frameOfPanel(panel);
+      if (frame != null) state.frame = frame;
+      render();
+    });
+    node.appendChild(button);
+  }
+}
+
+/**
+ * A panel's frame.
+ *
+ * The bundle integration already converted it into this scene's own indexing
+ * (`start_frame - clip_first_frame`), which is why `panelAt` compares it with
+ * the playhead directly.
+ */
+function frameOfPanel(panel) {
+  const { scene } = state;
+  if (!scene || panel?.frame == null) return null;
+  return Math.max(0, Math.min(scene.n_frames - 1, panel.frame));
 }
 
 function setLayer(name, on) {
@@ -1475,6 +1587,75 @@ function renderCounterfactual() {
 }
 
 /**
+ * Why this is a dilemma, in three lines -- and, while comparing, in six.
+ *
+ * Marking distance and reaction time are read from `data/compare`, which the
+ * repository's own `dynamic_marking` and `role_logic` produced at export time.
+ * Space created is the influence cache's own number, computed here the way
+ * every other space figure in this demo is. None of the three is an extraction
+ * criterion; the curated cast was picked by hand.
+ */
+function renderEvidence(slot) {
+  if (!section("an-evidence", isPublic())) return;
+  const { scene, selection, cache } = state;
+  const node = $("an-evidence-rows");
+  const note = $("an-evidence-note");
+  const lib = compareLib();
+  const payload = compareFor();
+  const defenderId = selection.defenders[0];
+  const teammateId = selection.beneficiaries[0];
+  const other = state.compare?.defender || state.compare?.teammate || null;
+  const who = (id) => {
+    const player = scene?.byId.get(id);
+    return player ? surnameOf(player) : "\u2014";
+  };
+
+  const entries = [];
+  if (lib && payload) {
+    const curatedRow = lib.defenderRow(payload, defenderId);
+    const otherRow = state.compare?.defender
+      ? lib.defenderRow(payload, state.compare.defender) : null;
+    const pair = (label, mine, theirs) => entries.push([
+      label, theirs == null ? mine : `${mine}   vs   ${theirs}`,
+    ]);
+    pair("Marking distance", lib.metres(curatedRow?.marking_distance_m),
+         otherRow ? lib.metres(otherRow.marking_distance_m) : null);
+    pair("Reaction", lib.reactionText(curatedRow),
+         otherRow ? lib.reactionText(otherRow) : null);
+  } else {
+    entries.push(["Marking distance", "\u2026"]);
+    entries.push(["Reaction", "\u2026"]);
+  }
+
+  // space created: the same quantity the explorer's stat shows, for whichever
+  // teammate is in question
+  if (cache && defenderId) {
+    const swap = swapSpec();
+    const spaceOf = (id) => (id
+      ? cache.combined([id], slot).value - cache.combined([id], slot, swap).value
+      : null);
+    const mine = spaceOf(teammateId);
+    const theirs = state.compare?.teammate ? spaceOf(state.compare.teammate) : null;
+    const show = (value) => {
+      if (value == null) return "\u2014";
+      const rounded = Math.abs(value) < 0.05 ? 0 : value;
+      return `${rounded > 0 ? "+" : ""}${NUMBER(rounded, 1)} m\u00b2`;
+    };
+    entries.push(["Space created",
+                  theirs == null ? show(mine) : `${show(mine)}   vs   ${show(theirs)}`]);
+  }
+  rows(node, entries);
+
+  const comparing = Boolean(other);
+  note.hidden = !comparing;
+  if (comparing) {
+    const curated = state.compare?.defender ? defenderId : teammateId;
+    note.textContent = `${who(curated)} and ${who(other)} `
+      + "\u2014 the play itself is unchanged.";
+  }
+}
+
+/**
  * "Observed: Run forward". `observed_action.description` is the pipeline's own
  * name for the command nearest where the player really was 0.6 s later, so the
  * football word translates a measurement. No word, no row.
@@ -1884,9 +2065,15 @@ function renderBundleRows(data, node, policy, provenance) {
       ["Defender", d.defender_mixed ? "mixed" : "one choice"],
       ["Attack", d.attack_mixed ? "mixed" : "one choice"],
     ];
-    if (s.static_attack_loss_rel != null) {
-      pub.push(["If the defender froze",
-                `+${NUMBER(100 * s.static_attack_loss_rel, 1)}% to the attack`]);
+    if (s.static_attack_appeared != null) {
+      // the Results paragraph: an attack looks better against a defender held
+      // to his observed command than against one who may answer
+      pub.push(["Attack, defender frozen", NUMBER(s.static_attack_appeared, 2)]);
+      pub.push(["Attack, defender answers", NUMBER(s.static_attack_responsive, 2)]);
+      if (s.static_attack_loss_rel != null) {
+        pub.push(["Overstated by",
+                  `${NUMBER(100 * s.static_attack_loss_rel, 1)}%`]);
+      }
     }
     rows(node, pub);
     policy.hidden = true;
@@ -2081,6 +2268,7 @@ function applyPublicChrome(showcase) {
   }
 
   $("layers-row").hidden = showcase;
+  $("compare-bar").hidden = true;
   $("show-layers").hidden = !showcase;
   $("roles-card").hidden = showcase;
   $("legend-card").hidden = !showcase;
@@ -2355,6 +2543,96 @@ function renderCandidates(freeze, slot) {
  * position the solver role already is. It replaces the explorer's role dock,
  * which exists to let someone pick a different cast.
  */
+/**
+ * Put one other player beside the curated one.
+ *
+ * A defender becomes the marking comparison, an attacker the space one, and
+ * the curated players themselves clear it. Nothing here touches
+ * `state.selection`: the cast the solver was run on stays exactly as curated,
+ * which is why no equilibrium or evaluation number moves with a comparison.
+ */
+function compareWith(playerId) {
+  const { scene, selection } = state;
+  const player = scene?.byId.get(playerId);
+  if (!player || player.gk) return;
+  const curated = selection.runner === playerId
+    || selection.defenders.includes(playerId)
+    || selection.beneficiaries.includes(playerId);
+  state.compare = curated ? null
+    : (player.side === "defend" ? { defender: playerId } : { teammate: playerId });
+  render();
+}
+
+/** Back to the curated play. */
+function clearCompare() {
+  if (!state.compare) return;
+  state.compare = null;
+  render();
+}
+
+/** The evidence file for this scene, fetched once, or null until it lands. */
+function compareFor() {
+  const { scene } = state;
+  if (!scene) return null;
+  if (state.compareData?.sceneId === scene.scene_id) return state.compareData.payload;
+  const lib = compareLib();
+  if (!lib) return null;
+  if (state.compareData?.pending === scene.scene_id) return null;
+  state.compareData = { pending: scene.scene_id };
+  lib.loadCompare(scene.scene_id).then((payload) => {
+    if (state.scene?.scene_id !== scene.scene_id) return;
+    state.compareData = { sceneId: scene.scene_id, payload };
+    render();
+  });
+  return null;
+}
+
+/**
+ * The three defender-start grids for this scene, or null.
+ *
+ * Null is the normal state: the files are not in this build, so the control
+ * that would draw them stays hidden. Nothing is estimated in their place.
+ */
+function gridsFor() {
+  const data = solverFor();
+  const code = data?.code;
+  if (!code || data.kind !== "bundle_panels") return null;
+  if (state.grids?.code === code) return state.grids.moments;
+  const lib = gridLib();
+  if (!lib) return null;
+  if (state.grids?.pending === code) return null;
+  state.grids = { pending: code };
+  const moments = (data.panels || []).map((panel) => panel.dt);
+  Promise.all(moments.map((dt) => lib.loadGrid(code, dt))).then((grids) => {
+    if (solverFor()?.code !== code) return;
+    const map = new Map();
+    moments.forEach((dt, index) => map.set(dt.toFixed(1), grids[index]));
+    // all or nothing: a partly-covered field would show one moment shaded and
+    // the next bare, which reads as a result rather than a missing file
+    const complete = grids.every(Boolean);
+    state.grids = { code, moments: complete ? map : null };
+    render();
+  });
+  return null;
+}
+
+/** Figure 2's background and move field, when the grids exist. */
+function renderDefenderField(index) {
+  const control = $("field-control");
+  const grids = state.mode === "game_solution" && isPublic() ? gridsFor() : null;
+  if (control) control.hidden = !grids;
+  if (!grids || !state.field) return;
+  const lib = gridLib();
+  const data = solverFor();
+  const panel = panelAt(data, index)?.panel;
+  const grid = panel ? grids.get(panel.dt.toFixed(1)) : null;
+  if (!lib || !grid) return;
+  lib.drawValueField(state.pitch, lib.valueRaster(grid), state.scene,
+                     { low: lib.SHADE.low, high: lib.SHADE.high });
+  lib.drawMoveField(state.pitch, lib.movePoints(grid), state.scene,
+                    { colour: lib.FLOW.colour, alpha: lib.FLOW.alpha });
+}
+
 function renderLegend() {
   const list = $("legend-list");
   if (!list) return;
@@ -2531,7 +2809,11 @@ function beginDrag(event, player, fromRole = null) {
         // one chip, one player: the rest of both roles is left alone
         state.selection.move(state.scene, role, dragged.playerId);
       }
-    } else if (!dragged.moved && !isPublic()) {
+    } else if (!dragged.moved && isPublic()) {
+      // selection is not editing: Dilemma compares, every other mode ignores
+      // the click, and the curated cast is never written to
+      if (state.mode === "counterfactual") compareWith(dragged.playerId);
+    } else if (!dragged.moved) {
       if (dragged.fromRole) state.selection.arm(dragged.fromRole);
       else state.selection.applyClick(state.scene, dragged.playerId);
       // clicking always inspects, whatever the click did to the roles
@@ -2668,6 +2950,12 @@ function bindControls() {
     node.addEventListener("change", () => setLayer(node.dataset.showlayer,
                                                    node.checked) || render());
   }
+  $("compare-reset").addEventListener("click", clearCompare);
+  $("field-on").addEventListener("change", (event) => {
+    state.field = event.target.checked;
+    render();
+  });
+
   const showLayers = $("show-layers-toggle");
   if (showLayers) {
     showLayers.addEventListener("click", () => {

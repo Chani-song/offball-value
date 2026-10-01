@@ -707,3 +707,17 @@ body.is-public .roleb { font-size: 12px; }
    card shows one section */
 body.is-public .an-section h4 { display: none; }
 body.is-public .an-section + .an-section { border-top: 0; margin-top: 2px; }
+
+/* --- Dilemma's comparison -------------------------------------------- */
+.comparebar {
+  display: flex; align-items: center; gap: 10px; padding: 9px 2px 2px;
+}
+.cmp-what { font-size: 12.5px; color: var(--text2); }
+body.is-public .an-section .pending { font-style: normal; }
+/* "5.8 m   vs   8.1 m": the curated value first, the compared one after */
+body.is-public #an-evidence-rows dd { white-space: pre-wrap; }
+body.is-public #an-evidence-note {
+  margin-top: 7px; font-size: 11.5px; color: #9A9A9A;
+  border-left: 2px solid var(--grid); padding-left: 8px;
+}
+body.is-public .player { cursor: pointer; }
