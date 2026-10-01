@@ -266,7 +266,8 @@ export class Pitch {
   drawPlayers(scene, index, selection, { labels = true, activeSide = null,
                                           hints = [], dragging = null,
                                           solverRoles = null,
-                                          muted = false } = {}) {
+                                          muted = false,
+                                          paperColours = null } = {}) {
     const hintSet = new Set(hints);
     for (const player of scene.players) {
       const position = playerAt(scene, player, index);
@@ -275,6 +276,9 @@ export class Pitch {
       const role = selection.roleOf(player.id);
       const colour = role ? ROLE_COLOUR[role] : (player.side === "attack" ? P.attack : P.defend);
       const solverRole = solverRoles ? solverRoles[player.id] : null;
+      // in a paper-facing mode the three take figure_style's colours and lose
+      // their outline, as the figure does since 2026-10-01
+      const paper = paperColours && solverRole ? paperColours[solverRole] : null;
       let opacity = role ? 1 : 0.55;
       if (muted && !role && !solverRole) opacity = 0.22;
       if (activeSide && !role) opacity = player.side === activeSide ? 0.95 : 0.2;
@@ -299,11 +303,12 @@ export class Pitch {
       }
       if (role) {
         group.appendChild(roleMarker(x, y, radius + 1.5, solverRole,
-                                     { fill: colour, opacity: 0.16 }));
+                                     { fill: paper || colour, opacity: 0.16 }));
       }
       group.appendChild(roleMarker(x, y, radius, solverRole, {
-        fill: colour, stroke: role ? colour : P.ink,
-        "stroke-width": role ? 0.4 : 0.18,
+        fill: paper || colour,
+        stroke: paper ? "none" : (role ? colour : P.ink),
+        "stroke-width": paper ? 0 : (role ? 0.4 : 0.18),
       }));
       if (labels) {
         const text = this.add("players", "text", {

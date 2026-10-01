@@ -274,3 +274,78 @@ solved state and no evaluation output is available here. Figure 1's futures,
 Figure 2's panels and every evaluation number are therefore still the honest
 unavailable state. What changed is *why*: the methods exist now, so the slots
 say **"Awaiting an evaluation run"** rather than "not defined".
+
+
+---
+
+# 8. Visual sync with the near-final figure (`139498a`, 2026-10-01)
+
+One commit since `8a5c69d`: *"figures: final abstract Figures 1 and 2 with
+captions, Figure 2's defender-start grids"*.
+
+## 8.1 What changed upstream, and is now ported
+
+| | before | **`139498a`** |
+| --- | --- | --- |
+| Palette | Okabe-Ito `#0072B2` / `#D55E00` | **pure blue `#0000FF` / pure red `#FF0000`** — the earlier pair "read as a stock palette" |
+| Key markers | 0.8 pt charcoal outline | **no outline** (`KEY_EDGE` 0.8 → 0) |
+| Other players | 45% tint | **full team colour**, thin white edge (the tint "read as blurred") |
+| Ball | charcoal | **white with a charcoal edge** |
+| Moves | started at the marker | start `MOVE_GAP` = **2.5 pt clear of the marker's edge** (`marker_edge`, `leave`) |
+| Defender labels | the percentage alone | **named**: `To goal 57%`, `To ball 43%` (`--defender-names short`) |
+| Label crowding | may touch | **`--label-gap 0.35` m** of clear ground from labels already placed |
+
+The near-final figure's own settings, from the README's command:
+
+```
+--frames --value-fade 0 --value-grids $GRIDS
+--flow-grids $GRIDS --flow-color "#FF8000" --flow-alpha 0.4
+--defender-names short --label-gap 0.35
+```
+
+## 8.2 Why the defender's moves are named
+
+`--defender-names`' own help text: *"a short move, e.g. 0.6 s toward ball 43% =
+**0.57 m**, hides under his marker and its % floats unexplained"*. That is
+exactly the team's 0.6 s readability concern. The demo names them by the same
+rule and, where a move is shorter than the marker, draws no shaft at all — the
+named label is the option.
+
+Upstream's table lists three targets because its final command renders S05, a
+2v1 game. `stage3_read.targets_for` gives a 3v1 defender a **fourth**, and four
+of the demo's seven scenes are 3v1 (S15 plays it 26% at 0.6 s), so
+`toward beneficiary` is title-cased by the same rule rather than left as a bare
+percentage.
+
+## 8.3 Label collision
+
+Labels are placed heaviest first, and a stop that has come to rest last —
+upstream's `prob - 1.0` ordering, because its label sits on the player and can
+go anywhere round him. Each label tries a fixed, ordered list of offsets (tip,
+then outward along the arrow, then to each side) and takes the first that
+clears every label already placed, with `labelGap` between them. **Nothing is
+hidden and nothing is random**; only the 2% probability floor ever removes a
+label.
+
+`rests` is upstream's exact test, `hypot(end_velocity) == 0.0`, so S05's
+defender stop at 1.2 s reads **Stop 22%**, not "Slow down".
+
+## 8.4 The defender-start grids are **not** ported
+
+`139498a` adds the scalar background (the game's value with the defender
+starting at each spot, darker = better for him) and the orange flow field of
+his expected 0.6 s move, on a 1 m lattice per moment.
+
+**There is no grid data.** `build_defender_grid.py`,
+`extract_defender_grid.py`, `check_defender_grid.py` and
+`jobs/solve_defender_grid.sbatch` are committed; the grids themselves
+(`data/processed/showcase_v1/defender_grid_S05/grid_S05[@dt]_1m_full.json`) are
+not, the 2026-09-30 bundle predates them, and nothing on this machine has one.
+Reconstructing a scalar field from a screenshot is exactly what section 7 of
+the brief forbids, so nothing was drawn.
+
+What would unblock it: those three JSON files per scene — they are numbers on a
+1 m lattice, no tracking. The renderer reads them as
+`--value-grids 0.0=... 0.6=... 1.2=...`.
+
+**No attacker vector field**, as upstream cancelled it and the brief confirms.

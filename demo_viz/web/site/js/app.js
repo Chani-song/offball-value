@@ -438,6 +438,10 @@ function render() {
     solverRoles: solverRolesAt(index),
     // the figures mute everyone but the central actors; the numbers keep them
     muted: state.mode === "counterfactual" || state.mode === "game_solution",
+    // Game solution is the panel a reader compares with Figure 2, so the three
+    // take the paper's own colours there: attack blue, defence red, no
+    // outline. Observed keeps the annotation colours the role dock shows.
+    paperColours: state.mode === "game_solution" ? figureLib()?.ROLE_COLOR : null,
   });
   pitch.drawAttackDirection();
 
@@ -1111,6 +1115,11 @@ function renderBundlePolicy(index, data) {
   const found = panelAt(data, index);
   if (!found) return;
   const { scene } = state;
+  // one label ledger for the whole panel, so a defender's label steps aside
+  // from an attacker's too -- at 1.2 s "Stop 22%" and "47%" used to read as
+  // one phrase (render_figure2_abstract --label-gap 0.35)
+  const placed = [];
+  const gap = figure.FIGURE2.labelGapM;
   for (const [role, body] of Object.entries(found.panel.bodies || {})) {
     const colour = figure.ROLE_COLOR[body.solver_role] || figure.PAPER.attack;
     const options = (body.options || [])
@@ -1121,12 +1130,20 @@ function renderBundlePolicy(index, data) {
         path: (o.path || []).map(([x, y]) => viewVector0(scene, x, y)),
         probability: o.prob,
         stop: o.command === 0,
-        label: figure.optionLabel(body.solver_role, o.prob,
-                                  { stop: o.command === 0, rests: false }),
+        rests: Boolean(o.rests),
+        label: figure.optionLabel(body.solver_role, o.prob, {
+          stop: o.command === 0, rests: Boolean(o.rests),
+          // the solver's own name for this command, so a 0.57 m move's
+          // percentage has something visible to belong to
+          name: o.label, defenderNames: figure.FIGURE2.defenderNames,
+        }),
       }));
     if (options.length) {
-      lib.drawActionArrows(state.pitch, playerPoint(scene, body.pos), options,
-                           { colour, labelFloor: figure.MIN_P });
+      lib.drawActionArrows(state.pitch, playerPoint(scene, body.pos), options, {
+        colour, labelFloor: figure.MIN_P, labelGap: gap, placed,
+        // a move leaves the marker with clear ground, as the figure does
+        clearM: markerClearance(figure, body.solver_role),
+      });
     }
   }
   // the pass: dashed charcoal from the ball to its target, labelled once
@@ -1137,6 +1154,19 @@ function renderBundlePolicy(index, data) {
     lib.drawPassChoice(state.pitch, ball, playerPoint(scene, pass.target),
                        figure.passLabel(pass.prob, { received: Boolean(pass.to) }));
   }
+}
+
+/**
+ * How far a move should start from a body's centre, in pitch metres.
+ *
+ * `figure_style` works in points at the printed size; the pitch works in
+ * metres. The marker's drawn radius here is `1.55 * max(k, 0.62)` metres, and
+ * the figure's gap is `MOVE_GAP / KEY_D` of a marker diameter, so the same
+ * proportion is applied to the radius this pitch actually draws.
+ */
+function markerClearance(figure, solverRole) {
+  const radius = 1.55 * Math.max(state.pitch.k, 0.62);
+  return radius * (1 + figure.MOVE_GAP / figure.KEY_D);
 }
 
 /** A scene-space point as a screen point (the same reflection `view` applies). */

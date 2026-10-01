@@ -2,7 +2,7 @@
 //
 // SOURCE OF TRUTH
 // ---------------
-// origin/kyuhyeok-dev@8a5c69d. The figure renderer is now in the repository --
+// origin/kyuhyeok-dev@139498a. The figure renderer is in the repository --
 // the previous pass could not find it and reconstructed parts of this file;
 // everything reconstructed has been replaced by the real thing:
 //
@@ -113,11 +113,17 @@ export const MIN_P = 0.02;
  *   ball carrier    "Dribble NN%"
  *   everyone else   the percentage only -- the direction is the arrow's job
  */
-export function optionLabel(role, probability, { stop = false, rests = false } = {}) {
+export function optionLabel(role, probability,
+                            { stop = false, rests = false, name = "",
+                              defenderNames = "none" } = {}) {
   const pct = `${Math.round(probability * 100)}%`;
   if (stop && !rests) return `Slow down ${pct}`;
   if (stop && rests) return `Stop ${pct}`;
   if (role === "ball carrier") return `Dribble ${pct}`;
+  if (role === "defender" && defenderNames !== "none") {
+    const prefix = defenderNamePrefix(name, defenderNames);
+    if (prefix) return `${prefix} ${pct}`;
+  }
   return pct;
 }
 
@@ -160,14 +166,15 @@ export const FIGURE1_OPTIONS = [
 // the print style (scripts/figure_style.py)
 // ---------------------------------------------------------------------------
 /**
- * The Okabe-Ito pair the team chose, told apart under every common
- * colour-vision deficiency. Both attackers are blue: the runner and the ball
- * carrier are distinguished by marker and by a direct label, so no role rests
- * on colour alone.
+ * `figure_style.ATTACK / DEFENCE`, as of 2026-10-01: **pure blue and pure
+ * red**, replacing the Okabe-Ito pair, "which read as a stock palette".
+ *
+ * Both attackers are blue -- the runner and the ball carrier are told apart by
+ * marker and by a direct label, so no role rests on colour alone.
  */
 export const PAPER = {
-  attack: "#0072B2",
-  defence: "#D55E00",
+  attack: "#0000FF",
+  defence: "#FF0000",
   ink: "#222222",
   muted: "#666666",
   faint: "#B3B3B3",
@@ -219,6 +226,83 @@ export const ROLE_MARKER = {
 /** Shape alone, for callers that size markers themselves. */
 export const ROLE_SHAPE = Object.fromEntries(
   Object.entries(ROLE_MARKER).map(([role, [shape]]) => [role, shape]));
+
+/**
+ * Since 2026-10-01 the three key players carry **no outline** (`KEY_EDGE` went
+ * 0.8 -> 0), players outside the game are drawn in their team's **full**
+ * colour rather than a 45% tint ("which read as blurred"), and the ball is
+ * **white with a charcoal edge** so it shows on the near-white pitch.
+ */
+export const KEY_EDGE = 0.0;
+
+/**
+ * Clear ground between a marker's edge and a move leaving it, in points.
+ * `figure_style.MOVE_GAP`, 2026-10-01: "the user found the arrows stuck to the
+ * shapes".
+ */
+export const MOVE_GAP = 2.5;
+
+/**
+ * Points from a key player's centre to his marker's edge along `u`.
+ *
+ * `figure_style.marker_edge`, ported: a disc is its radius in every
+ * direction; a square reaches further along a diagonal; a diamond the
+ * opposite way.
+ */
+export function markerEdge(role, u) {
+  const entry = ROLE_MARKER[role];
+  if (!entry) return KEY_D / 2;
+  const [shape, size] = entry;
+  const c = Math.abs(u[0]);
+  const s = Math.abs(u[1]);
+  if (shape === "circle") return size / 2;
+  if (shape === "square") return size / 2 / Math.max(c, s, 1e-9);
+  if (shape === "diamond") return (size / 2) * Math.SQRT2 / Math.max(c + s, 1e-9);
+  return (size / 2) * Math.SQRT2;
+}
+
+/**
+ * The solver's own name for a defender command, title-cased for a label.
+ *
+ * `render_figure2_abstract.DEFENDER_NAME`, with its `--defender-names short`
+ * form. This exists because of a real readability problem the team hit: at
+ * 0.6 s the defender's "toward ball" move is **0.57 m** long, so it hides
+ * under his marker and its percentage floats unexplained. Naming the move
+ * attaches the number to something a reader can see.
+ *
+ * Upstream raises on a name outside the three; a browser falls back to the
+ * percentage alone instead of failing the render.
+ */
+export const DEFENDER_NAME = {
+  "toward goal": "Toward goal",
+  "toward ball": "Toward ball",
+  "toward runner": "Toward runner",
+  // Upstream's table stops here because the README's final command renders
+  // S05, a 2v1 game. `stage3_read.targets_for` gives a 3v1 defender a fourth
+  // target, and four of the demo's seven scenes are 3v1 -- S15 at 0.6 s plays
+  // it 26% of the time. Title-cased by the same rule rather than left as a
+  // bare percentage, which is the very thing naming these moves fixes.
+  "toward beneficiary": "Toward beneficiary",
+};
+
+export function defenderNamePrefix(name, style = "short") {
+  const full = DEFENDER_NAME[name];
+  if (!full || style === "none") return "";
+  return style === "short" ? full.replace("Toward", "To") : full;
+}
+
+/**
+ * The near-final Figure 2's own settings, from the README's command:
+ *
+ *     --defender-names short --label-gap 0.35
+ *     --flow-color "#FF8000" --flow-alpha 0.4 --value-fade 0 --frames
+ */
+export const FIGURE2 = {
+  defenderNames: "short",
+  labelGapM: 0.35,
+  flowColour: "#FF8000",
+  flowAlpha: 0.4,
+};
 
 /** `figure_style` line weights, in points at the printed size. */
 export const STROKE = {

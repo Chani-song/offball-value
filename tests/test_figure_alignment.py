@@ -128,7 +128,7 @@ class UpstreamNameTests(unittest.TestCase):
 
     def test_the_source_of_truth_is_named_at_the_top(self):
         head = " ".join(self.figure[:2200].replace("//", " ").split())
-        self.assertIn("origin/kyuhyeok-dev@8a5c69d", head)
+        self.assertIn("origin/kyuhyeok-dev@139498a", head)
         self.assertIn("render_figure2_abstract.py", head)
 
 
@@ -182,10 +182,22 @@ class PrintStyleParityTests(unittest.TestCase):
             self.skipTest("origin/kyuhyeok-dev not available")
         self.figure = (SITE / "js" / "figure.js").read_text()
 
-    def test_the_okabe_ito_pair_matches(self):
-        self.assertIn('ATTACK, DEFENCE = "#0072B2", "#D55E00"', self.source)
-        self.assertIn('attack: "#0072B2"', self.figure)
-        self.assertIn('defence: "#D55E00"', self.figure)
+    def test_the_team_palette_matches(self):
+        """2026-10-01 replaced the Okabe-Ito pair with pure blue / pure red."""
+
+        self.assertIn('ATTACK, DEFENCE = "#0000FF", "#FF0000"', self.source)
+        self.assertIn('attack: "#0000FF"', self.figure)
+        self.assertIn('defence: "#FF0000"', self.figure)
+        self.assertNotIn("#0072B2", self.figure)
+        self.assertNotIn("#D55E00", self.figure)
+
+    def test_the_key_markers_carry_no_outline(self):
+        self.assertIn("KEY_EDGE = 0.0", self.source)
+        self.assertIn("KEY_EDGE = 0.0", self.figure)
+
+    def test_the_move_gap_matches(self):
+        self.assertIn("MOVE_GAP = 2.5", self.source)
+        self.assertIn("MOVE_GAP = 2.5", self.figure)
 
     def test_both_attackers_are_blue(self):
         """The runner and the ball carrier are told apart by marker, not hue."""
@@ -633,3 +645,139 @@ class ModuleExportTests(unittest.TestCase):
                     self.assertIn(name, exported,
                                   f"{path.name} imports {name} from {target}, "
                                   "which does not export it")
+
+
+class DefenderNameTests(unittest.TestCase):
+    """`--defender-names short`: the fix for a percentage with nothing to sit on.
+
+    At S05's 0.6 s the defender's "toward ball" move is 0.57 m -- shorter than
+    his own marker -- so the 43% floated unexplained. Upstream names the move;
+    so does the demo.
+    """
+
+    def setUp(self):
+        self.source = _show("scripts/render_figure2_abstract.py")
+        if self.source is None:
+            self.skipTest("origin/kyuhyeok-dev not available")
+        self.figure = (SITE / "js" / "figure.js").read_text()
+
+    def test_the_fourth_target_follows_the_same_rule(self):
+        """3v1 games have a fourth defender target upstream's S05-only table
+        does not list; four of the seven demo scenes are 3v1."""
+
+        self.assertIn('"toward beneficiary"', self.figure)
+        self.assertIn("Toward beneficiary", self.figure)
+        source = _show("src/offball_value/stage3_read.py")
+        if source:
+            self.assertIn('("toward beneficiary", snapshot["beneficiary"])', source)
+
+    def test_the_three_names_match_upstream(self):
+        self.assertIn('DEFENDER_NAME = {"toward goal": "Toward goal", '
+                      '"toward ball": "Toward ball", "toward runner": "Toward runner"}',
+                      self.source)
+        for korean_free in ("toward goal", "toward ball", "toward runner"):
+            self.assertIn(f'"{korean_free}"', self.figure, korean_free)
+        for title in ("Toward goal", "Toward ball", "Toward runner"):
+            self.assertIn(title, self.figure, title)
+
+    def test_the_short_form_is_upstreams_replace(self):
+        self.assertIn("name.replace('Toward', 'To')", self.source)
+        self.assertIn('full.replace("Toward", "To")', self.figure)
+
+    def test_the_near_final_settings_are_recorded(self):
+        """The README's own command for the final figure."""
+
+        readme = _show("README.md")
+        if readme is None:
+            self.skipTest("README not available")
+        self.assertIn("--defender-names short --label-gap 0.35", readme)
+        self.assertIn('--flow-color "#FF8000" --flow-alpha 0.4', readme)
+        self.assertIn('defenderNames: "short"', self.figure)
+        self.assertIn("labelGapM: 0.35", self.figure)
+        self.assertIn('flowColour: "#FF8000"', self.figure)
+
+    def test_a_name_outside_the_three_falls_back_rather_than_failing(self):
+        """Upstream raises; a browser must not blank the render."""
+
+        block = self.figure[self.figure.index("export function defenderNamePrefix"):]
+        block = block[:block.index("\n/**")]
+        self.assertIn("if (!full", block)
+        self.assertIn('return ""', block)
+
+
+class LabelPlacementTests(unittest.TestCase):
+    """Section 6: deterministic placement, nothing hidden, nothing random."""
+
+    def setUp(self):
+        self.arrows = (SITE / "js" / "arrows.js").read_text()
+        self.block = self.arrows[self.arrows.index("export function drawActionArrows"):]
+        self.block = self.block[:self.block.index("\nexport ")]
+
+    def test_placement_is_deterministic(self):
+        for banned in ("Math.random", "Date.now", "shuffle"):
+            self.assertNotIn(banned, self.arrows, banned)
+
+    def test_candidate_offsets_are_a_fixed_ordered_list(self):
+        self.assertIn("[[0, 0], [1, 0], [2, 0], [0, 1], [0, -1]", self.block)
+
+    def test_a_label_keeps_clear_of_the_ones_already_placed(self):
+        self.assertIn("collides(", self.block)
+        self.assertIn("labelGap", self.block)
+
+    def test_heaviest_first_and_a_resting_stop_last(self):
+        """Upstream places by `prob - 1.0` for a stop at rest."""
+
+        self.assertIn("o.stop && o.rests ? 1 : 0", self.block)
+
+    def test_no_option_is_dropped_to_make_room(self):
+        """Only the probability floor removes a label, never a collision."""
+
+        self.assertIn("p < labelFloor", self.block)
+        tail = self.block[self.block.index("p < labelFloor"):]
+        self.assertNotIn("continue", tail[tail.index("collides"):]
+                         if "collides" in tail else "")
+
+    def test_a_move_shorter_than_its_marker_still_gets_its_label(self):
+        """S05 at 0.6 s: 'toward ball' is 0.57 m, shorter than the marker, so
+        it has no shaft -- and that is why upstream names these moves."""
+
+        self.assertIn("shaft.length > 1", self.block)
+        self.assertIn("the label carries it", self.block)
+
+
+class StopLabelTests(unittest.TestCase):
+    """`rests` decides Stop from Slow down, and it is upstream's exact test."""
+
+    def test_the_rest_test_is_exact_equality_with_zero(self):
+        source = _show("scripts/render_figure2_abstract.py")
+        if source is None:
+            self.skipTest("origin/kyuhyeok-dev not available")
+        self.assertIn('math.hypot(*o["end_velocity"]) == 0.0', source)
+        bundle = (REPO_ROOT / "demo_viz" / "paper_story" / "bundle.py").read_text()
+        self.assertIn('math.hypot(*(o.get("end_velocity") or (1.0, 0.0)))', bundle)
+        self.assertIn("== 0.0", bundle)
+
+    def test_s05_at_1_2_rests_so_it_reads_stop(self):
+        path = (REPO_ROOT / "demo_viz" / "web_data" / "solver"
+                / "J03WOH_shot_010_P1_1759.json")
+        if not path.exists():
+            self.skipTest("S05 panels not exported")
+        panel = next(p for p in json.loads(path.read_text())["panels"]
+                     if p["dt"] == 1.2)
+        stop = panel["bodies"]["defender"]["options"][0]
+        self.assertTrue(stop["rests"])
+
+
+class PaperColourScopeTests(unittest.TestCase):
+    """Figure 2's palette is used where a reader compares with Figure 2."""
+
+    def test_game_solution_uses_the_paper_colours(self):
+        app = (SITE / "js" / "app.js").read_text()
+        self.assertIn('state.mode === "game_solution" ? figureLib()?.ROLE_COLOR', app)
+
+    def test_observed_keeps_the_annotation_colours(self):
+        """The role dock shows those, so the two must not disagree."""
+
+        app = (SITE / "js" / "app.js").read_text()
+        block = app[app.index("paperColours:"):]
+        self.assertIn("null", block[:160])

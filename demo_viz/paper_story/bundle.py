@@ -42,6 +42,7 @@ from __future__ import annotations
 
 import csv
 import json
+import math
 import os
 from dataclasses import dataclass
 from functools import lru_cache
@@ -350,6 +351,11 @@ def panel_payload(source: BundleEvaluationSource, scene_id: str) -> dict | None:
                     "path": [to_scene_xy(p) for p in (o.get("path") or ())],
                     "end": to_scene_xy(o["end"]),
                     "aim": [float(v) for v in (o.get("aim") or (0, 0))],
+                    # render_figure2_abstract: a stop that reached speed 0
+                    # inside the 0.6 s is "Stop", one still braking is "Slow
+                    # down". The test is exact equality with zero, as upstream.
+                    "rests": (math.hypot(*(o.get("end_velocity") or (1.0, 0.0)))
+                              == 0.0),
                 } for i, o in enumerate(body.get("options", ()))],
             }
         release = panel.get("release") or {}

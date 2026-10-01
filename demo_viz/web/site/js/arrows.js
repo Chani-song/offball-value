@@ -36,14 +36,53 @@ function circle(cx, cy, r, attrs) {
  * PROBABILITY IS WIDTH. `lwOf(p) = 0.6 + 2.4p`, one scale for every panel, as
  * upstream. A stop ends in a bar across the path, not a head.
  */
+/**
+ * Where a path should start so it leaves a marker's edge with clear ground.
+ *
+ * `render_figure2_abstract.leave` / `clear_of`: walk forward until the first
+ * point that is `reach` metres from the centre, then bisect the crossing
+ * segment. A path that already starts clear is untouched.
+ */
+function leaveMarker(pts, reachM) {
+  if (!pts.length || reachM <= 0) return pts;
+  const centre = pts[0];
+  const far = (p) => Math.hypot(p[0] - centre[0], p[1] - centre[1]) >= reachM;
+  let i = 0;
+  while (i < pts.length - 1 && !far(pts[i + 1])) i += 1;
+  if (i === pts.length - 1) return pts.slice(-1);
+  const [ax, ay] = pts[i];
+  const [bx, by] = pts[i + 1];
+  let lo = 0;
+  let hi = 1;
+  for (let n = 0; n < 40; n += 1) {
+    const mid = (lo + hi) / 2;
+    if (far([ax + (bx - ax) * mid, ay + (by - ay) * mid])) hi = mid; else lo = mid;
+  }
+  return [[ax + (bx - ax) * hi, ay + (by - ay) * hi], ...pts.slice(i + 1)];
+}
+
+/** Do two boxes overlap, once `gap` is added round the placed one? */
+function collides(box, placed, gap) {
+  return placed.some(([x0, y0, x1, y1]) =>
+    box[0] < x1 + gap && box[2] > x0 - gap && box[1] < y1 + gap && box[3] > y0 - gap);
+}
+
 export function drawActionArrows(pitch, origin, options, {
   colour = P.defender, length = 4.2, labelFloor = 0, labels = true,
-  widthOf = null, scale = 1,
+  widthOf = null, scale = 1, labelGap = 0, clearM = 0, placed = null,
 } = {}) {
   const k = Math.max(pitch.k, 0.62);
   const group = pitch.add("passes", "g", { class: "action-arrows" });
+  // labels are placed heaviest first, so the probability that matters most
+  // keeps the spot it wants and lighter ones step aside -- upstream's order
+  // upstream's placement order: heaviest first, and a stop that has come to
+  // rest last -- its label sits on the player and can go anywhere round him,
+  // so it takes whatever the moves leave free (`o["prob"] - 1.0` there).
+  const priority = (o) => (o.probability ?? 0) - (o.stop && o.rests ? 1 : 0);
+  const order = [...options].sort((a, b) => priority(b) - priority(a));
+  const taken = placed || [];
 
-  for (const option of options) {
+  for (const option of order) {
     // the path wins; aim + length is the declared fallback
     let pts = option.path && option.path.length > 1 ? option.path : null;
     if (!pts) {
@@ -56,6 +95,12 @@ export function drawActionArrows(pitch, origin, options, {
     const p = option.probability;
     const width = (widthOf ? widthOf(p) : (p == null ? 1.3 : 0.6 + 2.4 * p)) * 0.22 * k;
 
+    // the shaft starts clear of the marker; the *whole* path still sets the
+    // direction and the label's anchor. A move shorter than the marker --
+    // S05's 0.6 s "toward ball" is 0.57 m -- clips to nothing, so it has no
+    // shaft to draw and lives entirely in its named label, which is why
+    // upstream names these moves at all.
+    const shaft = clearM > 0 ? leaveMarker(pts, clearM) : pts;
     const [x0, y0] = pts[pts.length - 2];
     const [x1, y1] = pts[pts.length - 1];
     const dx = x1 - x0;
@@ -65,17 +110,20 @@ export function drawActionArrows(pitch, origin, options, {
     const ax = (dx / n) * head;
     const ay = (dy / n) * head;
 
-    const shaft = pts.map(([x, y]) => `${x},${y}`).join(" ");
-    const line = document.createElementNS(SVG_NS, "polyline");
-    line.setAttribute("points", shaft);
-    line.setAttribute("fill", "none");
-    line.setAttribute("stroke", colour);
-    line.setAttribute("stroke-width", width);
-    line.setAttribute("stroke-linecap", "butt");
-    line.setAttribute("stroke-linejoin", "round");
-    group.appendChild(line);
+    if (shaft.length > 1) {
+      const line = document.createElementNS(SVG_NS, "polyline");
+      line.setAttribute("points", shaft.map(([x, y]) => `${x},${y}`).join(" "));
+      line.setAttribute("fill", "none");
+      line.setAttribute("stroke", colour);
+      line.setAttribute("stroke-width", width);
+      line.setAttribute("stroke-linecap", "butt");
+      line.setAttribute("stroke-linejoin", "round");
+      group.appendChild(line);
+    }
 
-    if (option.stop) {
+    if (shaft.length <= 1) {
+      // nothing to head or bar: the label carries it
+    } else if (option.stop) {
       // braking: a bar across the end, as wide as a head on this line
       const bar = document.createElementNS(SVG_NS, "line");
       bar.setAttribute("x1", x1 - (dy / n) * head * 0.5);
@@ -99,10 +147,38 @@ export function drawActionArrows(pitch, origin, options, {
 
     if (!labels || !option.label) continue;
     if (p != null && p < labelFloor) continue;
+
+    // deterministic placement: try the arrow tip, then step outward along the
+    // arrow, then to its two sides. The first position clear of every label
+    // already placed wins; nothing is hidden and nothing is random.
+    const size = 1.45 * k;
+    const w = option.label.length * size * 0.56;
+    const h = size * 1.15;
+    const ux = dx / n;
+    const uy = dy / n;
+    let bx = 0;
+    let by = 0;
+    for (const [sx, sy] of [[0, 0], [1, 0], [2, 0], [0, 1], [0, -1],
+                            [1, 1], [1, -1], [3, 0], [0, 2], [0, -2]]) {
+      const ox = ux * sx * labelGap + -uy * sy * labelGap;
+      const oy = uy * sx * labelGap + ux * sy * labelGap;
+      const [cx, cy] = option.stop && option.rests ? pts[0] : [x1, y1];
+      const left = cx + ux * 1.0 * k + ox - (ux >= 0 ? 0 : w);
+      const top = cy + uy * 1.0 * k + oy - h / 2;
+      if (!collides([left, top, left + w, top + h], taken, labelGap)) {
+        bx = ox; by = oy; break;
+      }
+    }
+    // a resting stop is labelled on the player, not at the path's end
+    const [ax0, ay0] = option.stop && option.rests ? pts[0] : [x1, y1];
+    const lx = ax0 + ux * 1.0 * k + bx;
+    const ly = ay0 + uy * 1.0 * k + by;
+    taken.push([lx - (ux >= 0 ? 0 : w), ly - h / 2,
+                lx + (ux >= 0 ? w : 0), ly + h / 2]);
     const text = pitch.add("labels", "text", {
-      x: x1 + (dx / n) * 1.0 * k, y: y1 + (dy / n) * 1.0 * k + 0.4 * k,
-      "text-anchor": dx >= 0 ? "start" : "end",
-      "font-size": 1.45 * k, fill: colour, class: "action-label",
+      x: lx, y: ly + 0.4 * k,
+      "text-anchor": ux >= 0 ? "start" : "end",
+      "font-size": size, fill: colour, class: "action-label",
     }, option.label);
     group.appendChild(text);
   }

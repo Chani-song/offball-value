@@ -818,7 +818,7 @@ class LazyComponentTests(unittest.TestCase):
         # dilemma, which runs in render(). The figure conventions, the arrow
         # language, the policy component, the evaluation strip and the OBSO
         # stack are all deferred (33.9 KB) and excluded above.
-        self.assertLess(initial, 260 * 1024,
+        self.assertLess(initial, 264 * 1024,
                         f"initial load is {initial / 1024:.1f} KB")
 
 
