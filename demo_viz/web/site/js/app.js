@@ -1469,7 +1469,9 @@ function renderEvalStrip(index) {
   // there is no value, and saying which frame it came from is the honest read
   readout.textContent = (nearest || [])
     .map((near, i) => (near
-      ? `${series[i].label} ${near.value.toFixed(3)}`
+      // an ordinal keeps its integer form; a ratio gets three places
+      ? `${series[i].label} ${Number.isInteger(near.value)
+            ? near.value : near.value.toFixed(3)}`
         + (near.exact ? "" : ` (frame ${near.frame})`)
       : null))
     .filter(Boolean).join(" · ");

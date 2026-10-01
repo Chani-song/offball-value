@@ -110,6 +110,7 @@ EVALUATION_METRICS = (
 
 #: The same quantities over time. Only series the payload carries are drawn.
 FRAME_SERIES = (
+    FieldSpec("observed_action_rank", "Observed action rank"),
     FieldSpec("relative_rank", "Relative rank"),
     # same correction as EVALUATION_METRICS: upstream's quantity is the
     # equilibrium's probability of the observed option, not a similarity

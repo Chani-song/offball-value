@@ -272,8 +272,14 @@ class BundleEvaluationSource:
             out["observed_action"] = observed["observed_action"]
         return out
 
-    #: What a frame series is drawn for, and its natural range.
-    SERIES = (("relative_rank", "rank_frac", (0.0, 1.0)),
+    #: What a frame series carries, and its natural range.
+    #:
+    #: Every metric the panel shows needs one: the interface switches a row to
+    #: the solved moment nearest the playhead *through its series*, so a metric
+    #: without one would sit at the first moment's value beside rows that had
+    #: moved -- rank 1 next to a relative rank of 0.25.
+    SERIES = (("observed_action_rank", "rank", None),
+              ("relative_rank", "rank_frac", (0.0, 1.0)),
               ("similarity_to_optimal", "similarity", (0.0, 1.0)),
               ("regret", "regret", None))
 
@@ -326,9 +332,13 @@ def panel_payload(source: BundleEvaluationSource, scene_id: str) -> dict | None:
         panel, analysis = moment.panel, moment.analysis
         bodies = {}
         for body in panel.get("bodies", {}).values():
-            role = STORY_ROLE_OF.get(body.get("role"))
-            if role is None:
-                continue              # the 3v1 teammate: no story role here
+            # The panel payload draws every body the game contains, keyed by
+            # its story role where it has one and by its solver role where it
+            # does not. A 3v1 game's beneficiary is the second attacker --
+            # Figure 2's "Teammate" -- and has a real equilibrium policy; the
+            # story schema has no role for him, but the pitch still shows him
+            # rather than drawing two thirds of the equilibrium.
+            role = STORY_ROLE_OF.get(body.get("role"), body.get("role"))
             bodies[role] = {
                 "solver_role": body["role"],
                 "pos": to_scene_xy(body["pos"]),
