@@ -38,6 +38,21 @@ OUT = Path(__file__).resolve().parent / "data" / "submission_showcase.json"
 #: Trajectories are the one thing that must never come from the local source.
 FORBIDDEN_KEYS = ("t", "ball", "xy", "players", "tracks")
 
+#: The case study the demo opens on.
+#:
+#: S05 is the paper's Figure 1 and Figure 2 scene, and the one whose solved
+#: data tells the whole story in one place: a defensive dilemma at every one of
+#: its three moments, a mixed defender policy of 57/43 at 0.6 s, the through
+#: ball the equilibrium plays 74% of the time, and a static reading of the same
+#: choice overstating its value by 40.1% once the defender may answer.
+#:
+#: This is a curation decision, so it lives here rather than in the generated
+#: file: `order` is read by the selector's sort, the ingest writes it, and
+#: `--check` still proves the committed file is what this code produces. It
+#: does **not** set `featured` -- no final ten has been chosen, so the default
+#: filter stays "all" and every curated scene stays in the list.
+LEAD_SCENE = "S05"
+
 
 def build(source: Path | None = None) -> dict:
     entries = map_all(read_showcase(source), repository_scenes())
@@ -48,7 +63,7 @@ def build(source: Path | None = None) -> dict:
             "showcase_id": entry.showcase_id,
             "scene_id": entry.scene_id,
             "featured": False,
-            "order": None,
+            "order": 1 if entry.showcase_id == LEAD_SCENE else None,
             "provenance": entry.provenance,
             "review": {
                 "reviewers": [
@@ -90,7 +105,8 @@ def build(source: Path | None = None) -> dict:
             "not committed. Contains no player or ball trajectories: a scene is",
             "played from the repository scene_id it maps to, or not at all.",
             "featured/order are the only fields to edit when the final ten are",
-            "chosen; no code change is needed.",
+            "chosen; no code change is needed. order=1 on the lead scene comes",
+            "from ingest_showcase.LEAD_SCENE, not from a hand edit.",
         ],
         "scenes": records,
     }

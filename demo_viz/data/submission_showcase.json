@@ -5,7 +5,8 @@
     "not committed. Contains no player or ball trajectories: a scene is",
     "played from the repository scene_id it maps to, or not at all.",
     "featured/order are the only fields to edit when the final ten are",
-    "chosen; no code change is needed."
+    "chosen; no code change is needed. order=1 on the lead scene comes",
+    "from ingest_showcase.LEAD_SCENE, not from a hand edit."
   ],
   "scenes": [
     {
@@ -192,7 +193,7 @@
       "showcase_id": "S05",
       "scene_id": "J03WOH:shot_010_P1_1759",
       "featured": false,
-      "order": null,
+      "order": 1,
       "provenance": "human",
       "review": {
         "reviewers": [

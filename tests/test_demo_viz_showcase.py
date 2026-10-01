@@ -254,11 +254,43 @@ class FeaturedBehaviourTests(unittest.TestCase):
 
     def test_featured_scenes_come_back_in_order(self):
         raw = _raw()
+        # `order` is unique across the whole file, and the lead scene already
+        # holds one (ingest_showcase.LEAD_SCENE), so start from a clean slate:
+        # this is about the ordering rule, not about the real curation.
+        for scene in raw["scenes"]:
+            scene["order"] = None
         for position, index in enumerate((5, 1, 9), start=1):
             raw["scenes"][index]["featured"] = True
             raw["scenes"][index]["order"] = position
         chosen = featured(validate(raw))
         self.assertEqual([1, 2, 3], [s.order for s in chosen])
+
+    def test_order_must_be_unique_across_the_file(self):
+        """Which is why the test above clears it first."""
+
+        from demo_viz.core.showcase import ShowcaseError
+
+        raw = _raw()
+        raw["scenes"][0]["order"] = 1
+        raw["scenes"][1]["order"] = 1
+        with self.assertRaises(ShowcaseError):
+            validate(raw)
+
+    def test_the_lead_scene_opens_first_and_is_set_at_ingest(self):
+        """S05 is the paper's Figure 1 / Figure 2 scene. The selector sorts by
+        `order`, the ingest writes it, and nothing is featured -- so the full
+        curated list is still shown and no final ten is implied."""
+
+        from demo_viz.ingest_showcase import LEAD_SCENE
+
+        scenes = load(SHOWCASE)
+        ordered = sorted(scenes, key=lambda s: (s.order if s.order is not None
+                                                else float("inf"), s.showcase_id))
+        self.assertEqual(LEAD_SCENE, ordered[0].showcase_id)
+        self.assertEqual(1, ordered[0].order)
+        self.assertEqual([LEAD_SCENE],
+                         [s.showcase_id for s in scenes if s.order is not None])
+        self.assertFalse(any(s.featured for s in scenes))
 
     def test_the_browser_uses_the_same_default_rule(self):
         source = (SITE / "js" / "showcase.js").read_text()

@@ -260,3 +260,71 @@ class S05ParityTests(unittest.TestCase):
         self.assertEqual("8a5c69d0bb1c42948c3f9d50becd2ffc41e72344", p["upstream"])
         self.assertEqual("offball_demo_data_20260930",
                          self.story["provenance"]["evaluation_source"])
+
+
+class RoleScopeTests(unittest.TestCase):
+    """The beneficiary is visible in Game solution and absent from Evaluation.
+
+    A 3v1 game's beneficiary -- Figure 2's "Teammate" -- has a real
+    equilibrium policy, so the pitch draws him rather than two thirds of the
+    equilibrium. He is deliberately *not* an Evaluation role: the story schema
+    is runner / passer / defender, and adding a fourth is a schema change, not
+    a plumbing fix.
+    """
+
+    def test_the_story_schema_has_three_roles(self):
+        from demo_viz.paper_story import STORY_ROLES
+
+        self.assertEqual(("runner", "passer", "defender"), STORY_ROLES)
+
+    def test_a_3v1_scene_draws_the_beneficiary_but_does_not_evaluate_him(self):
+        solver = WEB_DATA / "solver" / "J03WN1_shot_002_P1_0057.json"
+        story = WEB_DATA / "story" / "J03WN1_shot_002_P1_0057.json"
+        if not (solver.exists() and story.exists()):
+            self.skipTest("S20 not exported")
+        panels = json.loads(solver.read_text())
+        self.assertEqual("3v1", panels["panels"][0]["kind"])
+        for panel in panels["panels"]:
+            self.assertIn("beneficiary", panel["bodies"])
+        evaluation = json.loads(story.read_text())["evaluation"]
+        self.assertNotIn("beneficiary", evaluation)
+        self.assertEqual({"runner", "passer", "defender"}, set(evaluation))
+
+    def test_every_body_the_game_contains_is_drawn(self):
+        """Three bodies per moment, in both game kinds."""
+
+        for path in sorted((WEB_DATA / "solver").glob("*.json")):
+            payload = json.loads(path.read_text())
+            if payload.get("kind") != "bundle_panels":
+                continue
+            for panel in payload["panels"]:
+                self.assertEqual(3, len(panel["bodies"]),
+                                 f"{payload['code']} at {panel['dt']} s")
+
+
+class LeadSceneTests(unittest.TestCase):
+    """S05 opens first, decided at ingest and reproducible."""
+
+    def test_the_lead_scene_is_named_in_the_ingest(self):
+        from demo_viz.ingest_showcase import LEAD_SCENE
+
+        self.assertEqual("S05", LEAD_SCENE)
+
+    def test_regenerating_reproduces_the_committed_order(self):
+        """The guard this replaces a hand edit with."""
+
+        from demo_viz.ingest_showcase import OUT, build
+
+        committed = json.loads(OUT.read_text())
+        rebuilt = build()
+        self.assertEqual([s["order"] for s in committed["scenes"]],
+                         [s["order"] for s in rebuilt["scenes"]])
+
+    def test_the_lead_scene_is_one_the_bundle_covers(self):
+        """Opening on a scene with no solved data would be a poor first look."""
+
+        from demo_viz.ingest_showcase import LEAD_SCENE
+
+        source = _bundle()
+        codes = {source.moments(s)[0].code for s in source.scenes()}
+        self.assertIn(LEAD_SCENE, codes)
