@@ -390,17 +390,19 @@ class ExportedPayloadTests(unittest.TestCase):
                     self.assertFalse(record.get("frames"),
                                      f"{path.name}: {record['name']}")
 
-    def test_no_development_fixture_can_reach_the_public_payload(self):
-        """Section 33: a layout fixture must never ship."""
+    def test_the_evaluation_source_is_the_bundle_or_nothing(self):
+        """Replaces a test that required `none`. The local bundle is now a
+        real source; what must never appear is a stub or a fixture."""
 
+        allowed = {"none", "offball_demo_data_20260930"}
         for path in self.files:
             payload = json.loads(path.read_text())
-            self.assertEqual("none", payload["provenance"]["evaluation_source"],
-                             f"{path.name} was exported from a live source; "
-                             "check it is the real pipeline, not a fixture")
+            source = payload["provenance"]["evaluation_source"]
+            self.assertIn(source, allowed, f"{path.name}: {source}")
             for record in self._records(payload):
-                self.assertNotIn("stub", str(record.get("source") or "").lower())
-                self.assertNotIn("fixture", str(record.get("source") or "").lower())
+                text = str(record.get("source") or "").lower()
+                self.assertNotIn("stub", text)
+                self.assertNotIn("fixture", text)
 
     def test_the_abstract_s_placeholders_never_reach_the_payload(self):
         """Section 25: no XX, no TBD, no example rank."""
@@ -422,15 +424,21 @@ class ExportedPayloadTests(unittest.TestCase):
                 self.assertIsNone(block["key"])
                 self.assertTrue(block["detail"])
 
-    def test_no_bundesliga_scene_claims_an_equilibrium_today(self):
-        """Stated plainly so the day one does, this test says so."""
+    def test_an_equilibrium_claim_is_backed_by_an_exported_file(self):
+        """Replaces "no tracked scene claims an equilibrium", which was true
+        until the 2026-09-30 bundle arrived. Seven scenes claim one now, and
+        each must have the file to show for it."""
 
-        attached = [p.name for p in self.files
-                    if json.loads(p.read_text())["equilibrium"]["availability"]
-                    == "available"]
-        self.assertEqual([], attached,
-                         "a solver artifact now covers a tracked scene; update "
-                         "PAPER_STORY_TRACE.md and this test together")
+        claimed = []
+        for path in self.files:
+            block = json.loads(path.read_text())["equilibrium"]
+            if block["availability"] != "available":
+                continue
+            claimed.append(path.stem)
+            self.assertTrue((WEB_DATA / "solver" / f"{block['key']}.json").exists(),
+                            f"{path.stem} claims {block['key']} with no file")
+        self.assertGreaterEqual(len(claimed), 1,
+                                "the bundle covers seven published scenes")
 
 
 class EquilibriumArtifactTests(unittest.TestCase):
@@ -438,9 +446,12 @@ class EquilibriumArtifactTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.files = sorted((WEB_DATA / "solver").glob("*.json"))
+        # two shapes live here now: the legacy exact-study states and the
+        # bundle's solved moments. This class is about the legacy shape.
+        cls.files = [p for p in sorted((WEB_DATA / "solver").glob("*.json"))
+                     if json.loads(p.read_text()).get("kind") != "bundle_panels"]
         if not cls.files:
-            raise unittest.SkipTest("no solver artifacts exported")
+            raise unittest.SkipTest("no legacy solver artifacts exported")
 
     def test_root_policies_are_probability_distributions(self):
         for path in self.files:
@@ -807,7 +818,7 @@ class LazyComponentTests(unittest.TestCase):
         # dilemma, which runs in render(). The figure conventions, the arrow
         # language, the policy component, the evaluation strip and the OBSO
         # stack are all deferred (33.9 KB) and excluded above.
-        self.assertLess(initial, 254 * 1024,
+        self.assertLess(initial, 260 * 1024,
                         f"initial load is {initial / 1024:.1f} KB")
 
 
@@ -852,13 +863,18 @@ class SourceDiscoveryTests(unittest.TestCase):
 
         os.environ["OFFBALL_EVALUATION_SOURCE"] = value
 
-    def test_unset_means_no_source(self):
+    def test_unset_falls_back_to_the_local_bundle_when_installed(self):
         import os
 
         from demo_viz.paper_story import NoEvaluationSource, discover_source
+        from demo_viz.paper_story.bundle import BUNDLE, available
 
         os.environ.pop("OFFBALL_EVALUATION_SOURCE", None)
-        self.assertIsInstance(discover_source(), NoEvaluationSource)
+        found = discover_source()
+        if available():
+            self.assertEqual(BUNDLE, found.name)
+        else:
+            self.assertIsInstance(found, NoEvaluationSource)
 
     def test_a_class_is_instantiated(self):
         from demo_viz.paper_story import discover_source
@@ -1017,7 +1033,7 @@ class MultiPassArtifactTests(unittest.TestCase):
 
         for path in sorted((WEB_DATA / "solver").glob("*.json")):
             raw = json.loads(path.read_text())
-            if not raw.get("available"):
+            if not raw.get("available") or raw.get("kind") == "bundle_panels":
                 continue
             self.assertFalse(raw.get("multi_pass", False))
             n = len(raw["directions"])
@@ -1156,7 +1172,7 @@ class PublicLabelTests(unittest.TestCase):
     def test_no_single_optimal_action_is_claimed(self):
         action = self.payload["evaluation"]["runner"]["optimal_action"]
         self.assertEqual("Best-valued option", action["label"])
-        self.assertIn("no single one", action["detail"])
+        self.assertIn("no single optimal action", action["detail"])
 
     def test_the_browser_shows_the_payload_label_not_its_own(self):
         """So a label fix in the adapter reaches the page without a UI change."""

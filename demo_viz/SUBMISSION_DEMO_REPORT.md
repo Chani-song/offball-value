@@ -897,3 +897,43 @@ Both labels live in the adapter, and a test asserts the browser renders
 reaches the page without touching the UI.
 
 468 tests.
+
+---
+
+# Real data (2026-10-01): S05 and six more scenes are live
+
+The `offball_demo_data_20260930` bundle arrived — 26 scenes, 69 solved moments
+from `kyuhyeok-dev@8a5c69d`. It carries licensed tracking, so it lives under
+`local_inputs/` (gitignored) and only derived quantities cross into the build.
+
+**Seven published showcase scenes now show real numbers**: S05 S13 S15 S20 S34
+S36 S44, each at the real 0.0 / 0.6 / 1.2 s moments. S53 is in the bundle but
+has no published tracking, so it is not indexed.
+
+## S05 reproduces the paper figure
+
+At 0.6 s: defender **56.8 / 43.2**, **Pass + receive · 74%** along the run 8 m
+ahead, equilibrium value **0.6668**, **dilemma yes** (defender mixes, no saddle
+point, gap 1.4e-2). Held defender 0.6744 → once he may answer 0.6609, so a
+static read **overstates by 2.0%**. At 1.2 s the same comparison overstates by
+**40%** (0.6868 → 0.4113) — the paper's point, on screen.
+
+Every one of those is asserted against the bundle in
+`tests/test_bundle_integration.py`, to twelve places.
+
+## What is not claimed
+
+No V/S/R/A (the bundle has `analyze_eval`'s one-decision comparison, not
+`static_counterfactual`'s whole-window four solves — a test asserts no payload
+mentions them). No clip score. No best-valued option where the equilibrium is
+mixed. Moments the run skipped are left out, never carried forward.
+
+## Licence
+
+`local_inputs/`, `*.tar.gz` and `tracking/` are gitignored; `git ls-files
+local_inputs` is empty; and a test walks the built site for `tracking`,
+`bundesliga-integrated`, `.csv`, `.xml`, `.npz`, `x_raw` and `local_inputs`.
+An exported option path is capped at 30 points — the solver's 0.6 s path is 25,
+a clip is hundreds — so a trajectory cannot pass as one.
+
+487 tests. Initial load 258 KB, solver payloads 311 KB lazy, total 8.57 MB.

@@ -34,3 +34,6 @@ annotations/*.csv
 
 # Curated showcase source: local only, carries embedded raw tracking
 local_inputs/
+# Licensed data bundles and the tracking they carry, wherever they land
+*.tar.gz
+tracking/

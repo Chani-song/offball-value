@@ -278,3 +278,23 @@ coefficients already shared, and no licensed data is involved.
 The adapter already names these; `EVALUATION_METRICS` carries each definition
 verbatim. Implement `EvaluationSource` over the run directory, set
 `OFFBALL_EVALUATION_SOURCE`, re-export, rebuild.
+
+
+---
+
+## The bundle route (2026-10-01) — now the live one
+
+`demo_viz/paper_story/bundle.py` implements `EvaluationSource` over
+`local_inputs/offball_demo_data_20260930/` and `discover_source()` picks it up
+automatically when installed. Nothing needs `OFFBALL_EVALUATION_SOURCE`.
+
+```bash
+.venv/bin/python -m demo_viz.web.export_panels        # Game solution panels
+.venv/bin/python -m demo_viz.web.export_paper_story   # evaluation numbers
+.venv/bin/python -m demo_viz.web.build
+```
+
+A newer bundle drops in the same way: extract under `local_inputs/`, point
+`OFFBALL_BUNDLE` at it if the folder name differs, re-export, rebuild. The
+Korean command map in `bundle.py` applies only to panels written before
+`e89e78f`; a newer run already carries English and passes through unchanged.

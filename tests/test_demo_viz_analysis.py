@@ -79,22 +79,23 @@ class SolverUnavailableTests(unittest.TestCase):
             self.assertIsInstance(result, Unavailable)
             self.assertIn("Unreadable", result.reason)
 
-    def test_no_demo_scene_claims_solver_output(self):
-        """Every exported solver file must be a declared study state, not a scene."""
+    def test_a_solver_claim_is_backed_by_a_real_export(self):
+        """Replaces "no demo scene claims solver output". Seven published
+        scenes carry the 2026-09-30 bundle's solved moments; what must not
+        happen is a claim with nothing behind it."""
 
-        solver_dir = WEB_DATA / "solver"
-        if not solver_dir.exists():
-            self.skipTest("no exported solver data")
-        scenes = {p.stem for p in WEB_DATA.glob("*.json")} - {"index"}
-        for path in solver_dir.glob("*.json"):
+        import json
+
+        root = REPO_ROOT / "demo_viz" / "web_data" / "solver"
+        for path in sorted(root.glob("*.json")):
             payload = json.loads(path.read_text())
-            self.assertEqual("solver_reference", payload["kind"], path.name)
-            self.assertNotIn(path.stem, scenes, f"{path.name} shadows a tracked scene")
-
-
-@unittest.skipIf(not SOLVER_RUN.exists(), "no local solver run to read")
-class SolverArtifactTests(unittest.TestCase):
-    """Parsing a real artifact, with nothing invented."""
+            if payload.get("kind") != "bundle_panels":
+                continue
+            self.assertTrue(payload["panels"], f"{path.name} claims no moments")
+            self.assertEqual("offball_demo_data_20260930",
+                             payload["provenance"]["bundle"])
+            for panel in payload["panels"]:
+                self.assertTrue(panel["bodies"], "a moment with no bodies")
 
     def test_reads_a_solved_state(self):
         state = load_state(SOLVER_RUN, 0, commit="e8b0a95")

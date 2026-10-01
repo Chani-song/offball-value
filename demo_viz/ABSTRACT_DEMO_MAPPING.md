@@ -1,5 +1,14 @@
 # Abstract → demo traceability
 
+> **LIVE 2026-10-01.** Seven published showcase scenes
+> (S05 S13 S15 S20 S34 S36 S44) now carry **real** equilibrium policies,
+> ranks, equilibrium probabilities, regrets, dilemma flags and the static
+> comparison, from the `offball_demo_data_20260930` bundle. Rows 1, 2, 4, 5,
+> 6a, 6b and 9 are no longer blocked on those scenes. Row 8 (static vs
+> responsive) is **partly** live: `analyze_eval`'s one-decision comparison,
+> not the whole-window V/S/R/A. Row 7 (clip aggregation) is unchanged --
+> upstream defines none. See `DATA_BUNDLE_PROVENANCE.md`.
+>
 > **REBASED 2026-10-01 onto `origin/kyuhyeok-dev` @ `8a5c69d`.** The rows
 > below that read "not implemented" are **out of date**: `analyze_eval.py` and
 > `static_counterfactual.py` now implement observed-action projection, rank,

@@ -362,3 +362,38 @@ set — a corpus summary, not a per-clip player score. Nothing produces one.
 No output. `data/processed/*` and `out/` are gitignored upstream, and the
 evaluation run writes to `out/runs/eval_v1_*`. Every field above is therefore
 `artifact_missing` in the demo — the method exists, the numbers do not.
+
+
+---
+
+## 8. Real numbers arrive (2026-10-01)
+
+The bundle `offball_demo_data_20260930` (see
+[`DATA_BUNDLE_PROVENANCE.md`](DATA_BUNDLE_PROVENANCE.md)) carries the output of
+the run §7 describes. **Seven published showcase scenes now show real
+evaluation numbers**, and the rows §7 marked `artifact_missing` are live for
+them.
+
+What is populated, straight from `analyze_eval.py`:
+
+| field | source |
+| --- | --- |
+| observed action, `projection_distance_m` | `observed` + `fit_m[0]` |
+| observed action rank | `rank` |
+| relative rank | `rank_frac` |
+| **equilibrium probability of the observed action** | `similarity` |
+| regret | `regret` |
+| equilibrium policy, with the solver's own 0.6 s paths | the panel's `options` |
+| dilemma | `defender_mixed` **and** `no_saddle`, upstream's own criterion |
+| static comparison | `static_attack_appeared` / `_responsive` / `_loss` |
+
+Still unavailable, and still for a reason:
+
+* **V / S / R / A.** The bundle has `analyze_eval`'s static comparison, which
+  holds the defender to his *observed* command at one decision. It is not
+  `static_counterfactual.py`'s whole-window four-solve version. A test asserts
+  no payload mentions V, S, R or A.
+* **Clip-level aggregation.** `analysis/summary.json` is a corpus summary over
+  69 moments, not a per-clip player score, so `clip_metrics` stays empty.
+* **Moments the run skipped** (S46, S48, S51, S60 past 0 s; S64 past 0.6 s) and
+  **S53**, which has no published tracking.

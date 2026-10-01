@@ -1085,14 +1085,81 @@ function defenderOptionsAt(index) {
  * has one -- this is exercised by demo_viz/web/story_harness.html against a
  * genuine solver study state.
  */
+/**
+ * The solved moment nearest the playhead, and whether we are standing on it.
+ *
+ * The bundle solves a fresh game at three real moments (0.0 / 0.6 / 1.2 s) and
+ * nothing in between. Rather than interpolate -- there is no solved game to
+ * interpolate -- the view holds the nearest solved moment and says which one
+ * it is, so persistence never reads as a new solve.
+ */
+function panelAt(data, index) {
+  const panels = data?.panels;
+  if (!panels?.length) return null;
+  let best = panels[0];
+  for (const panel of panels) {
+    if (Math.abs(panel.frame - index) < Math.abs(best.frame - index)) best = panel;
+  }
+  return { panel: best, exact: best.frame === index };
+}
+
+/** The bundle's equilibrium policy, drawn at the solved moment. */
+function renderBundlePolicy(index, data) {
+  const lib = arrowsLib();
+  const figure = figureLib();
+  if (!lib || !figure) return;
+  const found = panelAt(data, index);
+  if (!found) return;
+  const { scene } = state;
+  for (const [role, body] of Object.entries(found.panel.bodies || {})) {
+    const colour = figure.ROLE_COLOR[body.solver_role] || figure.PAPER.attack;
+    const options = (body.options || [])
+      .filter((o) => o.prob >= figure.MIN_P)
+      .map((o) => ({
+        // geometry is the solver's own 0.6 s path, converted to screen space;
+        // probability never touches it
+        path: (o.path || []).map(([x, y]) => viewVector0(scene, x, y)),
+        probability: o.prob,
+        stop: o.command === 0,
+        label: figure.optionLabel(body.solver_role, o.prob,
+                                  { stop: o.command === 0, rests: false }),
+      }));
+    if (options.length) {
+      lib.drawActionArrows(state.pitch, playerPoint(scene, body.pos), options,
+                           { colour, labelFloor: figure.MIN_P });
+    }
+  }
+  // the pass: dashed charcoal from the ball to its target, labelled once
+  for (const pass of found.panel.passes || []) {
+    if (!pass.target || pass.prob < figure.MIN_P) continue;
+    const ball = ballAt(scene, index);
+    if (!ball) continue;
+    lib.drawPassChoice(state.pitch, ball, playerPoint(scene, pass.target),
+                       figure.passLabel(pass.prob, { received: Boolean(pass.to) }));
+  }
+}
+
+/** A scene-space point as a screen point (the same reflection `view` applies). */
+function playerPoint(scene, xy) {
+  return scene.flip ? [-xy[0], xy[1]] : [xy[0], -xy[1]];
+}
+
+/** The same for a point that is part of a path. */
+function viewVector0(scene, x, y) {
+  return scene.flip ? [-x, y] : [x, -y];
+}
+
 function renderPolicyArrows(index) {
   if (state.mode !== "game_solution") return;
   if (state.solverView === "actual") return;
   const data = solverFor();
+  if (!data?.available) return;
+  if (data.kind === "bundle_panels") { renderBundlePolicy(index, data); return; }
+
   const lib = arrowsLib();
   const figure = figureLib();
   const policies = policyLib();
-  if (!data?.available || !lib || !figure || !policies) return;
+  if (!lib || !figure || !policies) return;
 
   const { scene, selection } = state;
   const seconds = scene.times[index] - scene.times[0];
@@ -1274,15 +1341,54 @@ function renderEvaluation() {
     note.hidden = true;
     return;
   }
-  contractRows($("an-eval-rows"), [...block.metrics, block.optimal_action],
+  // the numbers belong to a solved moment, so they follow the playhead: the
+  // series carry one value per solve and the rows show the nearest one,
+  // saying which. Nothing is interpolated -- between solves there is no
+  // solved game to interpolate.
+  const atMoment = metricsAtFrame(block, state.frame);
+  const shown = atMoment ? atMoment.metrics : block.metrics;
+  contractRows($("an-eval-rows"), [...shown, block.optimal_action],
                (r) => (r.name === "optimal_action" ? actionText(r) : metricText(r)));
-  const none = block.metrics.every((m) => m.availability !== "available");
-  note.hidden = !none;
+  const none = shown.every((m) => m.availability !== "available");
+  note.hidden = !(none || (atMoment && !atMoment.exact));
   if (none) {
     note.textContent = "Evaluation outputs are not available for this scene yet. "
       + "This view populates from the player-evaluation pipeline; nothing is "
       + "substituted in the meantime.";
+  } else if (atMoment && !atMoment.exact) {
+    note.textContent = `Solved at frame ${atMoment.frame}; the playhead is `
+      + "between solved moments, so these are that moment's numbers.";
   }
+}
+
+/**
+ * A role's metrics at the solved moment nearest `frame`.
+ *
+ * The evaluation solves a fresh game at each real moment and nothing between,
+ * so the rows show one solved moment's numbers and say which. Returns null
+ * when no series carries a value, leaving the static metrics in place.
+ */
+function metricsAtFrame(block, frame) {
+  const series = presentSeries(block);
+  if (!series.length) return null;
+  let best = null;
+  for (const line of series) {
+    for (const f of line.frames) {
+      if (best === null || Math.abs(f - frame) < Math.abs(best - frame)) best = f;
+    }
+  }
+  if (best === null) return null;
+  const byName = new Map(series.map((s) => [s.name, s]));
+  const metrics = block.metrics.map((metric) => {
+    const line = byName.get(metric.name);
+    if (!line) return metric;
+    const i = line.frames.indexOf(best);
+    if (i < 0) return metric;
+    return { ...metric, availability: "available", value: line.values[i],
+             source: line.source, definition_version: line.definition_version,
+             provenance: line.provenance };
+  });
+  return { metrics, frame: best, exact: best === frame };
 }
 
 function renderClipSummary() {
@@ -1530,6 +1636,42 @@ function renderReleaseRows(index, fan) {
  * policy tree, not a residual from the solved value arrays, so it is reported
  * as "Certificate gap" and not renamed to anything friendlier.
  */
+/**
+ * The bundle's solved moment, summarised.
+ *
+ * The pitch carries the policy; this says which moment is being shown, what
+ * the game is worth there, and whether upstream called it a dilemma. The
+ * criterion is upstream's boolean -- the defender mixes **and** there is no
+ * saddle point -- and is never recomputed here.
+ */
+function renderBundleRows(data, node, policy, provenance) {
+  const found = panelAt(data, state.frame);
+  if (!found) { rows(node, [["Game solution", "No solved moment", true]]); return; }
+  const panel = found.panel;
+  const d = panel.dilemma || {};
+  const s = panel.static || {};
+  const entries = [
+    ["Decision", `${panel.dt.toFixed(1)} s`
+      + (found.exact ? "" : " \u00b7 nearest solved moment")],
+    ["Equilibrium value", NUMBER(panel.value, 4)],
+    ["Dilemma", d.is_dilemma ? "yes" : "no"],
+    ["Defender policy", d.defender_mixed ? "mixed" : "pure"],
+    ["Attack policy", d.attack_mixed ? "mixed" : "pure"],
+    ["Saddle-point gap", d.saddle_gap != null ? d.saddle_gap.toExponential(1) : "\u2014"],
+  ];
+  if (s.static_attack_appeared != null) {
+    entries.push(["Held defender, attack's best", NUMBER(s.static_attack_appeared, 4)]);
+    entries.push(["Once he may answer", NUMBER(s.static_attack_responsive, 4)]);
+    entries.push(["Overstated by", `${NUMBER(100 * (s.static_attack_loss_rel ?? 0), 1)}%`]);
+  }
+  rows(node, entries);
+  policy.hidden = true;                 // the arrows on the pitch are the policy
+  provenance.hidden = false;
+  const p = data.provenance || {};
+  provenance.textContent = `${p.bundle} \u00b7 ${p.repository}@${String(p.upstream).slice(0, 7)}`
+    + ` \u00b7 ${p.script}`;
+}
+
 function renderSolverRows() {
   const node = $("an-solver-rows");
   const policy = $("an-policy");
@@ -1547,6 +1689,8 @@ function renderSolverRows() {
     provenance.hidden = true;
     return;
   }
+
+  if (data.kind === "bundle_panels") { renderBundleRows(data, node, policy, provenance); return; }
 
   const lib = policyLib();
   if (!lib) {

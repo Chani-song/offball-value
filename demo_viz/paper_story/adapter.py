@@ -111,7 +111,9 @@ EVALUATION_METRICS = (
 #: The same quantities over time. Only series the payload carries are drawn.
 FRAME_SERIES = (
     FieldSpec("relative_rank", "Relative rank"),
-    FieldSpec("similarity_to_optimal", "Similarity to optimal"),
+    # same correction as EVALUATION_METRICS: upstream's quantity is the
+    # equilibrium's probability of the observed option, not a similarity
+    FieldSpec("similarity_to_optimal", "Equilibrium probability"),
     FieldSpec("regret", "Regret"),
 )
 
@@ -211,7 +213,13 @@ def discover_source() -> EvaluationSource:
 
     spec = os.environ.get("OFFBALL_EVALUATION_SOURCE", "").strip()
     if not spec:
-        return NoEvaluationSource()
+        # the local bundle, when it is installed: real numbers for the seven
+        # published showcase scenes. It carries licensed tracking, so it lives
+        # under local_inputs/ and only its derived quantities are exported.
+        from .bundle import source as bundle_source
+
+        found = bundle_source()
+        return found if found is not None else NoEvaluationSource()
     module_name, _, attribute = spec.partition(":")
     if not module_name or not attribute:
         raise ContractError(
@@ -375,11 +383,8 @@ def _evaluation(scene_id: str, role: str, frame: int | None,
                       for spec in EVALUATION_METRICS),
         optimal_action=_action(
             "optimal_action", "Best-valued option", raw, source,
-            note="analyze_eval: the option with the best value against the "
-                 "other side's equilibrium. Where the equilibrium is mixed "
-                 "this is the best-valued option, not 'the' optimal action -- "
-                 "a mixed equilibrium has no single one. Awaiting an "
-                 "evaluation run.",
+            note="Not in this bundle. A mixed equilibrium has no single "
+                 "optimal action; the policy on the pitch is the answer.",
             unavailable="artifact_missing"),
         frame_series=tuple(_series(spec, series_raw, source) for spec in FRAME_SERIES),
     )
