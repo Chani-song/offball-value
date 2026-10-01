@@ -198,17 +198,20 @@ export function drawPassChoice(pitch, from, to, label) {
   line.setAttribute("y1", from[1]);
   line.setAttribute("x2", to[0]);
   line.setAttribute("y2", to[1]);
-  line.setAttribute("stroke", P.text);
+  // charcoal on the paper pitch, near-white on the dark one: the pass is ink,
+  // not a role, so it takes the theme's text colour rather than a role colour
+  const ink = pitch.theme?.text || P.text;
+  line.setAttribute("stroke", ink);
   line.setAttribute("stroke-width", 0.26 * k);
   line.setAttribute("stroke-dasharray", `${1.1 * k} ${0.8 * k}`);
   line.setAttribute("stroke-linecap", "round");
   group.appendChild(line);
   group.appendChild(circle(to[0], to[1], 0.55 * k,
-                           { fill: "none", stroke: P.text, "stroke-width": 0.22 * k }));
+                           { fill: "none", stroke: ink, "stroke-width": 0.22 * k }));
   if (label) {
     group.appendChild(pitch.add("labels", "text", {
       x: to[0], y: to[1] - 1.2 * k, "text-anchor": "middle",
-      "font-size": 1.45 * k, fill: P.text, class: "pass-label",
+      "font-size": 1.45 * k, fill: ink, class: "pass-label",
     }, label));
   }
   return group;

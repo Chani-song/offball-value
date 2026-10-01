@@ -778,9 +778,13 @@ class LazyComponentTests(unittest.TestCase):
         self.app = (SITE / "js" / "app.js").read_text()
 
     def test_the_policy_and_strip_components_are_imported_on_demand(self):
+        """Whatever the build calls deferred must actually be deferred."""
+
+        from demo_viz.web.build import ON_DEMAND
+
         head = self.app[:self.app.index("const $ =")]
-        for name in ("policy.js", "evalstrip.js", "figure.js", "arrows.js",
-                     "obso.js"):
+        for path in ON_DEMAND:
+            name = path.rsplit("/", 1)[-1]
             self.assertNotIn(name, head, name)
             self.assertIn(f'import("./{name}")', self.app, name)
 
@@ -804,11 +808,13 @@ class LazyComponentTests(unittest.TestCase):
             contract = (root / "data" / "story" / "contract.json").stat().st_size
             extra = (root / "data" / "submission_showcase.json").stat().st_size
         initial = shell + index + contract + extra
-        # the two lazy components are part of the shell on disk but are never
-        # fetched today, so subtract them for what a visitor actually loads
-        for name in ("policy.js", "evalstrip.js", "figure.js", "arrows.js",
-                     "obso.js"):
-            initial -= (SITE / "js" / name).stat().st_size
+        # the lazy components are part of the shell on disk but are not fetched
+        # until their mode is opened, so subtract what a visitor actually loads.
+        # The list is the build's, so the two cannot drift apart.
+        from demo_viz.web.build import ON_DEMAND
+
+        for path in ON_DEMAND:
+            initial -= (SITE / path).stat().st_size
         # 2026-09-30, figure alignment: the role markers, the attack-direction
         # indicator and the annotation->solver role translation run on every
         # render and cannot be deferred (+7 KB); splitting the carrier rule out
@@ -818,7 +824,15 @@ class LazyComponentTests(unittest.TestCase):
         # dilemma, which runs in render(). The figure conventions, the arrow
         # language, the policy component, the evaluation strip and the OBSO
         # stack are all deferred (33.9 KB) and excluded above.
-        self.assertLess(initial, 264 * 1024,
+        # 2026-10-01, showcase visual pass: the paper theme costs ~6 KB of CSS
+        # (a body[data-paper] override per component) and ~2 KB of JS -- the
+        # pitch, chart, arrows and stat each read their colours from the active
+        # theme instead of the research palette. None of it can be deferred:
+        # the theme is chosen before the first paint. Raise this only with a
+        # reason, and prefer deferring a mode-specific module over raising it.
+        # Which is what paid for it: release.js (the pass-model reader, wanted
+        # only by the explorer's exploratory-pass layer) is now on demand too.
+        self.assertLess(initial, 274 * 1024,
                         f"initial load is {initial / 1024:.1f} KB")
 
 

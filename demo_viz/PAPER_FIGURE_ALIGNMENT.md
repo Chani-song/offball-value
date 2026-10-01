@@ -121,6 +121,10 @@ and in the role dock, so recolouring them would have broken more consistency
 than it bought. Defender orange matches. This is the one place the demo keeps
 its own language deliberately.
 
+**Superseded for the showcase, 2026-10-01.** That departure now holds only in
+the Full explorer. The Submission showcase was moved onto the paper's own
+values; section 9 has the mapping and says what is shared.
+
 **Muting is visual only.** Background defenders stay in every calculation.
 
 ## 4. Attack direction
@@ -349,3 +353,55 @@ What would unblock it: those three JSON files per scene — they are numbers on 
 `--value-grids 0.0=... 0.6=... 1.2=...`.
 
 **No attacker vector field**, as upstream cancelled it and the brief confirms.
+
+
+## 9. Two themes, one grammar (2026-10-01)
+
+The demo serves two audiences from one build, so it carries two themes and the
+collection picks between them.
+
+| | Submission showcase | Full explorer |
+| --- | --- | --- |
+| Page, cards | white | the dark research shell |
+| Pitch | `#F7F7F7`, lines `#D0D0D0` | dark green, pale lines |
+| Attacker | `#0000FF` (both of them) | runner pink, beneficiary cyan |
+| Defender | `#FF0000` | orange |
+| Text | `#222222` / `#666666` / `#B3B3B3` | near-white / grey |
+| Role marker | ringed, no fill behind it | a filled wash behind it |
+| Default overlays | runner movement, defender response, numbers | the same, plus the mode's diagnostics |
+
+The showcase values are `figure_style.py`'s, read from
+`origin/kyuhyeok-dev@139498a` rather than from a screenshot:
+`PAGE/PITCH/LINE/INK/MUTED/FAINT/ATTACK/DEFENCE`. They live in
+`palette.js:PAPER_THEME` with the source named per line, and the three roles in
+`ROLE_PAPER`.
+
+**Shape, not colour, is the role** once both attackers are blue. The showcase
+leans harder on `ROLE_SHAPE` than the figures do, because a demo is clicked
+rather than read: carrier circle, runner diamond, teammate triangle, defender
+square, in both themes.
+
+**How a theme reaches a mark.** `Pitch.setTheme()` stores it and redraws the
+markings; everything drawn afterwards reads `this.theme` and `this.roles`,
+never the palette module directly. The chart takes `theme`, the arrow
+language reads `pitch.theme` for the pass, and the stat's inline colour goes
+through `tint()`. CSS does the same through a `body[data-paper]` block that
+redefines the custom properties and then adjusts the components that had
+hard-coded values. Nothing is duplicated per theme except the values.
+
+**Where the paper theme has fewer colours than the explorer.** The research
+palette has four accents; the paper has two. So in the showcase a gain is
+attack blue and a loss defence red, the run-start tick on the scrubber is
+attack blue, and "now" on the evaluation strip is charcoal rather than red —
+red stays the defender's, everywhere.
+
+**What the showcase turns off by default.** The space map, the held-defender
+ghost, and the reachable set in Counterfactual. All three remain under
+Advanced; the showcase's Counterfactual is Figure 1 — three bodies and two
+options — and the explorer's keeps its diagnostics.
+
+**What was *not* restyled.** The Full explorer. Its dark theme, its annotation
+colours and its layer defaults are unchanged, and a diff of the dark rules
+shows it: the theme work is additive (`PAPER_THEME`, `setTheme`, the
+`body[data-paper]` block) plus the substitution of `this.theme` for the
+module-level palette inside `Pitch`, which resolves to the same values there.

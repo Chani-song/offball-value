@@ -3,7 +3,7 @@
 //
 // Same visual language as the rendered videos and the Dash app.
 
-import { P, ROLE_COLOUR } from "./palette.js";
+import { P, ROLE_COLOUR, ROLE_PAPER } from "./palette.js";
 
 /**
  * Marker shape per solver role, mirroring `figure_style.ROLE_MARKER`.
@@ -51,6 +51,9 @@ export class Pitch {
     // 1 at full pitch, smaller when cropped; text and strokes divide by the
     // zoom so they keep a constant size on screen while players grow.
     this.k = 1;
+    // which palette the pitch itself is drawn in. The Submission showcase uses
+    // the paper's; the Full explorer keeps the dark research one.
+    this.theme = P;
     this.layers = {};
     for (const name of ["markings", "field", "reach", "paths", "passes", "trail",
                         "lane", "tether", "ghost", "players", "labels"]) {
@@ -76,20 +79,22 @@ export class Pitch {
       g.appendChild(node);
       return node;
     };
-    add("rect", { x: -halfL, y: -halfW, width: PITCH_L, height: PITCH_W, fill: P.pitch });
+    add("rect", { x: -halfL, y: -halfW, width: PITCH_L, height: PITCH_W, fill: this.theme.pitch });
     // mow bands, the same cue the rendered frames use
     const bands = 6;
     for (let i = 0; i < bands; i += 2) {
       add("rect", {
         x: -halfL + (i * PITCH_L) / bands, y: -halfW,
-        width: PITCH_L / bands, height: PITCH_W, fill: P.pitchBand, opacity: 0.75,
+        width: PITCH_L / bands, height: PITCH_W, fill: this.theme.pitchBand, opacity: 0.75,
       });
     }
-    const line = { fill: "none", stroke: P.line, "stroke-width": 0.28, opacity: 0.5 };
+    const line = { fill: "none", stroke: this.theme.line, "stroke-width": 0.28,
+                   opacity: this.theme === P ? 0.5 : 1 };
     add("rect", { x: -halfL, y: -halfW, width: PITCH_L, height: PITCH_W, ...line });
     add("line", { x1: 0, y1: -halfW, x2: 0, y2: halfW, ...line });
     add("circle", { cx: 0, cy: 0, r: 9.15, ...line });
-    add("circle", { cx: 0, cy: 0, r: 0.4, fill: P.line, opacity: 0.5, stroke: "none" });
+    add("circle", { cx: 0, cy: 0, r: 0.4, fill: this.theme.line,
+                    opacity: this.theme === P ? 0.5 : 1, stroke: "none" });
     for (const sign of [-1, 1]) {
       const base = sign * halfL;
       add("rect", {
@@ -102,10 +107,12 @@ export class Pitch {
       });
       add("rect", {
         x: Math.min(base, base + sign * 2), y: -3.66,
-        width: 2, height: 7.32, ...line, fill: P.ink, opacity: 0.6,
+        width: 2, height: 7.32, ...line,
+        fill: this.theme === P ? this.theme.ink : this.theme.line,
+        opacity: this.theme === P ? 0.6 : 1,
       });
       add("circle", { cx: base - sign * 11, cy: 0, r: 0.35,
-                      fill: P.line, opacity: 0.5, stroke: "none" });
+                      fill: this.theme.line, opacity: this.theme === P ? 0.5 : 1, stroke: "none" });
       const span = (Math.acos((16.5 - 11) / 9.15) * 180) / Math.PI;
       const cx = base - sign * 11;
       const a0 = sign > 0 ? 180 - span : -span;
@@ -121,6 +128,20 @@ export class Pitch {
   }
 
   /** Crop to a box in view coordinates, or to the whole pitch when null. */
+  /** The role palette that goes with the pitch palette in use. */
+  get roles() {
+    return this.theme === P ? ROLE_COLOUR : ROLE_PAPER;
+  }
+
+  /** Swap the pitch palette and redraw the markings in it. */
+  setTheme(theme) {
+    const next = theme || P;
+    if (next === this.theme) return;
+    this.theme = next;
+    this.layers.markings.replaceChildren();
+    this._drawMarkings();
+  }
+
   setView(box) {
     const full = [-PITCH_L / 2 - MARGIN, -PITCH_W / 2 - MARGIN,
                   PITCH_L + 2 * MARGIN, PITCH_W + 2 * MARGIN];
@@ -149,7 +170,8 @@ export class Pitch {
   }
 
   /** Opened-space field, rasterised to an image inside the SVG. */
-  drawField(grid, values, scene, { colour = P.beneficiary, peak = null } = {}) {
+  drawField(grid, values, scene, { colour = null, peak = null } = {}) {
+    colour = colour || this.roles.beneficiary;
     if (!values) return;
     const maximum = peak ?? values.reduce((a, b) => Math.max(a, b), 0);
     if (!(maximum > 1e-9)) return;
@@ -193,7 +215,7 @@ export class Pitch {
     this.canvas.height = grid.ny;
     const context = this.canvas.getContext("2d");
     const image = context.createImageData(grid.nx, grid.ny);
-    const rgb = hexToRgb(P.reach);
+    const rgb = hexToRgb(this.theme.reach);
     for (let iy = 0; iy < grid.ny; iy += 1) {
       const sourceRow = scene.flip ? iy : grid.ny - 1 - iy;
       for (let ix = 0; ix < grid.nx; ix += 1) {
@@ -225,19 +247,19 @@ export class Pitch {
       if (viewed.length < 2) continue;
       this.add("passes", "path", {
         d: viewed.map((p, i) => `${i ? "L" : "M"}${p[0]} ${p[1]}`).join(" "),
-        fill: "none", stroke: P.solver, "stroke-width": 0.42,
+        fill: "none", stroke: this.theme.solver, "stroke-width": 0.42,
         "stroke-dasharray": "2.2 1.4", "stroke-linecap": "round", opacity: 0.95,
       });
       for (const point of viewed) {
         this.add("passes", "circle", {
           cx: point[0], cy: point[1], r: 0.42,
-          fill: P.ink, stroke: P.solver, "stroke-width": 0.2, opacity: 0.95,
+          fill: this.theme.ink, stroke: this.theme.solver, "stroke-width": 0.2, opacity: 0.95,
         });
       }
       const last = viewed[viewed.length - 1];
       this.add("passes", "text", {
         x: last[0], y: last[1] - 1.4, "text-anchor": "middle",
-        fill: P.solver, "font-size": 1.25, opacity: 0.9,
+        fill: this.theme.solver, "font-size": 1.25, opacity: 0.9,
         style: "paint-order:stroke; stroke:#05090A; stroke-width:0.6px",
       }, body);
     }
@@ -246,7 +268,7 @@ export class Pitch {
       if (target) {
         this.add("passes", "circle", {
           cx: target[0], cy: target[1], r: 0.9,
-          fill: "none", stroke: P.solver, "stroke-width": 0.28, opacity: 0.95,
+          fill: "none", stroke: this.theme.solver, "stroke-width": 0.28, opacity: 0.95,
         });
       }
     }
@@ -274,7 +296,8 @@ export class Pitch {
       if (!position) continue;
       const [x, y] = position;
       const role = selection.roleOf(player.id);
-      const colour = role ? ROLE_COLOUR[role] : (player.side === "attack" ? P.attack : P.defend);
+      const colour = role ? this.roles[role]
+        : (player.side === "attack" ? this.theme.attack : this.theme.defend);
       const solverRole = solverRoles ? solverRoles[player.id] : null;
       // in a paper-facing mode the three take figure_style's colours and lose
       // their outline, as the figure does since 2026-10-01
@@ -292,28 +315,35 @@ export class Pitch {
       });
       if (activeSide && !role && player.side === activeSide) {
         group.appendChild(circle(x, y, radius + 0.85, {
-          fill: "none", stroke: P.text2, "stroke-width": 0.16, opacity: 0.55,
+          fill: "none", stroke: this.theme.text2, "stroke-width": 0.16, opacity: 0.55,
         }));
       }
       if (hintSet.has(player.id)) {
         group.appendChild(circle(x, y, radius + 1.1, {
-          fill: "none", stroke: role ? colour : P.defender,
+          fill: "none", stroke: role ? colour : this.roles.defender,
           "stroke-width": 0.26, opacity: 0.75,
         }));
       }
       if (role) {
-        group.appendChild(roleMarker(x, y, radius + 1.5, solverRole,
-                                     { fill: paper || colour, opacity: 0.16 }));
+        // the dark theme can carry a filled wash behind a role; pure blue at
+        // 16% on a near-white ground reads as a blob, so the paper theme rings
+        // the marker instead -- same "this one is picked", far less ink
+        group.appendChild(this.theme !== P
+          ? roleMarker(x, y, radius + 1.2, solverRole,
+                       { fill: "none", stroke: paper || colour,
+                         "stroke-width": 0.22, opacity: 0.55 })
+          : roleMarker(x, y, radius + 1.5, solverRole,
+                       { fill: colour, opacity: 0.16 }));
       }
       group.appendChild(roleMarker(x, y, radius, solverRole, {
         fill: paper || colour,
-        stroke: paper ? "none" : (role ? colour : P.ink),
+        stroke: paper ? "none" : (role ? colour : this.theme.ink),
         "stroke-width": paper ? 0 : (role ? 0.4 : 0.18),
       }));
       if (labels) {
         const text = this.add("players", "text", {
           x, y: y + 0.45 * this.k, "text-anchor": "middle", class: "shirt",
-          "font-size": (role ? 1.6 : 1.35) * Math.max(this.k, 0.62), fill: P.ink,
+          "font-size": (role ? 1.6 : 1.35) * Math.max(this.k, 0.62), fill: this.theme.ink,
         }, player.shirt);
         group.appendChild(text);
       }
@@ -329,8 +359,8 @@ export class Pitch {
     const ball = ballAt(scene, index);
     if (ball) {
       this.add("players", "circle", {
-        cx: ball[0], cy: ball[1], r: 0.62, fill: P.ball,
-        stroke: P.ink, "stroke-width": 0.22,
+        cx: ball[0], cy: ball[1], r: 0.62, fill: this.theme.ball,
+        stroke: this.theme.ink, "stroke-width": 0.22,
       });
     }
   }
@@ -346,10 +376,10 @@ export class Pitch {
     }
     if (points.length < 2) return;
     const d = points.map(([x, y], i) => `${i ? "L" : "M"}${x} ${y}`).join(" ");
-    this.add("trail", "path", { d, fill: "none", stroke: P.runner,
+    this.add("trail", "path", { d, fill: "none", stroke: this.roles.runner,
                                 "stroke-width": 1.4, opacity: 0.16,
                                 "stroke-linecap": "round" });
-    this.add("trail", "path", { d, fill: "none", stroke: P.runner,
+    this.add("trail", "path", { d, fill: "none", stroke: this.roles.runner,
                                 "stroke-width": 0.5, opacity: 0.9,
                                 "stroke-linecap": "round" });
   }
@@ -366,14 +396,22 @@ export class Pitch {
       if (!to) continue;
       this.add("tether", "line", {
         x1: from[0], y1: from[1], x2: to[0], y2: to[1],
-        stroke: P.defender, "stroke-width": 0.32, "stroke-dasharray": "1.4 1.1",
+        stroke: this.roles.defender, "stroke-width": 0.32,
+        "stroke-dasharray": "1.4 1.1",
         opacity: 0.85,
       });
       if (labels) {
-        const distance = Math.hypot(to[0] - from[0], to[1] - from[1]);
+        const [dx, dy] = [to[0] - from[0], to[1] - from[1]];
+        const distance = Math.hypot(dx, dy);
+        // a tight tether is a couple of metres long, so a label at its
+        // midpoint lands on a shirt number; push it out along the normal
+        const away = Math.max(distance, 1e-6);
+        const offset = 1.6 * Math.max(this.k, 0.62);
         this.add("labels", "text", {
-          x: (from[0] + to[0]) / 2, y: (from[1] + to[1]) / 2 - 0.8 * this.k,
-          "text-anchor": "middle", "font-size": 1.5 * this.k, fill: P.defender,
+          x: (from[0] + to[0]) / 2 + (dy / away) * offset,
+          y: (from[1] + to[1]) / 2 - (dx / away) * offset + 0.45 * this.k,
+          "text-anchor": "middle", "font-size": 1.5 * this.k,
+          fill: this.roles.defender,
           class: "pitch-label",
         }, `${distance.toFixed(0)} m`);
       }
@@ -389,18 +427,19 @@ export class Pitch {
       if (!held || !now) continue;
       this.add("ghost", "line", {
         x1: held[0], y1: held[1], x2: now[0], y2: now[1],
-        stroke: P.defender, "stroke-width": 0.2, "stroke-dasharray": "0.6 0.9",
+        stroke: this.roles.defender, "stroke-width": 0.2,
+        "stroke-dasharray": "0.6 0.9",
         opacity: 0.6,
       });
       this.add("ghost", "circle", {
-        cx: held[0], cy: held[1], r: 1.55, fill: P.defender, opacity: 0.14,
-        stroke: P.defender, "stroke-width": 0.28, "stroke-dasharray": "0.9 0.8",
+        cx: held[0], cy: held[1], r: 1.55, fill: this.roles.defender, opacity: 0.14,
+        stroke: this.roles.defender, "stroke-width": 0.28, "stroke-dasharray": "0.9 0.8",
       });
       if (labels) {
         const pulled = Math.hypot(now[0] - held[0], now[1] - held[1]);
         this.add("labels", "text", {
           x: held[0], y: held[1] - 2.6 * this.k, "text-anchor": "middle",
-          "font-size": 1.4 * this.k, fill: P.defender, class: "pitch-label",
+          "font-size": 1.4 * this.k, fill: this.roles.defender, class: "pitch-label",
         }, `held · ${pulled.toFixed(0)} m`);
       }
     }
@@ -417,12 +456,12 @@ export class Pitch {
       if (Math.hypot(to[0] - ball[0], to[1] - ball[1]) > maximum) continue;
       this.add("lane", "line", {
         x1: ball[0], y1: ball[1], x2: to[0], y2: to[1],
-        stroke: P.beneficiary, "stroke-width": 1.2, opacity: 0.22,
+        stroke: this.roles.beneficiary, "stroke-width": 1.2, opacity: 0.22,
         "stroke-linecap": "round",
       });
       this.add("lane", "line", {
         x1: ball[0], y1: ball[1], x2: to[0], y2: to[1],
-        stroke: P.beneficiary, "stroke-width": 0.32, opacity: 0.85,
+        stroke: this.roles.beneficiary, "stroke-width": 0.32, opacity: 0.85,
       });
     }
   }
@@ -446,19 +485,19 @@ export class Pitch {
       if (!end) continue;
       this.add("passes", "line", {
         x1: origin[0], y1: origin[1], x2: end[0], y2: end[1],
-        stroke: P.obso, "stroke-width": 1.1, opacity: 0.16,
+        stroke: this.theme.obso, "stroke-width": 1.1, opacity: 0.16,
         "stroke-linecap": "round",
       });
       this.add("passes", "line", {
         x1: origin[0], y1: origin[1], x2: end[0], y2: end[1],
-        stroke: P.obso, "stroke-width": 0.26, opacity: 0.8,
+        stroke: this.theme.obso, "stroke-width": 0.26, opacity: 0.8,
         "stroke-dasharray": "1.6 1.1", "stroke-linecap": "round",
       });
       const chosen = selected === fan.rays.indexOf(ray);
       this.add("passes", "circle", {
         cx: end[0], cy: end[1], r: chosen ? 0.95 : 0.62,
-        fill: chosen ? P.obso : "none", "fill-opacity": chosen ? 0.35 : 0,
-        stroke: P.obso, "stroke-width": chosen ? 0.34 : 0.22, opacity: 0.95,
+        fill: chosen ? this.theme.obso : "none", "fill-opacity": chosen ? 0.35 : 0,
+        stroke: this.theme.obso, "stroke-width": chosen ? 0.34 : 0.22, opacity: 0.95,
         "data-ray": String(fan.rays.indexOf(ray)),
         style: "cursor:pointer", "pointer-events": "all",
       });
@@ -476,7 +515,7 @@ export class Pitch {
           labelled.push(at);
           this.add("passes", "text", {
             x: at[0], y: at[1], "text-anchor": "middle",
-            fill: P.obso, "font-size": 1.35, opacity: 0.9,
+            fill: this.theme.obso, "font-size": 1.35, opacity: 0.9,
             style: "paint-order:stroke; stroke:#05090A; stroke-width:0.6px",
           }, ray.obso.toFixed(3));
         }
@@ -484,7 +523,7 @@ export class Pitch {
     }
     this.add("passes", "circle", {
       cx: origin[0], cy: origin[1], r: 1.15,
-      fill: "none", stroke: P.obso, "stroke-width": 0.3, opacity: 0.75,
+      fill: "none", stroke: this.theme.obso, "stroke-width": 0.3, opacity: 0.75,
     });
   }
 
@@ -499,7 +538,7 @@ export class Pitch {
       if (points.length < 2) continue;
       this.add("paths", "path", {
         d: points.map(([x, y], i) => `${i ? "L" : "M"}${x} ${y}`).join(" "),
-        fill: "none", stroke: P.muted, "stroke-width": 0.14, opacity: 0.3,
+        fill: "none", stroke: this.theme.muted, "stroke-width": 0.14, opacity: 0.3,
       });
     }
   }
@@ -562,7 +601,7 @@ Pitch.prototype.drawAttackDirection = function drawAttackDirection() {
     + `l ${-direction * head} ${-head * 0.62} M ${x1} ${y} `
     + `l ${-direction * head} ${head * 0.62}`);
   line.setAttribute("fill", "none");
-  line.setAttribute("stroke", P.text2);
+  line.setAttribute("stroke", this.theme.text2);
   line.setAttribute("stroke-width", 0.22 * Math.max(this.k, 0.62));
   line.setAttribute("stroke-linecap", "round");
   group.appendChild(line);
@@ -571,7 +610,7 @@ Pitch.prototype.drawAttackDirection = function drawAttackDirection() {
   const text = this.add("labels", "text", {
     x: x + len + 0.8, y: y + 0.42 * Math.max(this.k, 0.62),
     "text-anchor": "start",
-    "font-size": 1.5 * Math.max(this.k, 0.62), fill: P.text2, class: "attack-dir-label",
+    "font-size": 1.5 * Math.max(this.k, 0.62), fill: this.theme.text2, class: "attack-dir-label",
   }, "attack");
   group.appendChild(text);
   return group;

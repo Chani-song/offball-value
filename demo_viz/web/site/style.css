@@ -482,3 +482,165 @@ main {
              margin: 0 0 8px 0; }
 .casestudy.quoted { color: var(--text2); font-style: italic;
                     border-left: 2px solid var(--grid); padding-left: 9px; }
+
+/* Role colours moved out of inline styles so a theme can reach them. The Full
+   explorer keeps the annotation palette; body[data-paper] overrides below. */
+.slot-title[data-role="runner"] { color: var(--runner); }
+.slot-title[data-role="beneficiary"] { color: var(--beneficiary); }
+.slot-title[data-role="defender"] { color: var(--defender); }
+
+/* ===========================================================================
+   The Submission showcase: the paper's theme
+
+   `body[data-paper]` is set while the showcase collection is open and removed
+   for the Full explorer, which keeps the dark research theme above. The values
+   are figure_style.py's own at kyuhyeok-dev@139498a -- page #FFFFFF, pitch
+   #F7F7F7, lines #D0D0D0, ink #222222, secondary #666666, faint #B3B3B3,
+   attack #0000FF, defence #FF0000 -- so the page a reviewer reads beside
+   Figure 2 is drawn in Figure 2's colours.
+
+   Only presentation changes here. Every number, label and control is the same.
+   =========================================================================== */
+body[data-paper] {
+  --ink: #FFFFFF;          /* the page */
+  --panel: #FFFFFF;        /* cards */
+  --grid: #E4E4E4;         /* separators */
+  --text: #222222;
+  --text2: #666666;
+  --muted: #9A9A9A;
+  --runner: #0000FF;       /* both attackers are blue; shape carries the role */
+  --beneficiary: #0000FF;
+  --defender: #FF0000;
+  --attack: #0000FF;
+  --defend: #FF0000;
+  background: #FFFFFF;
+  color: #222222;
+}
+
+/* --- chrome: present, but quiet ---------------------------------------- */
+body[data-paper] .top {
+  background: #FFFFFF;
+  border-bottom: 1px solid var(--grid);
+  padding: 10px 20px 9px 20px;
+}
+body[data-paper] .brand-name { color: #222222; }
+body[data-paper] .brand-sub,
+body[data-paper] .control > label { color: #9A9A9A; }
+body[data-paper] select,
+body[data-paper] .btn,
+body[data-paper] .segmented,
+body[data-paper] .seg,
+body[data-paper] .fchip {
+  background: #FFFFFF;
+  border-color: var(--grid);
+  color: #444444;
+}
+body[data-paper] .btn:hover,
+body[data-paper] .fchip:hover:not(.is-on) { border-color: #9A9A9A; color: #222222; }
+body[data-paper] .btn.accent { color: #0000FF; border-color: #0000FF; }
+body[data-paper] .seg.is-on,
+body[data-paper] .seg-btn.is-on { background: #F2F2F2; color: #222222; }
+body[data-paper] .fchip.is-on { border-color: #0000FF; color: #0000FF; }
+/* the filters are a way back to the list, not part of the story */
+body[data-paper] .chips { opacity: 0.72; }
+body[data-paper] .chips:hover { opacity: 1; }
+
+/* --- the pitch card is the page's subject ------------------------------ */
+body[data-paper] .pitch-card,
+body[data-paper] .card {
+  background: #FFFFFF;
+  border: 1px solid var(--grid);
+  box-shadow: none;
+}
+body[data-paper] .pitch-wrap { background: #F7F7F7; }
+body[data-paper] .scene-head h1 { color: #222222; }
+body[data-paper] #subtitle { color: #666666; }
+
+/* --- the four modes --------------------------------------------------- */
+body[data-paper] .modes { border-bottom-color: var(--grid); }
+body[data-paper] .mode + .mode { border-left-color: var(--grid); }
+body[data-paper] .mode-t { color: #666666; }
+body[data-paper] .mode-q { color: #9A9A9A; }
+body[data-paper] .mode:hover .mode-t { color: #222222; }
+body[data-paper] .mode.is-on { background: #F7F7F7; border-bottom-color: #222222; }
+body[data-paper] .mode.is-on .mode-t { color: #222222; }
+body[data-paper] .mode.is-on .mode-q { color: #666666; }
+
+/* --- the side panel: the same information, less of a dashboard --------- */
+body[data-paper] .dock .card { border-color: var(--grid); }
+body[data-paper] .group-label,
+body[data-paper] .an-section h4,
+body[data-paper] .evalstrip-title,
+body[data-paper] .advanced .disclosure .label {
+  color: #9A9A9A;
+  letter-spacing: 0.04em;      /* the wide dashboard tracking reads as shouting */
+  font-weight: 600;
+}
+body[data-paper] .analysis dt { color: #666666; }
+body[data-paper] .analysis dd { color: #222222; }
+body[data-paper] .slot { background: #FFFFFF; border-color: var(--grid); }
+body[data-paper] .slot-title[data-role="runner"],
+body[data-paper] .slot-title[data-role="beneficiary"] { color: #0000FF; }
+body[data-paper] .slot-title[data-role="defender"] { color: #FF0000; }
+body[data-paper] .stat-value { color: #0000FF; }
+body[data-paper] .pending { color: #9A9A9A !important; }
+body[data-paper] .casestudy.quoted { border-left-color: var(--grid); color: #666666; }
+body[data-paper] .an-provenance { color: #9A9A9A; }
+body[data-paper] .cfside,
+body[data-paper] .clipcard { border-color: var(--grid); }
+body[data-paper] .empty { border-left-color: var(--grid); color: #9A9A9A; }
+
+/* --- policy bars, timeline, strip -------------------------------------- */
+body[data-paper] .polrow { background: rgba(0, 0, 255, 0.05); }
+body[data-paper] .polbar { background: rgba(0, 0, 255, 0.16); }
+body[data-paper] .polbar.is-release { background: rgba(255, 0, 0, 0.16); }
+body[data-paper] .polname { color: #666666; }
+body[data-paper] .polvalue { color: #222222; }
+body[data-paper] .evalbase { stroke: var(--grid); }
+body[data-paper] .evallabel { fill: #666666; }
+body[data-paper] .evalline, body[data-paper] .evaldot { stroke: #0000FF; fill: #0000FF; }
+body[data-paper] .evalstem { stroke: rgba(0, 0, 255, 0.35); }
+body[data-paper] .evalnear { stroke: #222222; }
+/* "now" is a time, not a side: red is the defender's everywhere else here */
+body[data-paper] .evalmark { stroke: #222222; }
+body[data-paper] input[type="range"] { accent-color: #0000FF; }
+body[data-paper] .check { color: #666666; }
+body[data-paper] .layers, body[data-paper] .advanced { border-top-color: var(--grid); }
+body[data-paper] .readout { color: #222222; }
+
+/* --- the source sheet --------------------------------------------------- */
+body[data-paper] .sheet { background: rgba(255, 255, 255, 0.86); }
+body[data-paper] .sheet-card { background: #FFFFFF; border-color: var(--grid); }
+body[data-paper] .sheet-card dd { color: #444444; }
+
+/* --- marks drawn on the pitch itself ------------------------------------ */
+/* The label halo exists so a number stays legible over a player or a line.
+   On the dark pitch it is the page colour; on the paper pitch it has to be
+   the paper, or every label wears a black chip. */
+body[data-paper] .pitch-label,
+body[data-paper] .pass-label {
+  paint-order: stroke; stroke: rgba(255, 255, 255, 0.9); stroke-width: 0.6px;
+}
+
+/* --- the showcase sidebar reads, it does not announce ------------------- */
+/* Every small label in the shell is uppercased with wide tracking, which is a
+   dashboard's voice. The showcase is a paper's: sentence case, a little
+   larger, and the tracking only where a label still has to read as a label. */
+body[data-paper] .label,
+body[data-paper] .control > label,
+body[data-paper] .group-label,
+body[data-paper] .slot-title,
+body[data-paper] .facts dt,
+body[data-paper] .an-section h4,
+body[data-paper] .evalstrip-title,
+body[data-paper] .advanced .disclosure .label {
+  text-transform: none; letter-spacing: 0.01em; font-size: 11px;
+  font-weight: 600;
+}
+body[data-paper] .control > label { font-size: 10.5px; color: #9A9A9A; }
+body[data-paper] .group-label { font-size: 11.5px; }
+body[data-paper] .an-section h4 { color: #9A9A9A; }
+/* the role dock is structure, not four boxes: one card, hairlines inside */
+body[data-paper] .group { background: #FFFFFF; }
+body[data-paper] .slot { border: 0; border-top: 1px solid var(--grid); }
+body[data-paper] .group .slot:first-of-type { border-top: 0; }

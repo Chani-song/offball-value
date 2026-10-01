@@ -5,7 +5,19 @@ import { P } from "./palette.js";
 
 const NS = "http://www.w3.org/2000/svg";
 
-export function drawChart(root, { times, factual, counter, now, freezeTime }) {
+/**
+ * `theme` is the pitch's active theme. The chart is the sidebar's only drawn
+ * panel, so it follows the page it sits on: the research palette in the Full
+ * explorer, figure_style's attack/defence in the Submission showcase.
+ */
+export function drawChart(root, { times, factual, counter, now, freezeTime,
+                                  theme = null }) {
+  const paper = theme && theme !== P;
+  const C = paper
+    ? { grid: theme.grid, muted: theme.text2, series: theme.attack,
+        counter: theme.defend, freeze: theme.muted, now: theme.text }
+    : { grid: P.grid, muted: P.muted, series: P.beneficiary,
+        counter: P.defender, freeze: P.runner, now: P.text };
   root.replaceChildren();
   if (!times || !times.length) {
     const empty = document.createElement("div");
@@ -43,9 +55,9 @@ export function drawChart(root, { times, factual, counter, now, freezeTime }) {
   for (let i = 0; i <= 2; i += 1) {
     const value = y0 + ((y1 - y0) * i) / 2;
     add("line", { x1: pad.l, x2: width - pad.r, y1: sy(value), y2: sy(value),
-                  stroke: P.grid, "stroke-width": 0.7 });
+                  stroke: C.grid, "stroke-width": 0.7 });
     add("text", { x: pad.l - 4, y: sy(value) + 3, "text-anchor": "end",
-                  "font-size": 7, fill: P.muted }, value.toFixed(0));
+                  "font-size": 7, fill: C.muted }, value.toFixed(0));
   }
 
   if (counter) {
@@ -55,28 +67,28 @@ export function drawChart(root, { times, factual, counter, now, freezeTime }) {
         `L${sx(times[times.length - 1 - i])} ${sy(v)}`),
       "Z",
     ].join(" ");
-    add("path", { d: area, fill: P.beneficiary, opacity: 0.15, stroke: "none" });
+    add("path", { d: area, fill: C.series, opacity: 0.15, stroke: "none" });
     add("path", {
       d: counter.map((v, i) => `${i ? "L" : "M"}${sx(times[i])} ${sy(v)}`).join(" "),
-      fill: "none", stroke: P.defender, "stroke-width": 1.2, "stroke-dasharray": "3 2",
+      fill: "none", stroke: C.counter, "stroke-width": 1.2, "stroke-dasharray": "3 2",
     });
   }
   add("path", {
     d: factual.map((v, i) => `${i ? "L" : "M"}${sx(times[i])} ${sy(v)}`).join(" "),
-    fill: "none", stroke: P.beneficiary, "stroke-width": 1.7,
+    fill: "none", stroke: C.series, "stroke-width": 1.7,
     "stroke-linejoin": "round",
   });
   if (freezeTime != null) {
     add("line", { x1: sx(freezeTime), x2: sx(freezeTime), y1: pad.t, y2: height - pad.b,
-                  stroke: P.runner, "stroke-width": 0.8, "stroke-dasharray": "2 2",
+                  stroke: C.freeze, "stroke-width": 0.8, "stroke-dasharray": "2 2",
                   opacity: 0.8 });
   }
   add("line", { x1: sx(now), x2: sx(now), y1: pad.t, y2: height - pad.b,
-                stroke: P.text, "stroke-width": 0.9, opacity: 0.85 });
-  add("text", { x: pad.l, y: height - 4, "font-size": 7, fill: P.muted },
+                stroke: C.now, "stroke-width": 0.9, opacity: 0.85 });
+  add("text", { x: pad.l, y: height - 4, "font-size": 7, fill: C.muted },
       `${times[0].toFixed(0)}s`);
   add("text", { x: width - pad.r, y: height - 4, "text-anchor": "end",
-                "font-size": 7, fill: P.muted },
+                "font-size": 7, fill: C.muted },
       `${times[times.length - 1].toFixed(0)}s`);
   root.appendChild(svg);
 }

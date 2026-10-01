@@ -1,7 +1,9 @@
 // Wiring: scene loading, the role dock, drag and drop, overlays, playback.
 
 import { InfluenceCache, velocityAt } from "./influence.js";
-import { LAYER_LABEL, P, ROLE_COLOUR, ROLE_LABEL, ROLE_SIDE } from "./palette.js";
+import {
+  LAYER_LABEL, P, PAPER_THEME, ROLE_COLOUR, ROLE_LABEL, ROLE_SIDE,
+} from "./palette.js";
 import { Pitch } from "./pitch.js";
 import { autoTriplet, rankBeneficiaries, rankDefenders } from "./ranking.js";
 import { drawChart } from "./chart.js";
@@ -14,7 +16,6 @@ import {
   PROVENANCE_LABEL, availableFilters, defaultFilter, filtered, loadShowcase,
   matchLabel, resolveRoles, selectorLabel,
 } from "./showcase.js";
-import { loadModelCard, loadRelease, releaseFor, releaseRow } from "./release.js";
 import {
   actionText, loadContract, loadStory, metricText, presentSeries, reservedSeries,
   sourceTitle,
@@ -93,6 +94,24 @@ function arrowsLib() {
   return null;
 }
 
+let releaseModule = null;
+let releaseLoading = false;
+
+/**
+ * The pass-model reader, or null until it arrives.
+ *
+ * Only the exploratory-pass layer asks for it, and that layer lives in the
+ * Full explorer's Advanced section, so the showcase never fetches it.
+ */
+function releaseLib() {
+  if (releaseModule) return releaseModule;
+  if (!releaseLoading) {
+    releaseLoading = true;
+    import("./release.js").then((module) => { releaseModule = module; render(); });
+  }
+  return null;
+}
+
 let stripModule = null;
 let stripLoading = false;
 
@@ -118,6 +137,9 @@ const state = {
   frame: 0,
   playing: false,
   timer: null,
+  // the Full explorer's defaults. The showcase narrows these in applyTheme's
+  // sibling below: the space map and the held defender are diagnostics, and
+  // they are one click away under Advanced rather than on by default.
   layers: new Set(["trail", "tether", "wake", "ghost", "labels", "candidates"]),
   view: "full",              // "full" | "focus"
   hintsOpen: null,           // null = follow the mode, true/false = user's choice
@@ -140,6 +162,7 @@ const state = {
   story: null,               // the paper-story contract payload for this scene
   solverView: "policy",      // policy | actual | overlay
   advancedOpen: false,       // the Advanced layer disclosure
+  showcaseLayersApplied: false,
 };
 
 // ---------------------------------------------------------------------------
@@ -395,7 +418,7 @@ function render() {
   if (state.layers.has("wake") && threat) {
     // frame-level threat: it does not move when the roles change, so it is
     // drawn in its own colour rather than the beneficiary's
-    pitch.drawField(threat.grid, threat.values, scene, { colour: P.obso });
+    pitch.drawField(threat.grid, threat.values, scene, { colour: tint("obso") });
   } else if (state.layers.has("wake") && mode !== "obso"
              && selection.beneficiaries.length) {
     const factual = cache.combined(selection.beneficiaries, slot);
@@ -437,11 +460,12 @@ function render() {
     dragging: state.drag ? state.drag.playerId : null,
     solverRoles: solverRolesAt(index),
     // the figures mute everyone but the central actors; the numbers keep them
-    muted: state.mode === "counterfactual" || state.mode === "game_solution",
-    // Game solution is the panel a reader compares with Figure 2, so the three
-    // take the paper's own colours there: attack blue, defence red, no
-    // outline. Observed keeps the annotation colours the role dock shows.
-    paperColours: state.mode === "game_solution" ? figureLib()?.ROLE_COLOR : null,
+    muted: state.collection === "showcase"
+      || state.mode === "counterfactual" || state.mode === "game_solution",
+    // the whole Submission showcase speaks the paper's grammar: attack blue,
+    // defence red, no outline, shape for the role. The Full explorer keeps the
+    // annotation colours its role dock shows.
+    paperColours: state.collection === "showcase" ? figureLib()?.ROLE_COLOR : null,
   });
   pitch.drawAttackDirection();
 
@@ -560,7 +584,7 @@ function renderPasses(index, threat) {
   const receiver = selectedReceiver();
   let labelled = false;
   if (payload && receiver) {
-    const row = releaseRow(payload, index, receiver);
+    const row = releaseLib().releaseRow(payload, index, receiver);
     for (let i = 0; i < fan.rays.length; i += 1) {
       const entry = row[i];
       if (entry.available) { fan.rays[i].obso = entry.releasePayoff; labelled = true; }
@@ -920,7 +944,10 @@ function setMode(mode, quiet = false) {
   }
   // each mode brings on the layer that answers its question; the reviewer can
   // still switch it off, and switching back to Observed puts it away
-  setLayer("reach", mode === "counterfactual");
+  // the reachable set is a diagnostic: it belongs to the Full explorer's
+  // Counterfactual. The showcase's is Figure 1 -- three bodies and two
+  // options -- and the layer stays available under Advanced.
+  setLayer("reach", mode === "counterfactual" && state.collection !== "showcase");
   setLayer("solver", mode === "game_solution");
   $("solver-view").hidden = mode !== "game_solution";
   if (!quiet) render();
@@ -1556,8 +1583,10 @@ function releaseFor_scene() {
   if (!scene) return null;
   if (state.release && state.release.sceneId === scene.scene_id) return state.release.data;
   if (state.release && state.release.pending) return null;
+  const lib = releaseLib();
+  if (!lib) return null;
   state.release = { sceneId: scene.scene_id, pending: true, data: null };
-  Promise.all([loadRelease(scene.scene_id), loadModelCard()]).then(([data]) => {
+  Promise.all([lib.loadRelease(scene.scene_id), lib.loadModelCard()]).then(([data]) => {
     if (!state.scene || state.scene.scene_id !== scene.scene_id) return;
     state.release = { sceneId: scene.scene_id, pending: false, data };
     render();
@@ -1604,7 +1633,7 @@ function renderReleaseRows(index, fan) {
   }
 
   const receiver = selectedReceiver();
-  const result = releaseFor(payload, index, receiver, state.endpoint);
+  const result = releaseLib().releaseFor(payload, index, receiver, state.endpoint);
   if (!result.available) {
     rows(node, [["Solver pass model", "unavailable", true]]);
     note.hidden = false;
@@ -1787,6 +1816,30 @@ function currentShowcase() {
 }
 
 /** Show the controls the active collection needs, and hide the other's. */
+/**
+ * The Submission showcase is a paper-themed view; the Full explorer keeps the
+ * dark research theme.
+ *
+ * One attribute on <body> drives the CSS, and the pitch takes the matching
+ * palette. The split is deliberate: the showcase is read next to the paper
+ * figures, the explorer is a research tool, and one theme cannot serve both.
+ */
+function applyTheme() {
+  const paper = state.collection === "showcase";
+  document.body.dataset.paper = paper ? "1" : "";
+  if (!paper) document.body.removeAttribute("data-paper");
+  state.pitch?.setTheme(paper ? PAPER_THEME : P);
+  if (paper && !state.showcaseLayersApplied) {
+    // once, on the first showcase render: the space map and the held defender
+    // stay available, they simply do not open the public view
+    state.showcaseLayersApplied = true;
+    for (const layer of ["wake", "ghost"]) setLayer(layer, false);
+  }
+}
+
+/** Layers the showcase opens with: the play, not the diagnostics. */
+const SHOWCASE_LAYERS = ["trail", "tether", "labels", "candidates"];
+
 function applyCollection() {
   const showcase = state.collection === "showcase" && Boolean(state.showcase);
   $("showcase-control").hidden = !showcase;
@@ -1796,6 +1849,7 @@ function applyCollection() {
     button.classList.toggle("is-on", button.dataset.collection === state.collection);
   }
   if (showcase) refreshShowcaseList();
+  applyTheme();
 }
 
 function refreshShowcaseList() {
@@ -1868,18 +1922,21 @@ function renderTicks() {
   if (!scene) return;
   const last = Math.max(1, scene.n_frames - 1);
 
+  const theme = state.pitch?.theme || P;
   const marks = [];
   for (const runnerId of selection.runners) {
     const onset = scene.onsets?.[runnerId];
     const player = scene.byId.get(runnerId);
     if (!onset || !player) continue;
-    marks.push({ index: onset.index, colour: P.runner,
+    // the run belongs to an attacker, so on the paper theme the tick is the
+    // attack colour rather than the research palette's runner pink
+    marks.push({ index: onset.index, colour: theme === P ? P.runner : theme.attack,
                  label: `run #${player.shirt}`, title: onset.method });
   }
   // the clip is cut around the annotated shot, so t = 0 is that shot
   const shot = Math.round(-scene.t0 * scene.fps);
   if (shot >= 0 && shot <= last) {
-    marks.push({ index: shot, colour: P.text, label: "shot",
+    marks.push({ index: shot, colour: theme.text, label: "shot",
                  title: "annotated shot" });
   }
 
@@ -1893,6 +1950,21 @@ function renderTicks() {
   }
 }
 
+/**
+ * An inline colour for the sidebar's stat, in whichever theme is active.
+ *
+ * The research palette gives space a cyan and a loss a pink; the paper theme
+ * has no third and fourth hue to spare, so a gain is attack blue and a loss
+ * defence red -- the same two colours the pitch is already using.
+ */
+function tint(key) {
+  const theme = state.pitch?.theme;
+  if (!theme || theme === P) return P[key];
+  const paper = { beneficiary: theme.attack, obso: theme.attack,
+                  runner: theme.defend, muted: theme.muted };
+  return paper[key] || theme[key] || P[key];
+}
+
 function renderStat(slot, swap) {
   const { cache, selection } = state;
   const node = $("stat-value");
@@ -1902,39 +1974,42 @@ function renderStat(slot, swap) {
     // is a frame-level quantity with no beneficiary in it
     const threat = obsoSurface(state.frame);
     $("stat-label").textContent = "OBSO threat · peak";
-    if (!threat) { node.textContent = "…"; node.style.color = P.muted; return; }
+    if (!threat) { node.textContent = "…"; node.style.color = tint("muted"); return; }
     let peak = 0;
     for (let i = 0; i < threat.values.length; i += 1) {
       if (threat.values[i] > peak) peak = threat.values[i];
     }
     node.textContent = peak.toFixed(3);
-    node.style.color = P.obso;
+    node.style.color = tint("obso");
     return;
   }
   const created = mode === "gain";
   if (!selection.beneficiaries.length) {
     $("stat-label").textContent = created ? "Space created" : "Available space";
     node.textContent = "—";
-    node.style.color = P.muted;
+    node.style.color = tint("muted");
     return;
   }
   const factual = cache.combined(selection.beneficiaries, slot).value;
   if (!created || !swap.length) {
     $("stat-label").textContent = "Available space";
     node.textContent = factual.toFixed(1);
-    node.style.color = P.beneficiary;
+    node.style.color = tint("beneficiary");
     return;
   }
   const counter = cache.combined(selection.beneficiaries, slot, swap).value;
   const gain = factual - counter;
   $("stat-label").textContent = "Space created";
   node.textContent = `${gain >= 0 ? "+" : ""}${gain.toFixed(1)}`;
-  node.style.color = gain >= 0 ? P.beneficiary : P.runner;
+  node.style.color = gain >= 0 ? tint("beneficiary") : tint("runner");
 }
 
 function renderChart(swap, freeze) {
   const { cache, scene, selection } = state;
-  if (!selection.beneficiaries.length) { drawChart($("chart"), {}); return; }
+  if (!selection.beneficiaries.length) {
+    drawChart($("chart"), { theme: state.pitch?.theme || null });
+    return;
+  }
   const sum = (ids, sw) => {
     const out = new Float64Array(cache.indices.length);
     for (const id of ids) {
@@ -1944,6 +2019,7 @@ function renderChart(swap, freeze) {
     return Array.from(out);
   };
   drawChart($("chart"), {
+    theme: state.pitch?.theme || null,
     times: cache.times,
     factual: sum(selection.beneficiaries, []),
     counter: swap.length ? sum(selection.beneficiaries, swap) : null,
@@ -2053,7 +2129,9 @@ function chip(scene, role, playerId) {
   const player = scene.byId.get(playerId);
   const node = document.createElement("span");
   node.className = "chip";
-  node.style.background = ROLE_COLOUR[role];
+  // the dock's chips follow whichever palette the pitch is drawn in, so a
+  // reader is never told the runner is pink and shown a blue diamond
+  node.style.background = state.pitch?.roles?.[role] || ROLE_COLOUR[role];
   node.draggable = false;
   node.dataset.player = playerId;
   node.dataset.role = role;

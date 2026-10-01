@@ -769,15 +769,67 @@ class StopLabelTests(unittest.TestCase):
 
 
 class PaperColourScopeTests(unittest.TestCase):
-    """Figure 2's palette is used where a reader compares with Figure 2."""
+    """The Submission showcase speaks the paper's grammar; the explorer does not."""
 
-    def test_game_solution_uses_the_paper_colours(self):
-        app = (SITE / "js" / "app.js").read_text()
-        self.assertIn('state.mode === "game_solution" ? figureLib()?.ROLE_COLOR', app)
+    def setUp(self):
+        self.app = (SITE / "js" / "app.js").read_text()
 
-    def test_observed_keeps_the_annotation_colours(self):
-        """The role dock shows those, so the two must not disagree."""
+    def test_the_whole_showcase_uses_the_paper_colours(self):
+        """Widened from Game solution alone: all four modes are one view, and
+        a reader opening Observed should see the figure's players."""
 
-        app = (SITE / "js" / "app.js").read_text()
-        block = app[app.index("paperColours:"):]
-        self.assertIn("null", block[:160])
+        self.assertIn('state.collection === "showcase" ? figureLib()?.ROLE_COLOR',
+                      self.app)
+
+    def test_the_full_explorer_keeps_the_annotation_colours(self):
+        """Its role dock shows those, so the two must not disagree."""
+
+        block = self.app[self.app.index("paperColours:"):]
+        self.assertIn("null", block[:200])
+
+    def test_the_pitch_takes_the_matching_palette(self):
+        self.assertIn("setTheme(paper ? PAPER_THEME : P)", self.app)
+        palette = (SITE / "js" / "palette.js").read_text()
+        for key, value in (("pitch", "#F7F7F7"), ("line", "#D0D0D0"),
+                           ("ink", "#222222"), ("attack", "#0000FF"),
+                           ("defend", "#FF0000")):
+            block = palette[palette.index("PAPER_THEME = {"):]
+            block = block[:block.index("};")]
+            self.assertIn(f'{key}: "{value}"', block, key)
+
+    def test_nothing_on_the_pitch_reads_the_dark_palette_directly(self):
+        """`Pitch` draws through `this.theme`, so one object switches both."""
+
+        pitch = (SITE / "js" / "pitch.js").read_text()
+        body = pitch[pitch.index("export class Pitch"):]
+        stray = [line.strip() for line in body.splitlines()
+                 if " P." in line and "this.theme" not in line]
+        self.assertEqual(stray, [], stray)
+
+    def test_the_chart_and_the_pass_label_follow_the_same_theme(self):
+        """Two marks outside `Pitch` that used to be hard-coded."""
+
+        self.assertIn("theme: state.pitch?.theme", self.app)
+        arrows = (SITE / "js" / "arrows.js").read_text()
+        self.assertIn("pitch.theme?.text || P.text", arrows)
+
+    def test_the_showcase_counterfactual_is_figure_1_not_a_diagnostic(self):
+        """The reachable set is the explorer's; the toggle stays in Advanced."""
+
+        self.assertIn('setLayer("reach", mode === "counterfactual"'
+                      ' && state.collection !== "showcase")', self.app)
+        self.assertIn('"reach"', (SITE / "js" / "app.js").read_text())
+
+    def test_a_label_on_the_paper_pitch_has_a_paper_halo(self):
+        css = (SITE / "style.css").read_text()
+        block = css[css.index("body[data-paper] .pitch-label"):]
+        block = block[:block.index("}")]
+        self.assertIn("rgba(255, 255, 255", block)
+
+    def test_the_pitch_values_are_figure_styles_own(self):
+        source = _show("scripts/figure_style.py")
+        if source is None:
+            self.skipTest("origin/kyuhyeok-dev not available")
+        self.assertIn('PITCH = "#F7F7F7"', source)
+        self.assertIn('INK, MUTED, FAINT, LINE, PAGE = "#222222", "#666666", '
+                      '"#B3B3B3", "#D0D0D0", "#FFFFFF"', source)
