@@ -26,7 +26,7 @@ def main() -> None:
     p.add_argument("--input", type=Path, required=True)
     p.add_argument("--output", type=Path, required=True)
     p.add_argument("--number", required=True, help="the bold lead, e.g. 'Figure 1.'")
-    p.add_argument("--text", required=True)
+    p.add_argument("--text", required=True, help='the caption; "\\n" starts a new line there')
     p.add_argument("--size", type=float, default=FS_CAPTION, help="caption, pt")
     p.add_argument("--one-line", action="store_true", help="refuse to wrap")
     p.add_argument("--dpi", type=float, default=600)
@@ -49,15 +49,17 @@ def main() -> None:
 
     avail = W - 2 * args.margin_in
     lead = args.number + " "
-    lines, cur, first = [], "", True
-    for word in args.text.split():                      # greedy wrap; the bold lead takes room on line 1
-        trial = (cur + " " + word).strip()
-        room = avail - (width(lead, True) if first else 0)
-        if cur and width(trial) > room:
-            lines.append(cur); cur, first = word, False
-        else:
-            cur = trial
-    lines.append(cur)
+    lines, first = [], True
+    for para in args.text.replace("\\n", "\n").split("\n"):   # "\n" in the text: start a new line there
+        cur = ""
+        for word in para.split():                       # greedy wrap; the bold lead takes room on line 1
+            trial = (cur + " " + word).strip()
+            room = avail - (width(lead, True) if first else 0)
+            if cur and width(trial) > room:
+                lines.append(cur); cur, first = word, False
+            else:
+                cur = trial
+        lines.append(cur); first = False
     assert not (args.one_line and len(lines) > 1), f"caption needs {len(lines)} lines at {FS_CAPTION} pt"
 
     pad_top, pad_bot = 0.06, 0.06

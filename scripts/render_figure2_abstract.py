@@ -613,6 +613,8 @@ def main() -> None:
     # layout (inches): title, panel titles, the panels, the legend if asked for
     W = args.width_mm * MM
     margin, gap, title_in, head_in, key_in = 0.05, 0.08, 0.30, 0.20, 0.36 if args.legend else 0.0
+    if not args.title:                             # --title "": no title row (the caption names the figure)
+        title_in = 0.0
     foot_in = 0.05 if args.no_match_line else 0.22   # the white strip under the panels for the match line
     n = len(scenes)
     m_per_in = sum(widths) / (W - 2 * margin - (n - 1) * gap)
@@ -665,14 +667,22 @@ def main() -> None:
         fig.text(left / W, (foot_in + key_in + ph + 0.05) / H, f"{dt:.1f} s", color=st.INK,
                  fontsize=FS_PANEL, fontweight="bold", ha="left", va="bottom")
         left += pw + gap
-    y_title = (H - title_in / 2) / H
-    fig.text(margin / W, y_title, args.title, color=st.INK, fontsize=FS_TITLE, fontweight="bold",
-             ha="left", va="center")
-    # the attack's direction: a word and the figures' own arrow, right-aligned on the title row
+    # the attack's direction: a word and the figures' own arrow, right-aligned on the title row -- or, with no
+    # title (2026-10-01, the user's call), on the moments' row, sitting on the same line as "0.0 s" ...
     arrow_in = 0.28
-    fig.text((W - margin - arrow_in - 0.05) / W, y_title, "attack", color=st.MUTED, fontsize=FS_KEY,
+    if args.title:
+        y_title = (H - title_in / 2) / H
+        fig.text(margin / W, y_title, args.title, color=st.INK, fontsize=FS_TITLE, fontweight="bold",
+                 ha="left", va="center")
+        fig.text((W - margin - arrow_in - 0.05) / W, y_title, "attack", color=st.MUTED, fontsize=FS_KEY,
                  ha="right", va="center")
-    st.fig_arrow(fig, ((W - margin - arrow_in) / W, y_title), ((W - margin) / W, y_title), color=st.MUTED,
+        y_arrow = y_title
+    else:
+        word = fig.text((W - margin - arrow_in - 0.05) / W, (foot_in + key_in + ph + 0.05) / H, "attack",
+                        color=st.MUTED, fontsize=FS_KEY, ha="right", va="bottom")
+        ext = word.get_window_extent(renderer)
+        y_arrow = (ext.y0 + ext.y1) / 2 / fig.dpi / H
+    st.fig_arrow(fig, ((W - margin - arrow_in) / W, y_arrow), ((W - margin) / W, y_arrow), color=st.MUTED,
                  lw=st.MOVE_LW * 0.7)
     if args.legend:
         legend(fig, W, foot_in + key_in / 2, m_per_pt, renderer)

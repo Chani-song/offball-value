@@ -107,11 +107,11 @@ options in its docstring and `--help`.
      --tracking data/processed/showcase_v1/tracking/S05.csv \
      --frames --value-fade 0 --value-grids $GRIDS \
      --flow-grids $GRIDS --flow-color "#FF8000" --flow-alpha 0.4 \
-     --defender-names short --label-gap 0.35 \
+     --defender-names short --label-gap 0.35 --title "" \
      --output out/showcase_v1/figure_multi/S05_figure2.png
    python scripts/add_caption.py --input out/showcase_v1/figure_multi/S05_figure2.png \
      --output out/showcase_v1/abstract_figures/S05_figure2_caption.png --number "Figure 2." \
-     --text "Nash equilibrium strategies at three successive moments. Percentages indicate action probabilities for the two attackers and defender; orange lines show the defender's expected movement from each starting position."
+     --text "Nash equilibrium choices during an off-ball play at three successive moments.\nPercentages are action probabilities; orange lines show the defender's expected movement from each starting position."
    PYTHONPATH=src:scripts python scripts/analyze_eval.py \
      --solved out/runs/eval_v1_2v1 out/runs/eval_v1_3v1 \
      --panels data/processed/eval_v1/panels --output data/processed/eval_v1/analysis
