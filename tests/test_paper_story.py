@@ -1124,3 +1124,44 @@ class AdvancedControlTests(unittest.TestCase):
         self.assertIn("ADVANCED_DEFAULT_ON", self.app)
         block = self.app[self.app.index("const ADVANCED_DEFAULT_ON"):][:120]
         self.assertIn("candidates", block)
+
+
+class PublicLabelTests(unittest.TestCase):
+    """Labels that would misstate what upstream computes.
+
+    `analyze_eval` defines similarity as the equilibrium's own probability of
+    the observed option. Shown as "Similarity to optimal 0.78" that reads as a
+    distance from a best action, which it is not -- and under a mixed
+    equilibrium there is no single best action to be distant from.
+    """
+
+    def setUp(self):
+        self.payload = build_scene("x").to_payload()
+        self.metrics = {m["name"]: m
+                        for m in self.payload["evaluation"]["runner"]["metrics"]}
+
+    def test_similarity_keeps_its_key_for_compatibility(self):
+        self.assertIn("similarity_to_optimal", self.metrics)
+
+    def test_but_is_labelled_for_what_it_is(self):
+        label = self.metrics["similarity_to_optimal"]["label"]
+        self.assertEqual("Equilibrium probability of observed action", label)
+        self.assertNotIn("Similarity", label)
+
+    def test_and_says_what_it_is_not(self):
+        detail = self.metrics["similarity_to_optimal"]["detail"]
+        self.assertIn("Not a distance", detail)
+        self.assertIn("not a cosine", detail)
+
+    def test_no_single_optimal_action_is_claimed(self):
+        action = self.payload["evaluation"]["runner"]["optimal_action"]
+        self.assertEqual("Best-valued option", action["label"])
+        self.assertIn("no single one", action["detail"])
+
+    def test_the_browser_shows_the_payload_label_not_its_own(self):
+        """So a label fix in the adapter reaches the page without a UI change."""
+
+        app = (SITE / "js" / "app.js").read_text()
+        self.assertIn("dt.textContent = record.label", app)
+        for banned in ("Similarity to optimal", "Optimal action"):
+            self.assertNotIn(banned, app, banned)

@@ -91,10 +91,17 @@ EVALUATION_METRICS = (
               note="analyze_eval: (n - fractional rank) / (n - 1); 1 is the "
                    "best option, 0 the worst, and tied options take the mean "
                    "of their places. Awaiting an evaluation run."),
-    FieldSpec("similarity_to_optimal", "Similarity to optimal",
+    # The schema key stays `similarity_to_optimal` for compatibility, but the
+    # public label must not: upstream's quantity is the equilibrium's own
+    # probability of the observed option, and "Similarity to optimal 0.78"
+    # would read as a distance from a best action. It is neither a distance nor
+    # a cosine, and under a mixed equilibrium there is no single best action to
+    # be similar to. See PAPER_STORY_TRACE.md section 7.
+    FieldSpec("similarity_to_optimal", "Equilibrium probability of observed action",
               note="analyze_eval: the equilibrium's own probability of the "
-                   "observed option (that player's marginal) -- not a distance "
-                   "or a cosine. Awaiting an evaluation run."),
+                   "observed option -- that player's marginal. Not a distance, "
+                   "not a cosine, and not similarity to any single action. "
+                   "Awaiting an evaluation run."),
     FieldSpec("regret", "Regret",
               note="analyze_eval: the best option's value minus the observed "
                    "one's; for the defender, observed minus best, since lower "
@@ -367,9 +374,12 @@ def _evaluation(scene_id: str, role: str, frame: int | None,
         metrics=tuple(_metric(spec, raw, source, unavailable="artifact_missing")
                       for spec in EVALUATION_METRICS),
         optimal_action=_action(
-            "optimal_action", "Optimal action", raw, source,
+            "optimal_action", "Best-valued option", raw, source,
             note="analyze_eval: the option with the best value against the "
-                 "other side's equilibrium. Awaiting an evaluation run.",
+                 "other side's equilibrium. Where the equilibrium is mixed "
+                 "this is the best-valued option, not 'the' optimal action -- "
+                 "a mixed equilibrium has no single one. Awaiting an "
+                 "evaluation run.",
             unavailable="artifact_missing"),
         frame_series=tuple(_series(spec, series_raw, source) for spec in FRAME_SERIES),
     )

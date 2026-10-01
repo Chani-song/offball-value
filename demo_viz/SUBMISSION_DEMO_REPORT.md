@@ -858,3 +858,42 @@ ported, nothing invented.
 moments for a corpus summary, not per clip per player.
 
 461 tests.
+
+---
+
+# Evaluation export attempt (2026-10-01) — blocked on inputs
+
+Traced the canonical chain for `analyze_eval.py` and
+`static_counterfactual.py` (recorded in
+[`EVALUATION_EXPORT_REQUEST.md`](EVALUATION_EXPORT_REQUEST.md)) and checked
+this machine for every input.
+
+**None of the pipeline inputs are here**: no `data/raw/bundesliga-integrated`
+(licensed DFL tracking), no `data/processed/stage3/*_final2m.json`, no
+`data/processed/rating_v1/merged.csv`, no `data/processed/showcase_v1/`, no
+`out/runs/eval_v1_*`. Only the solver package (`mit_ssac2027_ref/src`, 18
+modules) and the fitted models are available, and the runs are 37 CPUs x 1.5 h
+and 32 x 2 h. So no scene was evaluated, S05 included, and nothing was faked in
+its place.
+
+**One useful finding:** upstream's showcase codes are *exactly* the demo's
+curated ids, and seven of the eight already name a published scene (S53 has no
+published tracking). When the export arrives the join needs no new mapping.
+
+## What did change: two labels that were misstating upstream
+
+`analyze_eval` defines similarity as **the equilibrium's own probability of the
+observed option**. Shown as "Similarity to optimal 0.78" that reads as a
+distance from a best action — which it is not, and under a mixed equilibrium
+there is no single best action to be distant from. The schema key stays
+`similarity_to_optimal` for compatibility; the public label is now
+**"Equilibrium probability of observed action"**, and the field says in so many
+words that it is neither a distance nor a cosine.
+
+For the same reason `optimal_action` is labelled **"Best-valued option"**.
+
+Both labels live in the adapter, and a test asserts the browser renders
+`record.label` rather than any string of its own — so a label correction
+reaches the page without touching the UI.
+
+468 tests.
