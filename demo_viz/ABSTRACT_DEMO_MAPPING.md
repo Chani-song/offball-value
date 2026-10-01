@@ -1,5 +1,13 @@
 # Abstract → demo traceability
 
+> **REBASED 2026-10-01 onto `origin/kyuhyeok-dev` @ `8a5c69d`.** The rows
+> below that read "not implemented" are **out of date**: `analyze_eval.py` and
+> `static_counterfactual.py` now implement observed-action projection, rank,
+> relative rank, similarity, regret and the static/responsive pair on one
+> scale. They remain unavailable in the demo, but for a different reason — no
+> run's output is shared. Exact definitions in `PAPER_STORY_TRACE.md` §7. The
+> notes below are kept as the record of earlier audits.
+>
 > **Re-audited 2026-09-30 against `origin/kyuhyeok-dev` @ `e84553a`** (four
 > commits of real solver work). The evaluation metrics are still unimplemented,
 > so no status flips to live — but rows 3b and 9 gained real machinery, and a

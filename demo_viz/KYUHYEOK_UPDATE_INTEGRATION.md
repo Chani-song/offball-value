@@ -15,7 +15,10 @@ adapter boundary has leaked and that is the bug to fix first.
 
 | | |
 | --- | --- |
-| Last audited `origin/kyuhyeok-dev` | **`e84553a`** (2026-09-30 01:15 -0500) |
+| Last audited `origin/kyuhyeok-dev` | **`8a5c69d`** (2026-09-30 20:29 -0500) |
+| Evaluation layer at `8a5c69d` | **implemented** (`analyze_eval.py`, `static_counterfactual.py`); **no output shared** |
+| Figure renderers | **present** — `render_figure1_dilemma.py`, `render_figure2_abstract.py`, `figure_style.py` |
+| Previously audited | `e84553a` (2026-09-30 01:15 -0500) |
 | Previous baseline | `c6423d4` (2026-09-28) |
 | Between them | four commits: multi-pass solver, run-pass action set, opening payoff table, evaluation-set builders, A-sym pass model |
 | Evaluation layer at `e84553a` | **still unimplemented** — all ten quantities. The inputs are built; nothing computes the comparison |
@@ -228,4 +231,50 @@ observed-action matching"*. What is missing is the code that consumes them:
    with a responding one.
 
 Once those exist, the route is unchanged: implement `EvaluationSource`, set
+`OFFBALL_EVALUATION_SOURCE`, re-export, rebuild.
+
+
+---
+
+## What is needed now: the evaluation run's output
+
+The methods exist. The demo is one export away, and it is a *small* one.
+
+`jobs/solve_evaluation.sbatch` writes `out/runs/eval_v1_2v1` and
+`out/runs/eval_v1_3v1`; `scripts/analyze_eval.py` reads them and the tracking
+and produces the per-moment numbers; `scripts/static_counterfactual.py` writes
+`data/processed/eval_v1/static_full`. All three paths are gitignored upstream.
+
+**Ask for, per scene and per moment (0.0 / 0.6 / 1.2 s):**
+
+| field | from |
+| --- | --- |
+| `observed` per player: command index, label, the distance to the nearest and second-nearest command end | `analyze_eval` |
+| `rank`, `rank_frac`, `tie` | `analyze_eval` |
+| `similarity` (the equilibrium probability of the observed option) | `analyze_eval` |
+| `regret` | `analyze_eval` |
+| `V`, `S`, `R`, `A` | `static_counterfactual` |
+| `dilemma`: mixes, and the saddle-point gap | `analyze_eval` |
+| the panel file (`options` with `path`, `end`, `prob`; `passes`) | `extract_panel_policy` |
+
+These are **numbers, not tracking** — the same scale as the pass-model
+coefficients already shared, and no licensed data is involved.
+
+### Mapping to this repository's schema
+
+| upstream | `paper_story` field |
+| --- | --- |
+| `observed` + distances | `observed_action` (+ `projection_distance_m`, `confidence`) |
+| `rank` | `observed_action_rank` |
+| `rank_frac` | `relative_rank` |
+| `similarity` | `similarity_to_optimal` |
+| `regret` | `regret` |
+| `S` and its best column | `counterfactual.static` (`value`, `best_action`) |
+| `V` and the equilibrium | `counterfactual.responsive` |
+| `(S - V) / V` | `value_change` |
+| the three moments | `frame_series` |
+| — | `clip_metrics`: **no upstream definition**; leave empty |
+
+The adapter already names these; `EVALUATION_METRICS` carries each definition
+verbatim. Implement `EvaluationSource` over the run directory, set
 `OFFBALL_EVALUATION_SOURCE`, re-export, rebuild.

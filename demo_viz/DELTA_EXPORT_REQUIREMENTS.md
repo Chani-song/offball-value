@@ -151,3 +151,31 @@ un-ignored.
 
 **This does not touch §6.** Pass model A is a completion proxy. The evaluation
 layer is still unimplemented, and no export of coefficients can change that.
+
+
+---
+
+## 9. The evaluation run (`8a5c69d`, 2026-10-01) — this supersedes §6
+
+§6 said no export would unblock the evaluation layer, because no method
+existed. **That is no longer true.** `scripts/analyze_eval.py` and
+`scripts/static_counterfactual.py` implement it, with the definitions in
+`PAPER_STORY_TRACE.md` §7.
+
+What is now needed is an ordinary export of numbers:
+
+```
+out/runs/eval_v1_2v1/            the evaluation run (manifest, starting_states, states/)
+out/runs/eval_v1_3v1/
+data/processed/eval_v1/static_full/*.json     V, S, R, A per moment
+data/processed/showcase_v1/figure_multi/panels/*.json   the Figure 2 panels
+```
+
+plus whatever `analyze_eval.py --output` writes.
+
+**Join key unchanged:** `provenance.code` (S05, S20, …) and
+`provenance.onset_frame_id`. A moment is identified by its code and its `@dt`
+suffix, as `summarize_static` reads it (`r["code"].split("@")[0]`).
+
+**Still not needed:** raw tracking, licensed source data, policy `.npz` files
+(the panel file already carries the per-command paths the demo draws).

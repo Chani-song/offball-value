@@ -298,3 +298,67 @@ one arrives rather than after.
 `payoff.py` also changed — an optional EPV/xT terminal threat. The two functions
 this demo executes, `positional_threat_all` and `offside_flags`, are **byte-identical**
 at `c6423d4`, at `e84553a` and in our vendored copy, so no number on screen moves.
+
+
+---
+
+## 7. Re-audit at `8a5c69d` (2026-10-01) — the evaluation layer arrived
+
+`e84553a..8a5c69d` is three commits. **§2's headline no longer holds.**
+`scripts/analyze_eval.py` and `scripts/static_counterfactual.py` implement the
+quantities this document has recorded as missing since 2026-09-29. The history
+above is kept; this is what is true now.
+
+### Implemented, with exact definitions
+
+Let `M[d, a]` be the opening payoff table (`solve.root_game`: defender command
+d, attack column a, the rest of the game already solved) and `p`, `q` its
+equilibrium mixes.
+
+| Quantity | `analyze_eval.py` |
+| --- | --- |
+| **observed action** | the command whose 0.6 s end — the solver's own movement — is **nearest where the player really was 0.6 s later**; a pass when the ball outran any player (`TOP_SPEED`). The distance to the nearest *and second nearest* command end is reported, so a poor match is visible rather than dropped |
+| **option value** | attack column: `u[a] = p · M[:, a]`. A player's command: the best column with that command, the other attacker best-responding. Defender command: `w[d] = M[d, :] · q` — **lower is better for him** |
+| **rank** | `1 +` the number of legal options strictly better than the observed one; ties take the best place |
+| **relative rank** | `rank_frac = (n − fractional rank) / (n − 1)`; 1 best, 0 worst; tied options take the mean of their places. **Ties are common** and are reported as TIE |
+| **similarity to optimal** | the equilibrium's **own probability of the observed option** (that player's marginal). Not a distance, not a cosine |
+| **regret** | best option's value − the observed one's; **for the defender, observed − best** |
+| **static vs responsive** | defender held to his observed command `d_obs`: the attack's best column there looks worth `M[d_obs, a*]`; once he may answer it is worth `min_d M[d, a*]`. **Loss = the difference.** And symmetrically for the attack |
+| **equilibrium vs observed** | defence `max_a M[d_obs, a]` vs `V*`; attack `u[a_obs]` vs `V*` |
+| **dilemma** | the defender's equilibrium **mixes** (more than one command above 1e-9, as `solve.mixed_states`) **and** there is **no saddle point**: `min_d max_a M − max_a min_d M > 1e-9` |
+
+### The whole-window static counterfactual
+
+`static_counterfactual.py` solves each evaluation moment's game **four times**
+with the solver's own LP, holding a side by leaving it one legal command per
+turn — "the held side follows its real movement at EVERY turn", not only the
+first 0.6 s:
+
+* **V** free — the equilibrium value (checked against the run's saved value)
+* **S** the defender held to his real commands; the attack best-responds (`S ≥ V`)
+* **R** the attack held to its static-best plan; the defender answers (`R ≤ S`)
+* **A** the attack held to **what it really did**; the defender answers (`A ≤ V`)
+
+`summarize_static.py` then reports, per moment:
+
+| | |
+| --- | --- |
+| situation overestimated | `(S − V) / V` |
+| best action overrated | `(S − R) / S` |
+| defence could improve | `(S − V) / S` |
+| real attack short of V | `(V − A) / V` |
+
+A test asserts `S ≥ V ≥ A` and `R ≤ S`, and that the masked solver equals an
+independent dynamic programme over the free side's choices.
+
+### Still not implemented
+
+**Clip-level aggregation of a player's evaluation.** `summarize_static` takes
+mean / median / max over *moments*, grouped by game kind and by the showcase
+set — a corpus summary, not a per-clip player score. Nothing produces one.
+
+### Still unavailable
+
+No output. `data/processed/*` and `out/` are gitignored upstream, and the
+evaluation run writes to `out/runs/eval_v1_*`. Every field above is therefore
+`artifact_missing` in the demo — the method exists, the numbers do not.

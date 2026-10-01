@@ -66,7 +66,7 @@
 import { Pitch } from "./js/pitch.js";
 import { P } from "./js/palette.js";
 import { drawActionArrows, drawPassChoice } from "./js/arrows.js";
-import { compassName, defenderMoveLabel, targetsFor, worldDirection, SOLVER_ROLES }
+import { compassName, defenderMoveName, targetsFor, worldDirection, SOLVER_ROLES }
   from "./js/figure.js";
 import { attackRows, bodyPolicies, defenderRows, drawPolicy, isMixed, massOf,
          support, MODAL_LABEL, MODAL_NOTE } from "./js/policy.js";
@@ -130,7 +130,7 @@ function options(slot, probabilities) {
   return (probabilities || []).map((probability, k) => {
     const u = worldDirection(k, ad);
     const label = slot === "defender"
-      ? defenderMoveLabel(u, [dx, dy], targets)
+      ? defenderMoveName(u, [dx, dy], targets)
       : compassName(u, ad);
     return { label, probability, aim: viewVec(u[0], u[1]) };
   }).filter((o) => o.probability > 1e-9);

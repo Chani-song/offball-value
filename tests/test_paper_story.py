@@ -208,19 +208,33 @@ class TodayIsHonestTests(unittest.TestCase):
         for wanted in ("relative_rank", "similarity_to_optimal", "regret"):
             self.assertIn(wanted, names)
 
-    def test_the_regret_slot_says_which_regret_it_is_not(self):
-        """The `regret` that exists belongs to another lineage; the panel must
-        not let a reviewer assume it is this one."""
+    def test_the_regret_slot_carries_the_upstream_definition(self):
+        """Replaces a test from when no regret existed. analyze_eval defines
+        it (2026-09-30), so the slot states the definition and says the
+        *output* is what is missing."""
 
         regret = next(m for m in self.payload["evaluation"]["runner"]["metrics"]
                       if m["name"] == "regret")
-        self.assertIn("dynamic_response_game", regret["detail"])
+        self.assertEqual("artifact_missing", regret["availability"])
+        self.assertIn("best option", regret["detail"])
+        self.assertIn("observed minus best", regret["detail"])
 
-    def test_the_static_side_declares_no_semantics_yet(self):
+    def test_the_static_side_carries_the_upstream_semantics(self):
+        """Replaces a test from when no static/responsive pair existed on one
+        scale. static_counterfactual.py defines it; only the run is missing."""
+
         static = self.payload["counterfactual"]["runner"]["static"]
-        self.assertEqual("", static["semantics"],
-                         "three readings of 'static' exist; picking one is a "
-                         "research decision, not an interface default")
+        responsive = self.payload["counterfactual"]["runner"]["responsive"]
+        self.assertIn("held to his real commands at every turn", static["semantics"])
+        self.assertIn("equilibrium", responsive["semantics"])
+        self.assertEqual("artifact_missing", static["value"]["availability"])
+
+    def test_the_evaluation_fields_are_awaiting_a_run_not_a_method(self):
+        for role in STORY_ROLES:
+            for metric in self.payload["evaluation"][role]["metrics"]:
+                self.assertEqual("artifact_missing", metric["availability"],
+                                 metric["name"])
+                self.assertIn("Awaiting an evaluation run", metric["detail"])
 
     def test_clip_aggregation_is_not_assumed(self):
         for role in STORY_ROLES:
@@ -789,7 +803,11 @@ class LazyComponentTests(unittest.TestCase):
         # render and cannot be deferred (+7 KB); splitting the carrier rule out
         # of obso.js and deferring the OBSO stack, the conventions and the
         # arrow language paid for them and more. Raise this only with a reason.
-        self.assertLess(initial, 250 * 1024,
+        # 2026-10-01, source-of-truth rebase: +2 KB for Figure 1's two-option
+        # dilemma, which runs in render(). The figure conventions, the arrow
+        # language, the policy component, the evaluation strip and the OBSO
+        # stack are all deferred (33.9 KB) and excluded above.
+        self.assertLess(initial, 254 * 1024,
                         f"initial load is {initial / 1024:.1f} KB")
 
 

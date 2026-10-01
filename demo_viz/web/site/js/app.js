@@ -1004,20 +1004,55 @@ function defenderMoveNameAt(index, commandIndex) {
   if (!lib) return null;                    // a re-render follows when it lands
   const direction = scene.attacking_direction >= 0 ? 1 : -1;
   const goal = [direction * (scene.pitch[0] / 2), 0];
-  return lib.defenderMoveLabel(lib.worldDirection(commandIndex, direction),
+  return lib.defenderMoveName(lib.worldDirection(commandIndex, direction),
                                at(defender),
                                lib.targetsFor(at(carrier), at(runner), goal));
 }
 
 /**
- * The defender's five commands at this frame, named by the research code's
- * own rule, with the aim direction each one steers along.
+ * Figure 1's two options: **Follow?** the runner, or **Stay?** with the ball
+ * carrier.
  *
- * `probability` is deliberately null: naming the moves needs only the scene,
- * but saying how a defender should mix them needs the solved game, and no
- * solver artifact covers any scene here. An unweighted fan is the honest
- * picture of "these are the options"; weighting it without a policy would be
- * inventing one.
+ * `render_figure1_dilemma` draws exactly these two arrows from the defender,
+ * pointing at where the runner and the ball carrier **really were 0.6 s
+ * later**, both a fixed `OPTION_M` = 3 m. Its docstring calls that a "picture
+ * choice, not data", and Figure 1 "carries no number by design" -- so neither
+ * does this. The question is the whole content: which one should he cover?
+ *
+ * Returns null unless the scene gives all three bodies and a frame 0.6 s on.
+ */
+function figureOneOptionsAt(index) {
+  const { scene, selection } = state;
+  const lib = figureLib();
+  const defender = scene?.byId.get(selection.defenders[0]);
+  const runner = scene?.byId.get(selection.runner);
+  const carrier = candidatePasses(scene, index)?.carrier;
+  if (!lib || !defender || !runner || !carrier) return null;
+  const later = index + Math.round(0.6 * scene.fps);
+  if (later >= scene.n_frames) return null;
+  const origin = playerAt(scene, defender, index);
+  if (!origin) return null;
+  const toward = { runner, carrier };
+  const options = [];
+  for (const spec of lib.FIGURE1_OPTIONS) {
+    const target = playerAt(scene, toward[spec.toward], later);
+    if (!target) return null;
+    const dx = target[0] - origin[0];
+    const dy = target[1] - origin[1];
+    const n = Math.hypot(dx, dy);
+    if (n < 1e-6) return null;
+    options.push({ label: spec.label, aim: [dx / n, dy / n], probability: null });
+  }
+  return { origin, options, length: lib.OPTION_M };
+}
+
+/**
+ * The defender's five compass commands, named by the research rule.
+ *
+ * Kept as a diagnostic: Figure 1 shows two options, not five, and the five-way
+ * fan was this repository's own reading before the figure code was available.
+ * It stays available under Advanced because it is still the solver's real
+ * command set.
  */
 function defenderOptionsAt(index) {
   const { scene, selection } = state;
@@ -1081,20 +1116,39 @@ function renderPolicyArrows(index) {
     lib.drawActionArrows(state.pitch, origin, options, { colour, length: 5.0 });
   };
 
-  draw(selection.defenders[0], body.defender, ROLE_COLOUR.defender, true);
-  draw(selection.runner, body.receiver, ROLE_COLOUR.runner, false);
+  // the paper's palette here: attack blue, defence vermillion (figure_style).
+  // Observed keeps the demo's annotation colours -- two vocabularies, and
+  // PAPER_FIGURE_ALIGNMENT.md says which is which.
+  draw(selection.defenders[0], body.defender, figure.ROLE_COLOR.defender, true);
+  draw(selection.runner, body.receiver, figure.ROLE_COLOR.runner, false);
   const carrier = candidatePasses(scene, index)?.carrier;
-  if (carrier) draw(carrier.id, body.carrier, ROLE_COLOUR.beneficiary, false);
+  if (carrier) draw(carrier.id, body.carrier, figure.ROLE_COLOR["ball carrier"], false);
 }
 
-/** The dilemma fan, drawn only where the mode asks the dilemma question. */
+/**
+ * The dilemma, drawn where the mode asks the dilemma question.
+ *
+ * Figure 1's two options by default. The five-command fan is a diagnostic and
+ * appears only when the Advanced layer asks for it.
+ */
 function renderDilemma(index) {
   if (state.mode !== "counterfactual") return;
   const lib = arrowsLib();
-  const fan = defenderOptionsAt(index);
-  if (!lib || !fan) return;
-  lib.drawActionArrows(state.pitch, fan.origin, fan.options,
-                       { colour: ROLE_COLOUR.defender, length: 4.6 });
+  const figure = figureLib();
+  if (!lib || !figure) return;
+  const colour = figure.ROLE_COLOR.defender;
+  if (state.layers.has("commands")) {
+    const fan = defenderOptionsAt(index);
+    if (fan) {
+      lib.drawActionArrows(state.pitch, fan.origin, fan.options,
+                           { colour, length: 4.6 });
+    }
+    return;
+  }
+  const dilemma = figureOneOptionsAt(index);
+  if (!dilemma) return;
+  lib.drawActionArrows(state.pitch, dilemma.origin, dilemma.options,
+                       { colour, length: dilemma.length });
 }
 
 function renderStoryRoles() {
@@ -2102,7 +2156,8 @@ function bindControls() {
 }
 
 /** Advanced layers: collapsed, but never silently active. */
-const ADVANCED_LAYERS = ["candidates", "lane", "paths", "reach", "solver", "passes"];
+const ADVANCED_LAYERS = ["candidates", "lane", "paths", "reach", "solver",
+                         "commands", "passes"];
 
 //: Advanced layers that start on. The header hint exists so a layer a *mode*
 //: switched on is not invisible; naming one that has been on since load would

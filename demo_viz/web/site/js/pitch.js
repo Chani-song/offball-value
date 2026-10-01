@@ -6,7 +6,11 @@
 import { P, ROLE_COLOUR } from "./palette.js";
 
 /**
- * Marker shape per solver role, mirroring `figure.js:ROLE_SHAPE`.
+ * Marker shape per solver role, mirroring `figure_style.ROLE_MARKER`.
+ *
+ * The beneficiary takes the ball carrier's **disc**, not a triangle: upstream
+ * reserves the triangle for the 3v1 "teammate", the second attacker when a
+ * scripted passer has the ball.
  *
  * Inlined rather than imported: this is the only thing the pitch needs from
  * the conventions module at load, and importing the module would pull its
@@ -16,7 +20,7 @@ import { P, ROLE_COLOUR } from "./palette.js";
 const ROLE_SHAPE = {
   "ball carrier": "circle",
   runner: "diamond",
-  beneficiary: "triangle",
+  beneficiary: "circle",
   teammate: "triangle",
   defender: "square",
 };

@@ -804,3 +804,57 @@ Deferring the OBSO stack, the conventions module and the arrow language, and
 splitting the carrier rule out of `obso.js`, paid for the always-loaded
 additions: **249.6 KB initial** against 241 KB before, with 30.9 KB now fetched
 only when a solver view opens. 446 tests.
+
+---
+
+# Source-of-truth rebase (2026-10-01), `origin/kyuhyeok-dev` @ `8a5c69d`
+
+Branch `chani-ssac-demo-latest-paper`, from `d881899`
+(preserved at `backup/ssac-figure-aligned-d881899`).
+
+**The figure renderer that the previous pass could not find was pushed, and so
+was the evaluation layer.** Both of the previous pass's main caveats are gone,
+and several of its reconstructions were wrong.
+
+## What the demo had wrong, and now has right
+
+| | reconstructed | upstream |
+| --- | --- | --- |
+| Attack colour | runner pink, beneficiary cyan | **both blue `#0072B2`** |
+| Defence colour | orange | **vermillion `#D55E00`** (Okabe-Ito) |
+| Beneficiary marker | triangle | **disc**; the triangle is the 3v1 teammate |
+| Zero command | "brake" | **"slow down"** |
+| Target names | "toward the ball" | **"toward ball"** |
+| Option arrow | fixed length, width + opacity | **the solver's own 0.6 s path**, width only, `0.6 + 2.4p` |
+| Stop | an arrow | **a bar, no head** |
+| Defender label | "toward the ball 88%" | **"88%"** |
+| Dilemma | a five-command fan | **"Follow?" / "Stay?"**, 3 m, no numbers |
+
+All held by `tests/test_figure_alignment.py`, which now runs upstream's own
+functions against the browser port.
+
+## The evaluation layer exists
+
+`analyze_eval.py` defines observed-action projection (nearest 0.6 s command
+end), rank, `rank_frac`, similarity (**the equilibrium's probability of the
+observed option**), regret, and a dilemma criterion (**the defender mixes AND
+there is no saddle point**). `static_counterfactual.py` solves each moment four
+times — V free, S defender held, R static-best answered, A real attack answered
+— giving the static/responsive pair on one scale at last.
+
+The adapter now carries every definition verbatim, and the slots moved from
+`method_not_implemented` to **`artifact_missing`**: the method exists, the
+numbers do not. `data/processed/*` and `out/` are gitignored upstream, so no
+panel, no solved state and no evaluation output is shared.
+
+## Not present
+
+**No vector field, no heatmap.** `render_panel_figure.py` was pushed "without
+the `--heat` debug background, which is not part of the abstract", and
+`quiver`, `streamplot`, `imshow`, `pcolormesh` have zero matches. Nothing
+ported, nothing invented.
+
+**No clip-level player aggregation.** `summarize_static` aggregates over
+moments for a corpus summary, not per clip per player.
+
+461 tests.

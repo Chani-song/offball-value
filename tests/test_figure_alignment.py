@@ -53,8 +53,8 @@ def compass_name(u, direction):
 def name_move_targets(u, defender, targets):
     """stage3_read.name_move_targets."""
     if tuple(u) == (0.0, 0.0):
-        return "멈추기(감속)"
-    best, score = "옆으로", 0.3
+        return "slow down"
+    best, score = "sideways", 0.3
     for name, tgt in targets:
         vx, vy = tgt[0] - defender[0], tgt[1] - defender[1]
         n = math.hypot(vx, vy)
@@ -80,11 +80,11 @@ class SourceIsUnchangedTests(unittest.TestCase):
         source = _show("src/offball_value/stage3_read.py")
         if source is None:
             self.skipTest("origin/kyuhyeok-dev not available")
-        self.assertIn('best, score = "옆으로", 0.3', source)
-        self.assertIn('return "멈추기(감속)"', source,
-                      "a zero command is brake, not stand")
-        self.assertIn('("볼 쪽", snapshot["carrier"]), ("러너 쪽", snapshot["receiver"])',
-                      source)
+        self.assertIn('best, score = "sideways", 0.3', source)
+        self.assertIn('return "slow down"', source,
+                      "a zero command is slow down, not stand")
+        self.assertIn('("toward ball", snapshot["carrier"]), '
+                      '("toward runner", snapshot["receiver"])', source)
 
     def test_the_abstracts_runs_use_the_compass_command_set(self):
         """Which decides which decoder the figures are showing."""
@@ -97,29 +97,127 @@ class SourceIsUnchangedTests(unittest.TestCase):
             self.assertIn("--commands compass", source, job)
 
 
-class GlossTests(unittest.TestCase):
-    """Every name the research code can emit has exactly one English gloss."""
+class UpstreamNameTests(unittest.TestCase):
+    """The action names are upstream's own English; nothing is glossed here."""
 
     def setUp(self):
         self.figure = (SITE / "js" / "figure.js").read_text()
 
-    def test_every_defender_name_is_glossed(self):
-        for korean in ("볼 쪽", "러너 쪽", "수혜자 쪽", "골문 쪽",
-                       "옆으로", "멈추기(감속)"):
-            self.assertIn(f'"{korean}"', self.figure, korean)
+    def test_the_names_are_the_upstream_strings(self):
+        for name in ("toward ball", "toward runner", "toward goal",
+                     "sideways", "slow down"):
+            self.assertIn(f'"{name}"', self.figure, name)
 
-    def test_the_gloss_is_marked_as_this_repository_s_own(self):
-        block = self.figure[self.figure.index("DEFENDER_MOVE_GLOSS"):]
-        head = self.figure[:self.figure.index("DEFENDER_MOVE_GLOSS")]
-        self.assertIn("gloss is this file's, not the research code's",
-                      head + block[:400])
+    def test_no_gloss_table_survives(self):
+        """They were Korean until the 2026-09-30 cleanup; the demo translated
+        them. Upstream now ships English, so the translation must be gone."""
 
-    def test_the_missing_renderer_is_stated_at_the_top(self):
-        """So nobody later mistakes the house style for a recovered one."""
+        self.assertNotIn("GLOSS", self.figure)
+        for korean in ("볼 쪽", "러너 쪽", "골문 쪽", "옆으로", "멈추기"):
+            self.assertNotIn(korean, self.figure, korean)
 
-        head = " ".join(self.figure[:2000].replace("//", " ").split())
-        self.assertIn("figure *renderer* is not in this repository", head)
-        self.assertIn("could NOT be recovered from source", head)
+    def test_the_old_reconstruction_is_corrected(self):
+        """Checked against code: the header names the old wording to forbid it."""
+
+        import re
+
+        code = re.sub(r"/\*.*?\*/", "", self.figure, flags=re.S)
+        code = "\n".join(line.split("//")[0] for line in code.splitlines())
+        self.assertNotIn("toward the ball", code)
+        self.assertNotIn("brake", code)
+
+    def test_the_source_of_truth_is_named_at_the_top(self):
+        head = " ".join(self.figure[:2200].replace("//", " ").split())
+        self.assertIn("origin/kyuhyeok-dev@8a5c69d", head)
+        self.assertIn("render_figure2_abstract.py", head)
+
+
+class FigureLabelParityTests(unittest.TestCase):
+    """render_figure2_abstract's label rules and width scale, held exactly."""
+
+    def setUp(self):
+        self.source = _show("scripts/render_figure2_abstract.py")
+        if self.source is None:
+            self.skipTest("origin/kyuhyeok-dev not available")
+        self.figure = (SITE / "js" / "figure.js").read_text()
+
+    def test_the_width_scale_matches(self):
+        self.assertIn("return 0.6 + 2.4 * prob", self.source)
+        self.assertIn("0.6 + 2.4 * Math.max(0, Math.min(1, probability || 0))",
+                      self.figure)
+
+    def test_the_four_label_forms_match(self):
+        for upstream, ported in ((f'text = f"Slow down {{text}}"', "Slow down ${pct}"),
+                                 (f'text = f"Stop {{text}}"', "Stop ${pct}"),
+                                 (f'text = f"Dribble {{text}}"', "Dribble ${pct}")):
+            self.assertIn(upstream, self.source, upstream)
+            self.assertIn(ported, self.figure, ported)
+
+    def test_the_pass_label_matches(self):
+        self.assertIn("Pass + receive \u00b7 ", self.source)
+        self.assertIn("Pass + receive \u00b7 ${pct}", self.figure)
+
+    def test_only_the_ball_carrier_gets_a_verb(self):
+        """Everyone else's label is the percentage; direction is the arrow's job."""
+
+        block = self.figure[self.figure.index("export function optionLabel"):]
+        block = block[:block.index("\n/**")]
+        self.assertIn('role === "ball carrier"', block)
+        self.assertIn("return pct;", block)
+
+    def test_the_minimum_drawn_probability_matches(self):
+        self.assertIn("MIN_P = 0.02", self.figure)
+
+    def test_the_title_matches(self):
+        self.assertIn("Equilibrium choices during an off-ball play", self.source)
+        self.assertIn("Equilibrium choices during an off-ball play", self.figure)
+
+
+class PrintStyleParityTests(unittest.TestCase):
+    """figure_style.py's palette and markers, held exactly."""
+
+    def setUp(self):
+        self.source = _show("scripts/figure_style.py")
+        if self.source is None:
+            self.skipTest("origin/kyuhyeok-dev not available")
+        self.figure = (SITE / "js" / "figure.js").read_text()
+
+    def test_the_okabe_ito_pair_matches(self):
+        self.assertIn('ATTACK, DEFENCE = "#0072B2", "#D55E00"', self.source)
+        self.assertIn('attack: "#0072B2"', self.figure)
+        self.assertIn('defence: "#D55E00"', self.figure)
+
+    def test_both_attackers_are_blue(self):
+        """The runner and the ball carrier are told apart by marker, not hue."""
+
+        self.assertIn('"ball carrier": ATTACK', self.source)
+        block = self.figure[self.figure.index("export const ROLE_COLOR"):]
+        block = block[:block.index("}")]
+        self.assertIn("runner: PAPER.attack", block)
+        self.assertIn('"ball carrier": PAPER.attack', block)
+        self.assertIn("defender: PAPER.defence", block)
+
+    def test_the_markers_match(self):
+        self.assertIn('"runner": ("D", 0.80 * KEY_D)', self.source)
+        self.assertIn('"ball carrier": ("o", KEY_D)', self.source)
+        self.assertIn('"defender": ("s", 0.86 * KEY_D)', self.source)
+        self.assertIn('"teammate": ("^", 1.15 * KEY_D)', self.source)
+        for role, shape in (("runner", "diamond"), ("ball carrier", "circle"),
+                            ("defender", "square"), ("teammate", "triangle")):
+            self.assertIn(f'"{shape}"', self.figure, shape)
+
+    def test_the_beneficiary_takes_the_disc_not_the_triangle(self):
+        """The previous pass had this wrong: the triangle is the 3v1 teammate."""
+
+        self.assertIn('"beneficiary": ("o", KEY_D)', self.source)
+        block = self.figure[self.figure.index("export const ROLE_MARKER"):]
+        block = block[:block.index("};")]
+        self.assertIn('beneficiary: ["circle"', block)
+        self.assertIn('teammate: ["triangle"', block)
+
+    def test_the_tint_matches(self):
+        self.assertIn("TEAM_TINT = {s: tint(c, 0.45)", self.source)
+        self.assertIn("k = 0.45", self.figure)
 
 
 class FigureDecoderParityTests(unittest.TestCase):
@@ -147,8 +245,8 @@ class FigureDecoderParityTests(unittest.TestCase):
         expected = []
         for c in self.CASES:
             u = world_direction(c["k"], c["ad"])
-            targets = (("볼 쪽", c["carrier"]), ("러너 쪽", c["runner"]),
-                       ("골문 쪽", c["goal"]))
+            targets = (("toward ball", c["carrier"]), ("toward runner", c["runner"]),
+                       ("toward goal", c["goal"]))
             expected.append({"compass": compass_name(u, c["ad"]),
                              "defender": name_move_targets(u, c["defender"], targets)})
 
@@ -233,10 +331,11 @@ class ShapeTableTests(unittest.TestCase):
     def _table(self, text):
         import re
 
-        block = text[text.index("ROLE_SHAPE = {"):]
-        block = block[:block.index("}")]
+        key = "ROLE_MARKER = {" if "ROLE_MARKER = {" in text else "ROLE_SHAPE = {"
+        block = text[text.index(key):]
+        block = block[:block.index("};" if key.startswith("ROLE_MARKER") else "}")]
         return {k.strip(): v
-                for k, v in re.findall(r'"?([a-z ]+)"?:\s*"([a-z]+)"', block)}
+                for k, v in re.findall(r'"?([a-z ]+)"?:\s*\[?"([a-z]+)"', block)}
 
     def test_the_inlined_table_equals_the_conventions_module(self):
         figure = self._table((SITE / "js" / "figure.js").read_text())
@@ -322,6 +421,10 @@ class PolicyRenderingTests(unittest.TestCase):
         self.arrows = (SITE / "js" / "arrows.js").read_text()
         self.policy = (SITE / "js" / "policy.js").read_text()
 
+    def _block(self):
+        block = self.arrows[self.arrows.index("export function drawActionArrows"):]
+        return block[:block.index("\nexport ")]
+
     def test_arrows_are_drawn_only_from_an_available_artifact(self):
         block = self.app[self.app.index("function renderPolicyArrows"):]
         block = block[:block.index("\n/**")]
@@ -342,31 +445,42 @@ class PolicyRenderingTests(unittest.TestCase):
         block = block[:block.index("\n/**")]
         self.assertIn('state.solverView === "actual"', block)
 
-    def test_probability_drives_width_and_opacity_not_colour(self):
-        """Section 12: a 3% action must not look like an 83% one, and colour
-        must not be the channel that says so."""
+    def test_probability_is_the_width_channel_as_upstream(self):
+        """render_figure2_abstract: lw_of(p) = 0.6 + 2.4p, one scale for every
+        panel. Replaces an earlier test that asserted an opacity channel this
+        repository invented before the figure code was available."""
 
-        block = self.arrows[self.arrows.index("export function drawActionArrows"):]
-        block = block[:block.index("\nexport ")]
+        block = self._block()
+        self.assertIn("0.6 + 2.4 * p", block)
         self.assertIn("stroke-width", block)
-        self.assertIn("opacity", block)
-        # the colour is an argument, fixed per actor, never derived from p
-        self.assertNotIn("colour =", block.split("{", 1)[1].split("for (")[0]
-                         .replace("colour = P.defender", ""))
+        self.assertNotIn("colour = `", block)
+
+    def test_geometry_is_physical_and_never_rescaled_by_probability(self):
+        """Section 9, and upstream: an option is the solver's own 0.6 s path,
+        drawn unchanged. A high-probability command can have a short arrow."""
+
+        self.assertIn("GEOMETRY IS PHYSICAL", self.arrows)
+        block = self._block()
+        self.assertIn("option.path", block)
+        start = block.index("if (!pts)")
+        fallback = block[start:block.index("}", start)]
+        self.assertNotIn("probability", fallback)
 
     def test_a_low_probability_action_keeps_its_arrow(self):
-        block = self.arrows[self.arrows.index("export function drawActionArrows"):]
-        block = block[:block.index("\nexport ")]
-        # only the *label* is dropped below the floor; the arrow is always drawn
-        self.assertIn("if (!labels || (p != null && p < labelFloor)) continue;", block)
-        self.assertLess(block.index("group.appendChild(path);"),
+        block = self._block()
+        self.assertLess(block.index("group.appendChild(line);"),
                         block.index("p < labelFloor"),
-                        "the arrow must be appended before the label is skipped")
+                        "the arrow is appended before any label is skipped")
+
+    def test_a_stop_ends_in_a_bar_not_a_head(self):
+        """render_figure2_abstract: 'a stop ends in a bar, no head'."""
+
+        block = self._block()
+        self.assertIn("option.stop", block)
+        self.assertLess(block.index("option.stop"), block.index("arrowhead"))
 
     def test_an_unweighted_fan_is_the_honest_pre_policy_picture(self):
-        block = self.arrows[self.arrows.index("export function drawActionArrows"):]
-        block = block[:block.index("\nexport ")]
-        self.assertIn("p == null", block)
+        self.assertIn("p == null", self._block())
 
     def test_the_attack_marginal_is_the_joint_summed_over_the_other(self):
         """As extract_panel_policy does it; not an approximation."""
@@ -443,3 +557,79 @@ class ReferenceHarnessTests(unittest.TestCase):
             if state.get("kind") == "solver_reference":
                 self.assertTrue(path.stem.startswith("solver_"),
                                 f"{path.name} is keyed like a scene")
+
+
+class SolverRoleTests(unittest.TestCase):
+    """extract_panel_policy.ROLES, which the harness and the panels rely on."""
+
+    def test_the_role_names_match_upstream(self):
+        source = _show("scripts/extract_panel_policy.py")
+        if source is None:
+            self.skipTest("origin/kyuhyeok-dev not available")
+        self.assertIn('ROLES = {"2v1": ("ball carrier", "runner", "defender"), '
+                      '"3v1": ("runner", "beneficiary", "defender")}', source)
+        figure = (SITE / "js" / "figure.js").read_text()
+        block = figure[figure.index("export const SOLVER_ROLES"):]
+        block = block[:block.index("};")]
+        self.assertIn('"2v1": ["ball carrier", "runner", "defender"]', block)
+        self.assertIn('"3v1": ["runner", "beneficiary", "defender"]', block)
+
+
+class ModuleExportTests(unittest.TestCase):
+    """Every name a page imports is actually exported.
+
+    The harness is only exercised by screenshots, so a removed export used to
+    fail silently there -- it did, when the Korean gloss wrapper went away.
+    """
+
+    PAGES = ("demo_viz/web/story_harness.html",)
+    MODULES = ("app.js", "arrows.js", "figure.js", "policy.js", "pitch.js",
+               "story.js", "carrier.js", "scene.js", "solver.js", "showcase.js",
+               "evalstrip.js", "release.js", "reach.js", "palette.js",
+               "selection.js", "ranking.js", "chart.js", "influence.js", "obso.js")
+
+    @staticmethod
+    def _exports(text):
+        import re
+
+        names = set(re.findall(r"export\s+(?:async\s+)?function\s+(\w+)", text))
+        names |= set(re.findall(r"export\s+const\s+(\w+)", text))
+        names |= set(re.findall(r"export\s+class\s+(\w+)", text))
+        for block in re.findall(r"export\s*\{([^}]*)\}", text):
+            for piece in block.split(","):
+                piece = piece.strip()
+                if piece:
+                    names.add(piece.split(" as ")[-1].strip())
+        return names
+
+    def _imports(self, text):
+        import re
+
+        out = []
+        for block, module in re.findall(r"import\s*\{([^}]*)\}\s*from\s*\"([^\"]+)\"",
+                                        text):
+            names = [p.strip().split(" as ")[0].strip()
+                     for p in block.split(",") if p.strip()]
+            out.append((module, names))
+        return out
+
+    def test_every_import_resolves(self):
+        sources = {}
+        for name in self.MODULES:
+            path = SITE / "js" / name
+            if path.exists():
+                sources[name] = path.read_text()
+
+        files = [(SITE / "js" / n, s) for n, s in sources.items()]
+        files += [(REPO_ROOT / p, (REPO_ROOT / p).read_text()) for p in self.PAGES]
+
+        for path, text in files:
+            for module, names in self._imports(text):
+                target = module.rsplit("/", 1)[-1]
+                if target not in sources:
+                    continue                      # not one of ours
+                exported = self._exports(sources[target])
+                for name in names:
+                    self.assertIn(name, exported,
+                                  f"{path.name} imports {name} from {target}, "
+                                  "which does not export it")

@@ -76,17 +76,29 @@ class FieldSpec:
 
 #: The observed-action evaluation fields the abstract names, in panel order.
 #: Adding one here is the whole interface change: the panel renders the list.
+#: All four are now **implemented upstream** (scripts/analyze_eval.py, added
+#: 2026-09-30 at origin/kyuhyeok-dev@8a5c69d). What is missing is the output:
+#: the evaluation run writes to out/runs/eval_v1_*, which is gitignored, and no
+#: run covers a scene this demo publishes. So their unavailable state is
+#: `artifact_missing`, not `method_not_implemented`, and the notes carry the
+#: real definitions rather than "does not exist".
 EVALUATION_METRICS = (
     FieldSpec("observed_action_rank", "Observed action rank",
-              note="Requires the observed action to be matched to an action set."),
+              note="analyze_eval: 1 + the number of legal options strictly "
+                   "better than the observed one; ties take the best place. "
+                   "Awaiting an evaluation run for this scene."),
     FieldSpec("relative_rank", "Relative rank",
-              note="No relative-rank definition exists in the research code yet."),
+              note="analyze_eval: (n - fractional rank) / (n - 1); 1 is the "
+                   "best option, 0 the worst, and tied options take the mean "
+                   "of their places. Awaiting an evaluation run."),
     FieldSpec("similarity_to_optimal", "Similarity to optimal",
-              note="No similarity metric exists in the research code yet."),
+              note="analyze_eval: the equilibrium's own probability of the "
+                   "observed option (that player's marginal) -- not a distance "
+                   "or a cosine. Awaiting an evaluation run."),
     FieldSpec("regret", "Regret",
-              note="No observed-action regret exists in the research code yet. "
-                   "The `regret` in dynamic_response_game compares defender "
-                   "options in a different lineage and is not this quantity."),
+              note="analyze_eval: the best option's value minus the observed "
+                   "one's; for the defender, observed minus best, since lower "
+                   "is better for him. Awaiting an evaluation run."),
 )
 
 #: The same quantities over time. Only series the payload carries are drawn.
@@ -108,7 +120,18 @@ COUNTERFACTUAL_SIDES = (
 #: which is not the demo's ``beneficiary`` -- that stays off-ball context.
 ROLE_LABEL = {"runner": "Runner", "passer": "Passer", "defender": "Defender"}
 
-_PENDING_SIDE = "Definition pending updated research implementation."
+#: static_counterfactual.py + summarize_static.py (2026-09-30) define the pair
+#: on one scale at last: the same game solved with one side held to its real
+#: commands at every turn while the other best-responds. S = defender held,
+#: V = the free equilibrium, R = the static-best plan answered, A = the real
+#: attack answered. The demo has no run's output, so the slots stay empty --
+#: but the definition is no longer missing, only the numbers.
+_PENDING_SIDE = ("Defined upstream (static_counterfactual.py); awaiting an "
+                 "evaluation run for this scene.")
+_STATIC_SEMANTICS = ("the defender held to his real commands at every turn, "
+                     "the attack best-responding (S)")
+_RESPONSIVE_SEMANTICS = ("both sides free: the solved equilibrium of the same "
+                         "game (V)")
 _PENDING_CLIP = ("Clip aggregation is not defined in the research code yet; "
                  "the aggregation method arrives with the metric.")
 
@@ -280,14 +303,18 @@ def _counterfactual(scene_id: str, role: str, frame: int | None,
                     source: EvaluationSource) -> CounterfactualBlock:
     raw = source.counterfactual(scene_id, role, frame)
     sides = []
+    defaults = {"static": _STATIC_SEMANTICS, "responsive": _RESPONSIVE_SEMANTICS}
     for key, label in COUNTERFACTUAL_SIDES:
         entry = _entry(raw, key) or {}
-        semantics = str(entry.get("semantics", ""))
+        # the producer's own words win; upstream's definition is the fallback
+        semantics = str(entry.get("semantics", "") or defaults[key])
         best = _action(f"{key}_best_action", "Best action",
                        {f"{key}_best_action": entry.get("best_action")},
-                       source, note=_PENDING_SIDE)
+                       source, note=_PENDING_SIDE,
+                       unavailable="artifact_missing")
         value = _metric(FieldSpec(f"{key}_value", "Value", note=_PENDING_SIDE),
-                        {f"{key}_value": entry.get("value")}, source)
+                        {f"{key}_value": entry.get("value")}, source,
+                        unavailable="artifact_missing")
         sides.append(CounterfactualSide(key=key, label=label, semantics=semantics,
                                         best_action=best, value=value))
     # Section 17: the solver's own release library is real code
@@ -311,20 +338,24 @@ def _counterfactual(scene_id: str, role: str, frame: int | None,
     return CounterfactualBlock(
         observed_action=_action(
             "observed_action", "Observed action", raw, source,
-            note="Projecting observed tracking onto an action set is not "
-                 "defined in the research code yet."),
+            note="analyze_eval: the command whose 0.6 s end (the solver's own "
+                 "movement) is nearest where the player really was 0.6 s "
+                 "later; a pass when the ball outran any player. Awaiting an "
+                 "evaluation run for this scene.",
+            unavailable="artifact_missing"),
         feasible_actions=_metric(
             FieldSpec("feasible_actions", "Feasible alternatives",
-                      note="The evaluation action set arrives with the "
-                           "evaluation pipeline."),
-            raw, source),
+                      note="The legal columns of the opening payoff table "
+                           "(solve.root_game). Awaiting an evaluation run."),
+            raw, source, unavailable="artifact_missing"),
         feasible=feasible,
         release_library=release_library,
         static=sides[0], responsive=sides[1],
         value_change=_metric(
             FieldSpec("value_change", "Value change after response",
-                      note=_PENDING_SIDE),
-            raw, source),
+                      note="summarize_static: situation overestimated "
+                           "(S - V) / V. Awaiting an evaluation run."),
+            raw, source, unavailable="artifact_missing"),
     )
 
 
@@ -333,10 +364,13 @@ def _evaluation(scene_id: str, role: str, frame: int | None,
     raw = source.evaluation(scene_id, role, frame)
     series_raw = source.frame_series(scene_id, role)
     return EvaluationBlock(
-        metrics=tuple(_metric(spec, raw, source) for spec in EVALUATION_METRICS),
+        metrics=tuple(_metric(spec, raw, source, unavailable="artifact_missing")
+                      for spec in EVALUATION_METRICS),
         optimal_action=_action(
             "optimal_action", "Optimal action", raw, source,
-            note="No optimal-action definition exists in the research code yet."),
+            note="analyze_eval: the option with the best value against the "
+                 "other side's equilibrium. Awaiting an evaluation run.",
+            unavailable="artifact_missing"),
         frame_series=tuple(_series(spec, series_raw, source) for spec in FRAME_SERIES),
     )
 
