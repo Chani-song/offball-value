@@ -10,13 +10,15 @@ metric-compatible Helvetica clone, the face Ghostscript uses for Helvetica -- is
 by path, Regular and Bold; `use_font` refuses to run if matplotlib would resolve either weight to another
 file, and `check_text` refuses a figure with a glyph the face lacks (no silent fallback).
 
-Colours (the team's recommended values, not an official SSAC palette): attack blue #0072B2, defence
-vermillion #D55E00 (the Okabe-Ito pair, told apart under every common colour-vision deficiency),
-charcoal #222222 for text and the ball, grey #666666 for secondary text and the real (tracked)
+Colours: attack pure blue #0000FF = RGB (0, 0, 255), defence pure red #FF0000 = RGB (255, 0, 0) -- the
+user's call of 2026-10-01, replacing the Okabe-Ito pair #0072B2 / #D55E00 (it read as a stock palette);
+charcoal #222222 for text and the ball's moves, grey #666666 for secondary text and the real (tracked)
 movement, #D0D0D0 for pitch lines. The runner and the ball carrier are both attackers, so both blue:
 told apart by marker (runner diamond, ball carrier disc, defender square) and by direct labels, so no
-role rests on colour alone. Players outside the game keep their team's colour as a light tint (45%
-on white) -- smaller, no outline -- so the team split stays readable without competing with the three.
+role rests on colour alone. Since 2026-10-01 (the user's call): the three have no outline; players
+outside the game are drawn in their team's full colour (was a 45% tint, which read as blurred) --
+smaller discs with a thin white edge; the ball is white with a thin charcoal edge (it needs the edge to
+show on the near-white pitch).
 """
 
 from __future__ import annotations
@@ -87,7 +89,7 @@ def check_text(fig) -> list[str]:
 FS_TITLE, FS_PANEL, FS_LABEL, FS_NOTE, FS_SMALL = 10.0, 9.0, 9.0, 8.0, 7.5
 
 # ---------------------------------------------------------------------------------------------- colour
-ATTACK, DEFENCE = "#0072B2", "#D55E00"
+ATTACK, DEFENCE = "#0000FF", "#FF0000"     # RGB (0, 0, 255), (255, 0, 0)
 INK, MUTED, FAINT, LINE, PAGE = "#222222", "#666666", "#B3B3B3", "#D0D0D0", "#FFFFFF"
 PITCH = "#F7F7F7"                 # the pitch: a hair off white, so a panel reads as a panel with no frame
 
@@ -110,7 +112,7 @@ ROLE_MARKER = {"runner": ("D", 0.80 * KEY_D), "ball carrier": ("o", KEY_D), "ben
                "defender": ("s", 0.86 * KEY_D),
                # 3v1 (Figure 2 only): the second attacker in the game, when a scripted passer has the ball
                "teammate": ("^", 1.15 * KEY_D)}
-KEY_EDGE = 0.8                                  # pt, charcoal outline of the three
+KEY_EDGE = 0.0                                  # pt, outline of the three: none since 2026-10-01 (was 0.8 charcoal)
 OTHER_D, BALL_D = 6.0, 4.6                      # pt
 
 
@@ -120,6 +122,15 @@ def marker_radius(role) -> float:
     return ms / 2 * (math.sqrt(2) if m in "Ds^" else 1.0) + KEY_EDGE / 2
 
 
+def marker_edge(role, u) -> float:
+    """pt from a key player's centre to his marker's edge along the unit direction u (disc, square, diamond;
+    any other marker: its farthest edge)."""
+    m, ms = ROLE_MARKER[role]
+    c, s = abs(u[0]), abs(u[1])
+    half = {"o": ms / 2, "s": ms / 2 / max(c, s, 1e-9), "D": ms / 2 * math.sqrt(2) / max(c + s, 1e-9)}
+    return half.get(m, marker_radius(role) - KEY_EDGE / 2) + KEY_EDGE / 2
+
+
 def key_radius() -> float:
     """The largest of the three: the clearance a path keeps from any key player."""
     return max(marker_radius(r) for r in ("runner", "ball carrier", "defender"))
@@ -127,7 +138,7 @@ def key_radius() -> float:
 
 def key_player(ax, xy, role, z=7):
     m, ms = ROLE_MARKER[role]
-    ax.plot(*xy, m, ms=ms, color=ROLE_COLOR[role], mec=INK, mew=KEY_EDGE, zorder=z)
+    ax.plot(*xy, m, ms=ms, color=ROLE_COLOR[role], mew=KEY_EDGE, zorder=z)
 
 
 def key_hollow(ax, xy, role, color=MUTED, lw=0.8, z=6.5):
@@ -137,11 +148,11 @@ def key_hollow(ax, xy, role, color=MUTED, lw=0.8, z=6.5):
 
 
 def other_player(ax, xy, side, z=3):
-    ax.plot(*xy, "o", ms=OTHER_D, color=TEAM_TINT[side], mec=PAGE, mew=0.5, zorder=z)
+    ax.plot(*xy, "o", ms=OTHER_D, color=TEAM[side], mec=PAGE, mew=0.5, zorder=z)
 
 
 def ball(ax, xy, z=8.5):
-    ax.plot(*xy, "o", ms=BALL_D, color=INK, mec=PAGE, mew=0.6, zorder=z)
+    ax.plot(*xy, "o", ms=BALL_D, color=PAGE, mec=INK, mew=0.6, zorder=z)
 
 
 def halo(lw=2.2, color=PITCH):
@@ -151,6 +162,10 @@ def halo(lw=2.2, color=PITCH):
 
 # ---------------------------------------------------------------------------------------------- lines
 MOVE_LW = 1.5                   # pt, a player's move still to come (Figure 1)
+MOVE_GAP = 2.5                  # pt of clear ground between a marker's edge and a move leaving it (Figure 1;
+                                # a picture choice of 2026-10-01 -- the user found the arrows stuck to the shapes)
+BALL_MOVE = "#36454F"           # the ball's moves in Figure 1, solid since 2026-10-01: "charcoal" at the
+                                # colour name's usual value, RGB (54, 69, 79)
 PAST_LW, PAST_ALPHA = 1.0, 0.45  # pt, a path already run: thinner and lighter
 BALL_LW = 1.3                    # pt, the ball's moves (pass, shot)
 BALL_DASH = (5.0, 2.8)           # pt on / off, the same at every width (divided by lw below, since
@@ -221,10 +236,10 @@ def fig_arrow(fig, a, b, *, color=FAINT, lw=0.9):
 
 
 # ---------------------------------------------------------------------------------------------- pitch
-def pitch(ax):
+def pitch(ax, line=LINE, lw=0.6):
     """The pitch in metres from the centre spot (105 x 68), thin light-grey lines on a near-white ground."""
     ax.set_facecolor(PITCH)
-    kw = dict(color=LINE, lw=0.6, zorder=0.5)
+    kw = dict(color=line, lw=lw, zorder=0.5)
     ax.add_patch(Rectangle((-52.5, -34), 105, 68, fill=False, **kw))
     ax.plot([0, 0], [-34, 34], **kw)
     ax.add_patch(Circle((0, 0), 9.15, fill=False, **kw))
@@ -232,7 +247,7 @@ def pitch(ax):
         ax.add_patch(Rectangle((s * 52.5 - (16.5 if s > 0 else 0), -20.16), 16.5, 40.32, fill=False, **kw))
         ax.add_patch(Rectangle((s * 52.5 - (5.5 if s > 0 else 0), -9.16), 5.5, 18.32, fill=False, **kw))
         ax.add_patch(Rectangle((s * 52.5 + (0 if s > 0 else -2), -3.66), 2, 7.32, fill=False, **kw))
-        ax.plot([s * 41.5], [0], "o", ms=1.6, color=LINE, zorder=0.5)
+        ax.plot([s * 41.5], [0], "o", ms=1.6, color=line, zorder=0.5)
         ax.add_patch(Arc((s * 41.5, 0), 18.3, 18.3, theta1=127 if s > 0 else -53, theta2=233 if s > 0 else 53, **kw))
     ax.set_xticks([]); ax.set_yticks([])
     for sp in ax.spines.values():

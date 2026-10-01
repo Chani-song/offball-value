@@ -20,7 +20,7 @@ andrew-passer2on1/    2v1 game: ball carrier and runner against one defender (so
 andrew-fixedpasser/   3v1 game: a scripted passer, the runner and a teammate against one defender
 src/offball_value/    tracking loaders, run-onset detection, scene building and local-game code
 scripts/              the pipeline steps, the figures and the evaluation numbers (below)
-jobs/                 SLURM job scripts for the two solver runs
+jobs/                 SLURM job scripts for the solver runs
 data/processed/       fitted pass-model coefficients and measured movement limits (numbers only)
 data/static/          a small static model input (EPV grid)
 tests/                unit tests (each solver package has its own tests/ as well)
@@ -84,6 +84,10 @@ options in its docstring and `--help`.
 
    ```bash
    sbatch --account=<account> jobs/solve_figure2_panels.sbatch
+   # then Figure 2's defender-start grids, one per moment (lattice covering each panel)
+   sbatch --account=<account> jobs/solve_defender_grid.sbatch S05     -11 6 -9 7
+   sbatch --account=<account> jobs/solve_defender_grid.sbatch S05@0.6  -9 10 -9 7
+   sbatch --account=<account> jobs/solve_defender_grid.sbatch S05@1.2  -8 7 -8 7
    sbatch --account=<account> --cpus-per-task=37 --time=01:30:00 jobs/solve_evaluation.sbatch 2v1
    sbatch --account=<account> --cpus-per-task=32 --time=02:00:00 jobs/solve_evaluation.sbatch 3v1
    ```
@@ -92,11 +96,22 @@ options in its docstring and `--help`.
 
    ```bash
    PYTHONPATH=andrew-passer2on1 python scripts/render_figure1_dilemma.py \
-     --output out/showcase_v1/figure1_S05/S05_figure1_ssac_v2.png
+     --output out/showcase_v1/figure1_S05/S05_figure1.png
+   python scripts/add_caption.py --input out/showcase_v1/figure1_S05/S05_figure1.png \
+     --output out/showcase_v1/abstract_figures/S05_figure1_caption.png --number "Figure 1." \
+     --text "An off-ball run creates a defensive dilemma: follow the runner or stay with the ball carrier."
+   G=data/processed/showcase_v1/defender_grid_S05
+   GRIDS="0.0=$G/grid_S05_1m_full.json 0.6=$G/grid_S05@0.6_1m_full.json 1.2=$G/grid_S05@1.2_1m_full.json"
    python scripts/render_figure2_abstract.py \
      --panels data/processed/showcase_v1/figure_multi/panels --label S05-full \
      --tracking data/processed/showcase_v1/tracking/S05.csv \
-     --output out/showcase_v1/figure_multi/S05_figure2_abstract_ssac_v2.png
+     --frames --value-fade 0 --value-grids $GRIDS \
+     --flow-grids $GRIDS --flow-color "#FF8000" --flow-alpha 0.4 \
+     --defender-names short --label-gap 0.35 \
+     --output out/showcase_v1/figure_multi/S05_figure2.png
+   python scripts/add_caption.py --input out/showcase_v1/figure_multi/S05_figure2.png \
+     --output out/showcase_v1/abstract_figures/S05_figure2_caption.png --number "Figure 2." \
+     --text "Nash equilibrium strategies at three successive moments. Percentages indicate action probabilities for the two attackers and defender; orange lines show the defender's expected movement from each starting position."
    PYTHONPATH=src:scripts python scripts/analyze_eval.py \
      --solved out/runs/eval_v1_2v1 out/runs/eval_v1_3v1 \
      --panels data/processed/eval_v1/panels --output data/processed/eval_v1/analysis

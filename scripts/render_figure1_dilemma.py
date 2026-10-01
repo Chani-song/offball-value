@@ -6,9 +6,9 @@ The intuition figure; the solver, its payoffs and the equilibrium belong to Figu
 face, colours, markers, arrows, the match line). A tree of three panels, every position read from the
 S05 tracking (attack to the right):
 
-  Current state -- Figure 2's "0.6 s": each of the three's last 0.6 s as a line, the runner's run to
+  Current State -- Figure 2's "0.6 s": each of the three's last 0.6 s as a line, the runner's run to
       come (his real run, to the shot), the ball carrier's next 0.6 s, and the defender's two possible
-      answers, "Follow?" and "Stay?". At this moment the solver's defender is indifferent between
+      answers, "(1) Stay?" and "(2) Follow?". At this moment the solver's defender is indifferent between
       dropping with the runner and stepping to the ball (equal values, 57/43 mix), and the real
       defender slows to his slowest speed of the play;
   Future 1, follow the runner (what really happened, drawn at the shot): the defender dropped with
@@ -25,12 +25,12 @@ multi-pass study): the through ball is worth 0.674 against "toward ball" and 0.6
 "toward goal"; by the defender's indifference the ball carrier's drive is then worth more against
 "toward goal" (0.683 vs 0.645). No number is drawn -- Figure 1 carries none by design.
 
-Encoding (the team's simplification of 2026-09-29, restyled for print 2026-09-30): attackers blue,
-defenders vermillion; the runner / ball carrier / defender are a diamond / disc / square with a
-charcoal outline, named once in the current state; everyone else a smaller disc in a light tint of his
-team's colour. Every player movement one style -- a line in his team's colour with a small head on
+Encoding (the team's simplification of 2026-09-29, restyled for print 2026-09-30; pure RGB team
+colours 2026-10-01): attackers blue (0, 0, 255), defenders red (255, 0, 0), the shooting lane in the attack's blue; the runner / ball carrier / defender are a diamond / disc / square, no
+outline, named once in the current state; everyone else a smaller disc in his team's full colour; the ball
+white with a thin charcoal edge. Every player movement one style -- a line in his team's colour with a small head on
 what is still to come, thinner and lighter for a path already run (it ends at the player); the ball's
-moves (pass, shot) dashed charcoal. No captions inside the panels (times go in the caption); the match
+moves (pass, shot) solid charcoal #36454F; a move leaving a marker starts MOVE_GAP clear of it. No captions inside the panels (times go in the caption); the match
 line (date, teams, clock at the solver start) once, under the figure.
 
 Picture choices, not data: the defender's two option arrows point at where the runner / the ball
@@ -40,7 +40,7 @@ read from Figure 2's panel file, its flight time from the pass model's ball spee
 defender is moved with the solver's own motion function.
 
 Usage:
-    python scripts/render_figure1_dilemma.py --output out/showcase_v1/figure1_S05/S05_figure1_ssac_v2.png
+    python scripts/render_figure1_dilemma.py --output out/showcase_v1/figure1_S05/S05_figure1_ssac_v6.png
     (--layout tree|row; writes the .png at 600 dpi and a vector .pdf with the face embedded)
 """
 
@@ -98,6 +98,8 @@ def parse_args() -> argparse.Namespace:
                    help="the offside line at the pass moment: in Future 2, in the current state too, or "
                         "nowhere (default since 2026-09-29, the team's simplification)")
     p.add_argument("--layout", choices=("tree", "row"), default="tree")
+    p.add_argument("--title-size", type=float, default=st.FS_PANEL, help="panel titles, pt")
+    p.add_argument("--figure-label", default="", help="e.g. 'Figure 1': bold, top left of the page")
     p.add_argument("--no-match-line", action="store_true", help="leave out the date / teams / clock line")
     p.add_argument("--output", type=Path, required=True)
     return p.parse_args()
@@ -240,33 +242,64 @@ def smooth(pts, half=2):
     return out + [pts[-1]]
 
 
-def ball_move(ax, pts, *, shrink_start=0.0, shrink_end=0.0):
-    """The ball's move (a shot, a pass): dashed charcoal, one small head; starts clear of the kicker and
-    (shrink_end, pt) stops at the edge of the ball / player drawn at its end, so the head covers neither."""
+def leave(pts, centre, reach):
+    """The path from where it first gets clear of a mark at `centre`: `reach(u)` metres away along the unit
+    direction u from the centre (the mark's edge that way plus the gap). A path starting clear is kept."""
+    def clear(p):
+        r = math.dist(p, centre)
+        return r > 1e-9 and r >= reach(((p[0] - centre[0]) / r, (p[1] - centre[1]) / r))
+    pts = list(pts)
+    if clear(pts[0]):
+        return pts
+    i = 0
+    while i < len(pts) - 1 and not clear(pts[i + 1]):
+        i += 1
+    if i == len(pts) - 1:
+        return pts[-1:]
+    (ax_, ay), (bx, by) = pts[i], pts[i + 1]
+    lo, hi = 0.0, 1.0
+    for _ in range(40):                                # bisect the segment for the crossing
+        mid = (lo + hi) / 2
+        lo, hi = (lo, mid) if clear((ax_ + (bx - ax_) * mid, ay + (by - ay) * mid)) else (mid, hi)
+    return [(ax_ + (bx - ax_) * hi, ay + (by - ay) * hi)] + pts[i + 1:]
+
+
+def clear_of_player(ax, pts, centre, role):
+    """`pts` from MOVE_GAP clear of a key player's marker edge."""
+    mpp = st.metres_per_point(ax)
+    return leave(pts, centre, lambda u: (st.marker_edge(ROLE[role], u) + st.MOVE_GAP) * mpp)
+
+
+def clear_of_ball(ax, pts, centre):
+    """`pts` from MOVE_GAP clear of the drawn ball's edge (its outline included)."""
+    mpp = st.metres_per_point(ax)
+    return leave(pts, centre, lambda u: (st.BALL_D / 2 + 0.3 + st.MOVE_GAP) * mpp)
+
+
+def ball_move(ax, pts, *, start=(), shrink_end=0.0):
+    """The ball's move (a shot, a pass): a solid charcoal line, one small head. `start`: the marks it leaves
+    -- (centre, role) for a key player, (centre, "ball") for the drawn ball -- it starts MOVE_GAP clear of
+    each; (shrink_end, pt) stops at the edge of the ball / player drawn at its end, so the head covers neither."""
     mpp = st.metres_per_point(ax)
     pts = smooth(pts)
-    if shrink_start:
-        u = unit((pts[1][0] - pts[0][0], pts[1][1] - pts[0][1]))
-        pts[0] = (pts[0][0] + u[0] * shrink_start * mpp, pts[0][1] + u[1] * shrink_start * mpp)
+    for centre, what in start:
+        pts = clear_of_ball(ax, pts, centre) if what == "ball" else clear_of_player(ax, pts, centre, what)
     if shrink_end:
         pts = trimmed(pts, shrink_end * mpp)
-    st.arrow(ax, pts, st.INK, st.BALL_LW, dashed=True, z=6)
+    st.arrow(ax, pts, st.BALL_MOVE, st.BALL_LW, z=6)
 
 
 def move(ax, pts, role, *, ran):
     """Every player movement, one style: a line in his team's colour, lightly smoothed. `ran` -- a path
     already run: thinner and lighter, it ends at the player (at his marker's edge), no head; otherwise a
-    move still to come: it starts at his marker's edge and ends in a small head."""
+    move still to come: it starts MOVE_GAP clear of his marker's edge and ends in a small head."""
     mpp = st.metres_per_point(ax)
     pts, color = smooth(pts), st.ROLE_COLOR[ROLE[role]]
     if ran:
         ax.plot(*zip(*trimmed(pts, (st.key_radius() + 0.5) * mpp)), color=color, lw=st.PAST_LW,
                 alpha=st.PAST_ALPHA, zorder=4.9, solid_capstyle="round", solid_joinstyle="round")
         return
-    u = unit((pts[1][0] - pts[0][0], pts[1][1] - pts[0][1]))
-    gap = (st.key_radius() + 0.8) * mpp
-    pts[0] = (pts[0][0] + u[0] * gap, pts[0][1] + u[1] * gap)
-    st.arrow(ax, pts, color, st.MOVE_LW, z=5)
+    st.arrow(ax, clear_of_player(ax, pts, pts[0], role), color, st.MOVE_LW, z=5)
 
 
 def label(ax, xy, text, *, size=None, weight="normal", color=st.INK, ha="center", va="center", z=9):
@@ -291,16 +324,20 @@ def player(ax, xy, role):
     st.key_player(ax, xy, ROLE[role])
 
 
-def ball(ax, xy, carrier=None):
-    """The ball; if it lies under the carrier's marker (S05's shot: 0.43 m from his centre) it is drawn at
-    the marker's edge on its real bearing from him -- a drawing convention, so both stay visible."""
+def drawn_ball(ax, xy, carrier=None):
+    """Where the ball is drawn: if it lies under the carrier's marker (S05's shot: 0.43 m from his centre),
+    at the marker's edge on its real bearing from him -- a drawing convention, so both stay visible."""
     if carrier is not None:
         r = (st.marker_radius("ball carrier") + st.BALL_D / 2 - 0.6) * st.metres_per_point(ax)
         dx, dy = xy[0] - carrier[0], xy[1] - carrier[1]
         if 0 < math.hypot(dx, dy) < r:
             u = unit((dx, dy))
             xy = (carrier[0] + u[0] * r, carrier[1] + u[1] * r)
-    st.ball(ax, xy)
+    return xy
+
+
+def ball(ax, xy, carrier=None):
+    st.ball(ax, drawn_ball(ax, xy, carrier))
 
 
 def path(d, oid, f_from, f_to):
@@ -369,8 +406,8 @@ def panel_current(ax, d, window):
         player(ax, xy, role)
     ball(ax, d["at"](f, "ball"), carrier=k["beneficiary"])
     fu, sy = tips["follow"], tips["stay"]
-    label(ax, (fu[0] + 0.8, fu[1] - 1.5), "Follow?", ha="left")
-    label(ax, (sy[0] - 0.5, sy[1] + 0.9), "Stay?", ha="right")
+    label(ax, (fu[0] + 0.8, fu[1] - 1.5), "(2) Follow?", ha="left", weight="bold")
+    label(ax, (sy[0] - 0.5, sy[1] + 0.9), "(1) Stay?", ha="right", weight="bold")
     # who is whom, once (the markers' key), in his team's colour
     label(ax, (k["runner"][0] - 0.3, k["runner"][1] + 1.6), st.ROLE_NAME["runner"], color=st.ATTACK)
     label(ax, (k["defender"][0] + 1.1, k["defender"][1] - 2.0), st.ROLE_NAME["defender"], color=st.DEFENCE)
@@ -388,7 +425,8 @@ def panel_follow(ax, d, window):
     zone(ax, [shot_from, (GOAL_X, -POST), (GOAL_X, POST)], "beneficiary")
     past(ax, d, f, s)
     flight = [d["at"](g, "ball") for g in d["flight"]]
-    ball_move(ax, [flight[0], flight[-1]], shrink_start=st.key_radius(), shrink_end=st.OTHER_D / 2 + 0.8)
+    ball_move(ax, [flight[0], flight[-1]], shrink_end=st.OTHER_D / 2 + 0.8,
+              start=((k["beneficiary"], "beneficiary"), (drawn_ball(ax, shot_from, k["beneficiary"]), "ball")))
     for role, xy in k.items():
         player(ax, xy, role)
     ball(ax, shot_from, carrier=k["beneficiary"])
@@ -410,7 +448,7 @@ def panel_stay(ax, d, window):
     move(ax, path(d, ids["beneficiary"], d["before"], f), "beneficiary", ran=True)
     move(ax, stay, "defender", ran=True)
     move(ax, path(d, ids["runner"], f, a), "runner", ran=True)
-    ball_move(ax, [d["passer"], target], shrink_start=st.key_radius(), shrink_end=st.BALL_D / 2 + 0.8)
+    ball_move(ax, [d["passer"], target], start=((k["beneficiary"], "beneficiary"),), shrink_end=st.BALL_D / 2 + 0.8)
     u = unit((target[0] - k["runner"][0], target[1] - k["runner"][1]))
     move(ax, [k["runner"], (target[0] - 0.8 * u[0], target[1] - 0.8 * u[1])], "runner", ran=False)
     for role, xy in k.items():
@@ -440,9 +478,9 @@ def window_around(points, pad_x, pad_y, aspect, goal=True):
     return (x0, x1), (y0, y1)
 
 
-def titles(fig, W, H, box, title):
+def titles(fig, W, H, box, title, size=st.FS_PANEL):
     x, y, w, h = box                                   # inches, the panel's axes
-    fig.text(x / W, (y + h + 0.07) / H, title, fontsize=st.FS_PANEL, fontweight="bold", color=st.INK,
+    fig.text(x / W, (y + h + 0.07) / H, title, fontsize=size, fontweight="bold", color=st.INK,
              ha="left", va="bottom")
 
 
@@ -456,9 +494,9 @@ def fig_line(fig, W, H, a, b, head=False):
 
 
 TEXT = {
-    "now": "Current state",
-    "f1": "Future 1 — Follow the runner",
-    "f2": "Future 2 — Stay with the ball carrier",
+    "now": "Current State",
+    "f1": "Future 1: Follow the Runner",
+    "f2": "Future 2: Stay with the Ball Carrier",
 }
 
 
@@ -515,11 +553,14 @@ def main() -> None:
     for n, box in boxes.items():
         title = TEXT[n]
         if args.layout == "row" and n != "now":       # narrow futures: the answer in a word, as in the tree
-            title = title.split(" — ")[0] + " — " + ("Follow" if n == "f1" else "Stay")
-        titles(fig, W, H, box, title)
+            title = title.split(": ")[0] + ": " + ("Follow" if n == "f1" else "Stay")
+        titles(fig, W, H, box, title, args.title_size)
     panel_current(axes["now"], d, win)
     panel_follow(axes["f1"], d, win)
     panel_stay(axes["f2"], d, win)
+    if args.figure_label:                              # the paper's figure number, top left
+        fig.text(m / W, 1 - 0.02 / H, args.figure_label, fontsize=st.FS_PANEL, fontweight="bold", color=st.INK,
+                 ha="left", va="top")
     if not args.no_match_line:                         # the scene's start (the solver's t = 0), once
         note = st.match_line(args.code, d["start"])
         st.match_note(fig, note, W - m, 0.07)
