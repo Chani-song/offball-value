@@ -5,8 +5,11 @@ import {
   LAYER_LABEL, P, PAPER_THEME, ROLE_COLOUR, ROLE_LABEL, ROLE_SIDE,
 } from "./palette.js";
 import { Pitch } from "./pitch.js";
-import { autoTriplet, rankBeneficiaries, rankDefenders } from "./ranking.js";
-import { drawChart } from "./chart.js";
+import {
+  MODE_TITLE as PUBLIC_MODE_TITLE, PUBLIC_ROLE, PUBLIC_STORY_ROLE,
+  ordinal, percent, publicActionName, publicOptionLabel, publicPassLabel,
+  publicSelectorLabel, publicSubtitle,
+} from "./public.js";
 import { Selection } from "./selection.js";
 import { ballAt, loadIndex, loadScene, onsetFor, playerAt, viewVector } from "./scene.js";
 import { candidatePasses } from "./carrier.js";
@@ -90,6 +93,37 @@ function arrowsLib() {
   if (!arrowsLoading) {
     arrowsLoading = true;
     import("./arrows.js").then((module) => { arrowsModule = module; render(); });
+  }
+  return null;
+}
+
+let rankingModule = null;
+let rankingLoading = false;
+
+/**
+ * The hint rankings, or null until they arrive.
+ *
+ * Only the explorer asks: the showcase's cast is curated, so nothing there
+ * suggests a different one.
+ */
+function rankingLib() {
+  if (rankingModule) return rankingModule;
+  if (!rankingLoading) {
+    rankingLoading = true;
+    import("./ranking.js").then((module) => { rankingModule = module; render(); });
+  }
+  return null;
+}
+
+let chartModule = null;
+let chartLoading = false;
+
+/** The sidebar's time series, which only the explorer draws. */
+function chartLib() {
+  if (chartModule) return chartModule;
+  if (!chartLoading) {
+    chartLoading = true;
+    import("./chart.js").then((module) => { chartModule = module; render(); });
   }
   return null;
 }
@@ -346,7 +380,8 @@ async function openScene(file, wanted = null) {
   $("time").value = String(state.frame);
   $("scene").value = file;
   $("title").textContent = scene.title;
-  $("subtitle").textContent = scene.subtitle;
+  $("subtitle").textContent = isPublic()
+    ? publicSubtitle(scene, currentShowcase()) : scene.subtitle;
   $("notes").textContent = scene.notes || "—";
   $("team-attack").textContent = scene.attacking_team;
   $("team-defend").textContent = scene.defending_team;
@@ -405,12 +440,15 @@ function render() {
   pitch.clearDynamic();
 
   let hints = [];
-  if (selection.runner && !selection.defenders.length) {
-    hints = rankDefenders(scene, selection.runner, freeze).slice(0, 4).map((r) => r.id);
-  } else if (selection.runner && selection.defenders.length && !selection.beneficiaries.length) {
-    hints = rankBeneficiaries(cache, scene, selection.runner, selection.defenders,
-                              freeze, slot).filter((r) => r.gain > 0.05).slice(0, 3)
-      .map((r) => r.id);
+  const ranking = isPublic() ? null : rankingLib();
+  if (ranking && selection.runner && !selection.defenders.length) {
+    hints = ranking.rankDefenders(scene, selection.runner, freeze)
+      .slice(0, 4).map((r) => r.id);
+  } else if (ranking && selection.runner && selection.defenders.length
+             && !selection.beneficiaries.length) {
+    hints = ranking.rankBeneficiaries(cache, scene, selection.runner,
+                                      selection.defenders, freeze, slot)
+      .filter((r) => r.gain > 0.05).slice(0, 3).map((r) => r.id);
   }
 
   const mode = $("wake-mode").value;
@@ -470,10 +508,10 @@ function render() {
   pitch.drawAttackDirection();
 
   renderDock();
-  // the headline stat is off-ball context, which the paper puts below the
-  // story; outside Observed its space belongs to the mode's own panel
+  // the headline stat is the explorer's: the showcase drops it entirely, and
+  // outside Observed its space belongs to the mode's own panel
   const stat = document.querySelector(".card.stat");
-  if (stat) stat.hidden = state.mode !== "observed";
+  if (stat) stat.hidden = isPublic() || state.mode !== "observed";
   renderStat(slot, swap);
   renderChart(swap, freeze);
   renderCandidates(freeze, slot);
@@ -692,7 +730,8 @@ function rows(node, entries) {
  * reviewer thirty seconds.
  */
 function section(id, visible) {
-  const on = Boolean(visible) && (MODE_SECTIONS[state.mode] || []).includes(id);
+  const sections = isPublic() ? PUBLIC_SECTIONS : MODE_SECTIONS;
+  const on = Boolean(visible) && (sections[state.mode] || []).includes(id);
   const node = $(id);
   if (node) node.hidden = !on;
   return on;
@@ -840,8 +879,14 @@ function renderAnalysis(index, slot, threat, fan) {
   renderSourceRows();
 
   card.hidden = ![...card.querySelectorAll(".an-section")].some((s) => !s.hidden);
-  $("analysis-label").textContent = MODE_TITLE[state.mode] || "Analysis";
-  $("analysis-hint").textContent = player ? `#${player.shirt}` : "";
+  if (isPublic()) {
+    $("analysis-label").textContent = PUBLIC_MODE_TITLE[state.mode] || "Story";
+    $("analysis-hint").textContent = "";
+  } else {
+    $("analysis-label").textContent = MODE_TITLE[state.mode] || "Analysis";
+    $("analysis-hint").textContent = player ? `#${player.shirt}` : "";
+  }
+  renderLegend();
 }
 
 // ---------------------------------------------------------------------------
@@ -861,6 +906,18 @@ const MODE_SECTIONS = {
   evaluation: ["an-scene", "an-player", "an-decision", "an-evaluation", "an-clip",
                "an-source"],
   game_solution: ["an-scene", "an-solver", "an-source"],
+};
+
+/**
+ * The same four modes for a public reader. Scene, review, provenance and
+ * source repeat in every mode, so they live in Details. The clicked-player
+ * block goes too: the showcase's cast is curated and nothing repoints it.
+ */
+const PUBLIC_SECTIONS = {
+  observed: [],
+  counterfactual: ["an-decision", "an-counterfactual"],
+  evaluation: ["an-decision", "an-evaluation"],
+  game_solution: ["an-solver"],
 };
 
 const MODE_TITLE = {
@@ -955,8 +1012,11 @@ function setMode(mode, quiet = false) {
 
 function setLayer(name, on) {
   if (on) state.layers.add(name); else state.layers.delete(name);
-  const box = document.querySelector(`[data-layer="${name}"]`);
-  if (box) box.checked = on;
+  // one layer, two checkboxes: the explorer's row and the showcase's Layers
+  for (const selector of [`[data-layer="${name}"]`, `[data-showlayer="${name}"]`]) {
+    const box = document.querySelector(selector);
+    if (box) box.checked = on;
+  }
 }
 
 /**
@@ -1158,12 +1218,18 @@ function renderBundlePolicy(index, data) {
         probability: o.prob,
         stop: o.command === 0,
         rests: Boolean(o.rests),
-        label: figure.optionLabel(body.solver_role, o.prob, {
-          stop: o.command === 0, rests: Boolean(o.rests),
-          // the solver's own name for this command, so a 0.57 m move's
-          // percentage has something visible to belong to
-          name: o.label, defenderNames: figure.FIGURE2.defenderNames,
-        }),
+        // the figure's wording in the explorer, football in the showcase:
+        // the same option, the same probability, a different reader
+        label: isPublic()
+          ? publicOptionLabel(body.solver_role, o.prob, {
+            stop: o.command === 0, rests: Boolean(o.rests), name: o.label,
+          })
+          : figure.optionLabel(body.solver_role, o.prob, {
+            stop: o.command === 0, rests: Boolean(o.rests),
+            // the solver's own name for this command, so a 0.57 m move's
+            // percentage has something visible to belong to
+            name: o.label, defenderNames: figure.FIGURE2.defenderNames,
+          }),
       }));
     if (options.length) {
       lib.drawActionArrows(state.pitch, playerPoint(scene, body.pos), options, {
@@ -1179,7 +1245,9 @@ function renderBundlePolicy(index, data) {
     const ball = ballAt(scene, index);
     if (!ball) continue;
     lib.drawPassChoice(state.pitch, ball, playerPoint(scene, pass.target),
-                       figure.passLabel(pass.prob, { received: Boolean(pass.to) }));
+                       isPublic() ? publicPassLabel(pass.prob)
+                                  : figure.passLabel(pass.prob,
+                                                     { received: Boolean(pass.to) }));
   }
 }
 
@@ -1283,7 +1351,9 @@ function renderStoryRoles() {
     button.className = `roleb${state.storyRole === role ? " is-on" : ""}`;
     button.type = "button";
     button.dataset.storyRole = role;
-    button.textContent = STORY_ROLE_LABEL[role];
+    button.textContent = isPublic()
+      ? (PUBLIC_STORY_ROLE[role] || STORY_ROLE_LABEL[role])
+      : STORY_ROLE_LABEL[role];
     button.setAttribute("aria-pressed", String(state.storyRole === role));
     node.append(button);
   }
@@ -1317,6 +1387,15 @@ function renderDecision(index) {
   renderStoryRoles();
   const player = resolveStoryRole(index);
   const time = scene.times[index];
+  if (isPublic()) {
+    // the role buttons above say which role and the legend says who, so the
+    // public card adds no row of its own here
+    rows($("an-decision-rows"), player ? [] : [
+      [PUBLIC_STORY_ROLE[state.storyRole] || STORY_ROLE_LABEL[state.storyRole],
+       "Not in this play", true],
+    ]);
+    return;
+  }
   const entries = [
     ["Frame", `${index} · ${time >= 0 ? "+" : ""}${time.toFixed(2)} s`],
   ];
@@ -1362,6 +1441,15 @@ function renderCounterfactual() {
     $("an-cf-change").replaceChildren();
     return;
   }
+  if (isPublic()) {
+    // the public card carries the one thing this mode knows -- what he did --
+    // and leaves the reserved slots, their reasons and the paired baselines
+    // to the explorer, which is where an unfilled slot is information
+    rows($("an-cf-rows"), publicObservedRow(block));
+    pair.replaceChildren();
+    $("an-cf-change").replaceChildren();
+    return;
+  }
   contractRows($("an-cf-rows"),
                [block.observed_action, block.feasible_actions, block.release_library],
                (r) => (r.name === "observed_action" ? actionText(r) : metricText(r)));
@@ -1386,6 +1474,27 @@ function renderCounterfactual() {
   contractRows($("an-cf-change"), [block.value_change], metricText);
 }
 
+/**
+ * "Observed: Run forward". `observed_action.description` is the pipeline's own
+ * name for the command nearest where the player really was 0.6 s later, so the
+ * football word translates a measurement. No word, no row.
+ */
+function publicObservedRow(block) {
+  const action = block?.observed_action;
+  if (!action || action.availability !== "available") return [];
+  const solverRole = STORY_TO_SOLVER[state.storyRole] || state.storyRole;
+  const word = publicActionName(solverRole, action.description)
+    || (action.description ? sentenceCase(action.description) : null);
+  return word ? [["Observed", word]] : [];
+}
+
+const STORY_TO_SOLVER = { passer: "ball carrier", runner: "runner", defender: "defender" };
+
+function sentenceCase(text) {
+  const s = String(text || "");
+  return s ? s[0].toUpperCase() + s.slice(1) : s;
+}
+
 function renderEvaluation() {
   const story = storyFor();
   if (!section("an-evaluation", true)) return;
@@ -1404,6 +1513,11 @@ function renderEvaluation() {
   // solved game to interpolate.
   const atMoment = metricsAtFrame(block, state.frame);
   const shown = atMoment ? atMoment.metrics : block.metrics;
+  if (isPublic()) {
+    renderPublicEvaluation(shown, atMoment);
+    note.hidden = true;
+    return;
+  }
   contractRows($("an-eval-rows"), [...shown, block.optimal_action],
                (r) => (r.name === "optimal_action" ? actionText(r) : metricText(r)));
   const none = shown.every((m) => m.availability !== "available");
@@ -1416,6 +1530,42 @@ function renderEvaluation() {
     note.textContent = `Solved at frame ${atMoment.frame}; the playhead is `
       + "between solved moments, so these are that moment's numbers.";
   }
+}
+
+/**
+ * How good the decision was, in four lines: the same records the explorer
+ * reads, as an ordinal, a percentage and a number. Relative rank is the rank
+ * again on a 0-1 scale, so only one of the two is here.
+ *
+ * The observed action joins them only at the moment it belongs to -- the
+ * payload carries the first solved moment's, while these numbers follow the
+ * playhead, so pairing them elsewhere would caption one moment with another's.
+ */
+function renderPublicEvaluation(metrics, atMoment) {
+  const byName = new Map(metrics.map((m) => [m.name, m]));
+  const value = (name) => {
+    const record = byName.get(name);
+    return record && record.availability === "available" ? record.value : null;
+  };
+  const entries = [];
+  const story = storyFor();
+  const first = presentSeries(story?.evaluation?.[state.storyRole] || {})[0];
+  const firstFrame = first?.frames?.[0];
+  if (atMoment && firstFrame != null && atMoment.frame === firstFrame) {
+    entries.push(...publicObservedRow(story?.counterfactual?.[state.storyRole]));
+  }
+  const rank = value("observed_action_rank");
+  if (rank != null) entries.push(["Rank", ordinal(rank)]);
+  const probability = value("similarity_to_optimal");
+  if (probability != null) {
+    entries.push(["Equilibrium probability", percent(probability)]);
+  }
+  const regret = value("regret");
+  if (regret != null) entries.push(["Regret", NUMBER(regret, 2)]);
+  if (!entries.length) {
+    entries.push(["Player evaluation", "Not available for this play", true]);
+  }
+  rows($("an-eval-rows"), entries);
 }
 
 /**
@@ -1495,6 +1645,13 @@ function renderSourceRows() {
  * would appear here and names the reserved series -- an empty state that looks
  * intentional, because it is. No example curve is ever drawn.
  */
+/** The three evaluation lines, named for the public strip and card. */
+const PUBLIC_METRIC = {
+  observed_action_rank: "Rank",
+  similarity_to_optimal: "Equilibrium probability",
+  regret: "Regret",
+};
+
 function renderEvalStrip(index) {
   const strip = $("eval-strip");
   strip.hidden = state.mode !== "evaluation";
@@ -1517,8 +1674,14 @@ function renderEvalStrip(index) {
   empty.hidden = true;
   const lib = stripLib();
   if (!lib) return;                       // a re-render follows when it lands
+  // relative rank is the rank again on a 0-1 scale, so the public strip draws
+  // one of the two and the explorer keeps both
+  const lines = isPublic()
+    ? series.filter((s) => s.name !== "relative_rank")
+      .map((s) => ({ ...s, label: PUBLIC_METRIC[s.name] || s.label }))
+    : series;
   const nearest = lib.drawEvalStrip(plot, {
-    series, nFrames: state.scene.n_frames, frame: index,
+    series: lines, nFrames: state.scene.n_frames, frame: index,
     width: plot.clientWidth,
     onSeek: (frame) => { state.frame = frame; render(); },
   });
@@ -1527,7 +1690,7 @@ function renderEvalStrip(index) {
   readout.textContent = (nearest || [])
     .map((near, i) => (near
       // an ordinal keeps its integer form; a ratio gets three places
-      ? `${series[i].label} ${Number.isInteger(near.value)
+      ? `${lines[i].label} ${Number.isInteger(near.value)
             ? near.value : near.value.toFixed(3)}`
         + (near.exact ? "" : ` (frame ${near.frame})`)
       : null))
@@ -1711,6 +1874,25 @@ function renderBundleRows(data, node, policy, provenance) {
   const panel = found.panel;
   const d = panel.dilemma || {};
   const s = panel.static || {};
+  if (isPublic()) {
+    // the arrows on the pitch already are the recommendation, so the card
+    // answers the one thing they cannot: whether this really is a dilemma.
+    // The equilibrium value, the certificate gap and the provenance string
+    // are the explorer's, and Details carries the method.
+    const pub = [
+      ["Dilemma", d.is_dilemma ? "yes" : "no"],
+      ["Defender", d.defender_mixed ? "mixed" : "one choice"],
+      ["Attack", d.attack_mixed ? "mixed" : "one choice"],
+    ];
+    if (s.static_attack_loss_rel != null) {
+      pub.push(["If the defender froze",
+                `+${NUMBER(100 * s.static_attack_loss_rel, 1)}% to the attack`]);
+    }
+    rows(node, pub);
+    policy.hidden = true;
+    provenance.hidden = true;
+    return;
+  }
   const entries = [
     ["Decision", `${panel.dt.toFixed(1)} s`
       + (found.exact ? "" : " \u00b7 nearest solved moment")],
@@ -1849,8 +2031,80 @@ function applyCollection() {
     button.classList.toggle("is-on", button.dataset.collection === state.collection);
   }
   if (showcase) refreshShowcaseList();
+  applyPublicChrome(showcase);
   applyTheme();
 }
+
+/**
+ * Which of the two interfaces this is: the showcase drops the headings, the
+ * filters, the role controls, the diagnostic layers and the identifiers that
+ * the explorer exists to show. Nothing here changes a value.
+ */
+/** True while the Submission showcase is open: the public interface. */
+function isPublic() {
+  return state.collection === "showcase" && Boolean(state.showcase);
+}
+
+function applyPublicChrome(showcase) {
+  document.body.classList.toggle("is-public", showcase);
+
+  $("brand-name").textContent = showcase ? "Off-ball Movement" : "Off-the-ball value";
+  $("brand-sub").hidden = showcase;
+  $("btn-source").textContent = showcase ? "Details" : "Source";
+  for (const button of document.querySelectorAll("#collection .seg-btn")) {
+    const full = button.dataset.collection === "showcase"
+      ? "Submission showcase" : "Full explorer";
+    button.textContent = showcase
+      ? (button.dataset.collection === "showcase" ? "Showcase" : "Explorer")
+      : full;
+  }
+  // the micro-headings describe the interface, not the football
+  $("collection-label").hidden = showcase;
+  $("showcase-label").hidden = showcase;
+  $("roles-control").hidden = showcase;
+  $("showcase-filters").hidden = showcase;
+  $("jump-peak").hidden = showcase;
+  $("jump-run").textContent = showcase ? "Run starts" : "Run";
+
+  // "Solver policy" is what the model recommends; in public it says so
+  for (const button of document.querySelectorAll("#solver-view .seg")) {
+    const names = showcase ? PUBLIC_SOLVER_VIEW : RESEARCH_SOLVER_VIEW;
+    button.textContent = names[button.dataset.solverview] || button.textContent;
+  }
+  for (const button of document.querySelectorAll("#story-modes .mode")) {
+    const name = button.querySelector(".mode-t");
+    const question = button.querySelector(".mode-q");
+    name.textContent = showcase
+      ? button.dataset.public
+      : MODE_RESEARCH_NAME[button.dataset.mode];
+    question.hidden = showcase;
+  }
+
+  $("layers-row").hidden = showcase;
+  $("show-layers").hidden = !showcase;
+  $("roles-card").hidden = showcase;
+  $("legend-card").hidden = !showcase;
+  $("stat-card").hidden = showcase;
+  $("hints-card").hidden = showcase;
+  $("notes-card").hidden = showcase;
+  const advanced = document.querySelector(".advanced");
+  if (advanced) advanced.hidden = showcase;
+  const evalTitle = document.querySelector(".evalstrip-head");
+  if (evalTitle) evalTitle.hidden = showcase;
+}
+
+const PUBLIC_SOLVER_VIEW = { policy: "Equilibrium", actual: "Actual", overlay: "Both" };
+const RESEARCH_SOLVER_VIEW = {
+  policy: "Solver policy", actual: "Actual movement", overlay: "Overlay",
+};
+
+/** The research names for the four modes, which the explorer keeps. */
+const MODE_RESEARCH_NAME = {
+  observed: "Observed",
+  counterfactual: "Counterfactual",
+  evaluation: "Evaluation",
+  game_solution: "Game solution",
+};
 
 function refreshShowcaseList() {
   if (!state.showcase) return;
@@ -1875,7 +2129,9 @@ function refreshShowcaseList() {
   for (const scene of filtered(state.showcase, state.showcaseFilter)) {
     const option = document.createElement("option");
     option.value = scene.showcase_id;
-    option.textContent = selectorLabel(scene);
+    const clock = state.index?.find((r) => r.scene_id === scene.scene_id)?.match_clock;
+    option.textContent = isPublic() ? publicSelectorLabel(scene, clock)
+                                    : selectorLabel(scene);
     // an entry with no published trajectory is listed, with the reason, but
     // cannot be opened; hiding it would misrepresent the curated set
     option.disabled = !scene.playable;
@@ -1931,7 +2187,8 @@ function renderTicks() {
     // the run belongs to an attacker, so on the paper theme the tick is the
     // attack colour rather than the research palette's runner pink
     marks.push({ index: onset.index, colour: theme === P ? P.runner : theme.attack,
-                 label: `run #${player.shirt}`, title: onset.method });
+                 label: isPublic() ? "run starts" : `run #${player.shirt}`,
+                 title: onset.method });
   }
   // the clip is cut around the annotated shot, so t = 0 is that shot
   const shot = Math.round(-scene.t0 * scene.fps);
@@ -2006,8 +2263,11 @@ function renderStat(slot, swap) {
 
 function renderChart(swap, freeze) {
   const { cache, scene, selection } = state;
+  if (isPublic()) return;           // the showcase has no chart to fetch one for
+  const lib = chartLib();
+  if (!lib) return;
   if (!selection.beneficiaries.length) {
-    drawChart($("chart"), { theme: state.pitch?.theme || null });
+    lib.drawChart($("chart"), { theme: state.pitch?.theme || null });
     return;
   }
   const sum = (ids, sw) => {
@@ -2018,7 +2278,7 @@ function renderChart(swap, freeze) {
     }
     return Array.from(out);
   };
-  drawChart($("chart"), {
+  lib.drawChart($("chart"), {
     theme: state.pitch?.theme || null,
     times: cache.times,
     factual: sum(selection.beneficiaries, []),
@@ -2030,6 +2290,7 @@ function renderChart(swap, freeze) {
 
 function renderCandidates(freeze, slot) {
   const { scene, cache, selection } = state;
+  if (isPublic()) return;           // the hints card is the explorer's
   const list = $("candidates");
   const card = $("hints-card");
   const toggle = $("hints-toggle");
@@ -2052,9 +2313,11 @@ function renderCandidates(freeze, slot) {
     || (selection.defenders.length && !selection.beneficiaries.length);
   let rows;
   let role;
+  const ranking = rankingLib();
+  if (!ranking) return;
   if (wantBeneficiaries && selection.defenders.length) {
-    rows = rankBeneficiaries(cache, scene, selection.runner, selection.defenders,
-                             freeze, slot).slice(0, 8);
+    rows = ranking.rankBeneficiaries(cache, scene, selection.runner,
+                                     selection.defenders, freeze, slot).slice(0, 8);
     role = "beneficiary";
     $("candidates-label").textContent = "Gains most";
   } else if (wantBeneficiaries) {
@@ -2063,7 +2326,7 @@ function renderCandidates(freeze, slot) {
     if (expanded) list.innerHTML = '<div class="muted">Pick a defender first.</div>';
     return;
   } else {
-    rows = rankDefenders(scene, selection.runner, freeze).slice(0, 8);
+    rows = ranking.rankDefenders(scene, selection.runner, freeze).slice(0, 8);
     role = "defender";
     $("candidates-label").textContent = "Reacts most";
   }
@@ -2085,6 +2348,59 @@ function renderCandidates(freeze, slot) {
     });
     list.appendChild(item);
   }
+}
+
+/**
+ * Who is in this play, in three lines: a shape, a name and the football
+ * position the solver role already is. It replaces the explorer's role dock,
+ * which exists to let someone pick a different cast.
+ */
+function renderLegend() {
+  const list = $("legend-list");
+  if (!list) return;
+  list.replaceChildren();
+  if (!isPublic()) return;
+  const { scene } = state;
+  const roles = solverRolesAt(state.frame) || {};
+  const seen = new Set();
+  const order = ["runner", "ball carrier", "beneficiary", "defender"];
+  const entries = [];
+  for (const [playerId, solverRole] of Object.entries(roles)) {
+    const player = scene?.byId.get(playerId);
+    const name = PUBLIC_ROLE[solverRole];
+    if (!player || !name || seen.has(playerId)) continue;
+    seen.add(playerId);
+    entries.push({ player, solverRole, name });
+  }
+  entries.sort((a, b) => order.indexOf(a.solverRole) - order.indexOf(b.solverRole));
+  for (const entry of entries) {
+    const row = document.createElement("li");
+    const mark = document.createElement("span");
+    mark.className = `lgmark is-${SHAPE_CLASS[entry.solverRole] || "circle"}`;
+    mark.style.background = entry.solverRole === "defender"
+      ? (state.pitch?.roles?.defender || ROLE_COLOUR.defender)
+      : (state.pitch?.roles?.runner || ROLE_COLOUR.runner);
+    const who = document.createElement("span");
+    who.className = "lgname";
+    who.textContent = `${surnameOf(entry.player)}`;
+    const what = document.createElement("span");
+    what.className = "lgrole";
+    what.textContent = entry.name;
+    row.append(mark, who, what);
+    list.appendChild(row);
+  }
+}
+
+/** The marker shape each solver role is drawn with, as a CSS class. */
+const SHAPE_CLASS = {
+  "ball carrier": "circle", runner: "diamond",
+  beneficiary: "triangle", defender: "square",
+};
+
+/** "D. Ginczek" -> "Ginczek": a legend has room for the name people use. */
+function surnameOf(player) {
+  const parts = String(player.name || "").trim().split(/\s+/);
+  return parts.length > 1 ? parts[parts.length - 1] : (parts[0] || `#${player.shirt}`);
 }
 
 function renderDock() {
@@ -2215,7 +2531,7 @@ function beginDrag(event, player, fromRole = null) {
         // one chip, one player: the rest of both roles is left alone
         state.selection.move(state.scene, role, dragged.playerId);
       }
-    } else if (!dragged.moved) {
+    } else if (!dragged.moved && !isPublic()) {
       if (dragged.fromRole) state.selection.arm(dragged.fromRole);
       else state.selection.applyClick(state.scene, dragged.playerId);
       // clicking always inspects, whatever the click did to the roles
@@ -2311,7 +2627,8 @@ function bindControls() {
   $("btn-auto").addEventListener("click", () => {
     $("status").textContent = "searching…";
     setTimeout(() => {
-      const best = autoTriplet(state.cache, state.scene, state.selection.runner);
+      const best = rankingLib()?.autoTriplet(state.cache, state.scene,
+                                            state.selection.runner);
       if (best) {
         state.selection = new Selection({
           runners: [best.runner], defenders: [best.defender],
@@ -2345,6 +2662,20 @@ function bindControls() {
       if (node.checked && ANALYSIS_LAYERS.has(name)) {
         $("analysis-card")?.scrollIntoView({ block: "nearest", behavior: "smooth" });
       }
+    });
+  }
+  for (const node of document.querySelectorAll("[data-showlayer]")) {
+    node.addEventListener("change", () => setLayer(node.dataset.showlayer,
+                                                   node.checked) || render());
+  }
+  const showLayers = $("show-layers-toggle");
+  if (showLayers) {
+    showLayers.addEventListener("click", () => {
+      const body = $("show-layers-body");
+      const open = body.hidden;
+      body.hidden = !open;
+      $("show-layers-chev").textContent = open ? "\u25be" : "\u25b8";
+      showLayers.setAttribute("aria-expanded", String(open));
     });
   }
   $("wake-mode").addEventListener("change", render);

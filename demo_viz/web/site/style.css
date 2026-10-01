@@ -644,3 +644,66 @@ body[data-paper] .an-section h4 { color: #9A9A9A; }
 body[data-paper] .group { background: #FFFFFF; }
 body[data-paper] .slot { border: 0; border-top: 1px solid var(--grid); }
 body[data-paper] .group .slot:first-of-type { border-top: 0; }
+
+/* =======================================================================
+   The public showcase
+   -----------------------------------------------------------------------
+   Everything under `body.is-public` is editorial: what is named, how much
+   of it there is, and what a reader is asked to look at first. The research
+   interface is one class away and keeps its own voice.
+   ======================================================================= */
+body.is-public,
+body.is-public button,
+body.is-public input,
+body.is-public select {
+  font-family: Helvetica, Arial, sans-serif;
+}
+
+/* one voice, three sizes */
+body.is-public .mode-t { font-size: 14px; font-weight: 600; letter-spacing: 0; }
+body.is-public .mode { padding: 13px 16px; }
+body.is-public .scene-head h1 { font-size: 19px; font-weight: 600; }
+body.is-public #subtitle { font-size: 13px; color: #555555; }
+body.is-public .brand-name { font-size: 15px; font-weight: 600; letter-spacing: 0; }
+body.is-public .top { padding: 10px 18px; gap: 18px; }
+
+/* the players legend: a shape, a name, a position */
+.legend ul { list-style: none; margin: 0; padding: 0; }
+.legend li {
+  display: grid; grid-template-columns: 16px 1fr auto; gap: 10px;
+  align-items: center; padding: 5px 0; font-size: 13px;
+}
+.legend li + li { border-top: 1px solid var(--grid); }
+.lgname { color: var(--text); }
+.lgrole { color: var(--text2); font-size: 12px; }
+.lgmark { width: 11px; height: 11px; justify-self: center; }
+.lgmark.is-circle { border-radius: 50%; }
+.lgmark.is-diamond { transform: rotate(45deg); }
+.lgmark.is-square { border-radius: 1px; }
+.lgmark.is-triangle {
+  width: 0; height: 0; background: none !important;
+  border-left: 6px solid transparent; border-right: 6px solid transparent;
+  border-bottom: 11px solid currentColor;
+}
+
+/* the one layers control, closed by default */
+.showlayers { padding: 10px 2px 2px; }
+.showlayers-body { display: flex; gap: 16px; flex-wrap: wrap; padding-top: 8px; }
+body.is-public .showlayers .label {
+  text-transform: none; letter-spacing: 0.01em; font-size: 11.5px;
+  font-weight: 600; color: var(--text2);
+}
+body.is-public .check { font-size: 12px; }
+
+/* the sidebar carries one story, not a record of the pipeline */
+body.is-public .an-section h4 {
+  font-size: 11px; color: #9A9A9A; text-transform: none; letter-spacing: 0.01em;
+}
+body.is-public .analysis dt { font-size: 12.5px; color: #555555; }
+body.is-public .analysis dd { font-size: 13px; }
+body.is-public .facts dt { text-transform: none; letter-spacing: 0.01em; }
+body.is-public .roleb { font-size: 12px; }
+/* one heading per card: the card title already names the mode, and a public
+   card shows one section */
+body.is-public .an-section h4 { display: none; }
+body.is-public .an-section + .an-section { border-top: 0; margin-top: 2px; }

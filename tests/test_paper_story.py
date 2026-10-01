@@ -16,6 +16,7 @@ boundary has leaked.
 from __future__ import annotations
 
 import json
+import re
 import unittest
 from pathlib import Path
 
@@ -832,7 +833,13 @@ class LazyComponentTests(unittest.TestCase):
         # reason, and prefer deferring a mode-specific module over raising it.
         # Which is what paid for it: release.js (the pass-model reader, wanted
         # only by the explorer's exploratory-pass layer) is now on demand too.
-        self.assertLess(initial, 274 * 1024,
+        # 2026-10-01, public editorial pass: the showcase ships a second
+        # vocabulary (public.js) and a second chrome, and both are chosen
+        # before the first paint. ranking.js and chart.js went on demand to
+        # pay part of it -- the showcase has no hints card and no chart, so it
+        # fetches neither. Raise this only with a reason, and prefer deferring
+        # a mode-specific module over raising it.
+        self.assertLess(initial, 288 * 1024,
                         f"initial load is {initial / 1024:.1f} KB")
 
 
@@ -1129,7 +1136,7 @@ class AdvancedControlTests(unittest.TestCase):
         return self.markup[start:self.markup.index("</div>", start)]
 
     def test_the_first_control_row_is_short(self):
-        row = self._row('<div class="layers">')
+        row = self._row('<div class="layers" id="layers-row">')
         visible = row.count("data-layer=")
         self.assertLessEqual(visible, 6,
                              f"{visible} always-visible toggles is a forest")
@@ -1195,3 +1202,86 @@ class PublicLabelTests(unittest.TestCase):
         self.assertIn("dt.textContent = record.label", app)
         for banned in ("Similarity to optimal", "Optimal action"):
             self.assertNotIn(banned, app, banned)
+
+
+class PublicCopyTests(unittest.TestCase):
+    """The Submission showcase speaks football; the explorer speaks pipeline."""
+
+    def setUp(self):
+        self.app = (SITE / "js" / "app.js").read_text()
+        self.public = (SITE / "js" / "public.js").read_text()
+        self.markup = (SITE / "index.html").read_text()
+
+    def test_the_four_tabs_are_named_for_a_public_audience(self):
+        for name in ("Play", "Dilemma", "Player evaluation", "Nash equilibrium"):
+            self.assertIn(f'data-public="{name}"', self.markup, name)
+
+    def test_a_tab_carries_no_subtitle_in_the_showcase(self):
+        block = self.app[self.app.index("function applyPublicChrome"):]
+        block = block[:block.index("\n/**")]
+        self.assertIn("question.hidden = showcase", block)
+
+    def test_the_showcase_hides_the_interface_headings_and_role_controls(self):
+        block = self.app[self.app.index("function applyPublicChrome"):]
+        block = block[:block.index("\n/**")]
+        for node in ("collection-label", "showcase-label", "roles-control",
+                     "showcase-filters", "jump-peak", "stat-card", "hints-card",
+                     "notes-card", "layers-row"):
+            self.assertIn(f'$("{node}")', block, node)
+
+    def test_the_showcase_panel_drops_the_identifier_and_source_sections(self):
+        block = self.app[self.app.index("const PUBLIC_SECTIONS"):]
+        block = block[:block.index("};")]
+        for banned in ("an-scene", "an-source", "an-clip", "an-player"):
+            self.assertNotIn(banned, block, banned)
+
+    def test_every_command_the_bundle_names_has_a_football_word(self):
+        """A new bundle with a new command name fails here, not on the pitch."""
+
+        solver = WEB_DATA / "solver"
+        if not solver.exists():
+            self.skipTest("no exported solver panels")
+        defender, attack = set(), set()
+        for path in sorted(solver.glob("*.json")):
+            payload = json.loads(path.read_text())
+            if payload.get("kind") != "bundle_panels":
+                continue
+            for panel in payload.get("panels", []):
+                for body in panel["bodies"].values():
+                    names = defender if body["solver_role"] == "defender" else attack
+                    for option in body["options"]:
+                        names.add(option["label"])
+        self.assertTrue(defender, "no defender options in the exported panels")
+        block = self.public[self.public.index("DEFENDER_FOOTBALL = {"):]
+        block = block[:block.index("};")]
+        for name in sorted(defender):
+            self.assertIn(f'"{name}"', block.replace("sideways:", '"sideways":'), name)
+        for name in sorted(attack):
+            self.assertTrue(
+                f'{name}:' in self.public or f'"{name}"' in self.public, name)
+
+    def test_command_zero_is_never_called_a_hold(self):
+        """It is maximum braking along the current heading, not a hold.
+
+        `agile_motion.steer` with a zero desired velocity; the research code
+        calls it "slow down" for that reason. See PAPER_FIGURE_ALIGNMENT.md
+        section 10.
+        """
+
+        source = re.sub(r"/\*.*?\*/", "", self.public, flags=re.S)
+        source = re.sub(r"//.*", "", source)
+        self.assertNotIn("Hold", source)
+        for word in ('"Slow down', '"Stop'):
+            self.assertIn(word, source)
+
+    def test_the_showcase_does_not_repoint_the_cast_on_a_click(self):
+        """The curated story and the panel beside it cannot disagree."""
+
+        block = self.app[self.app.index("function beginDrag"):]
+        self.assertIn("!dragged.moved && !isPublic()", block)
+
+    def test_the_explorer_keeps_its_own_words(self):
+        for name in ("Observed", "Counterfactual", "Evaluation", "Game solution"):
+            self.assertIn(f'"{name}"', self.app, name)
+        self.assertIn("MODE_SECTIONS", self.app)
+        self.assertIn('"an-source"', self.app)

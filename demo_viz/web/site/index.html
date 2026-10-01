@@ -11,18 +11,18 @@
 <body>
 <header class="top">
   <div class="brand">
-    <span class="brand-name">Off-the-ball value</span>
-    <span class="brand-sub">explorer</span>
+    <span class="brand-name" id="brand-name">Off-the-ball value</span>
+    <span class="brand-sub" id="brand-sub">explorer</span>
   </div>
   <div class="control" id="collection-control" hidden>
-    <label>Collection</label>
+    <label id="collection-label">Collection</label>
     <div class="seg" id="collection">
       <button class="seg-btn is-on" data-collection="showcase">Submission showcase</button>
       <button class="seg-btn" data-collection="explorer">Full explorer</button>
     </div>
   </div>
   <div class="control grow" id="showcase-control" hidden>
-    <label for="showcase-scene">Case study</label>
+    <label for="showcase-scene" id="showcase-label">Case study</label>
     <div class="row">
       <select id="showcase-scene"></select>
       <div class="chips" id="showcase-filters"></div>
@@ -40,7 +40,7 @@
       <span class="muted" id="scene-count"></span>
     </div>
   </div>
-  <div class="control grow">
+  <div class="control grow" id="roles-control">
     <label>Roles</label>
     <div class="row">
       <button id="btn-annotation" class="btn">Annotation</button>
@@ -55,19 +55,19 @@
 <main>
   <section class="pitch-card">
     <nav class="modes" id="story-modes" role="tablist" aria-label="Story mode">
-      <button class="mode is-on" data-mode="observed" role="tab" aria-selected="true">
+      <button class="mode is-on" data-mode="observed" role="tab" data-public="Play" aria-selected="true">
         <span class="mode-t">Observed</span>
         <span class="mode-q">What happened?</span>
       </button>
-      <button class="mode" data-mode="counterfactual" role="tab" aria-selected="false">
+      <button class="mode" data-mode="counterfactual" role="tab" data-public="Dilemma" aria-selected="false">
         <span class="mode-t">Counterfactual</span>
         <span class="mode-q">What else could the player have done?</span>
       </button>
-      <button class="mode" data-mode="evaluation" role="tab" aria-selected="false">
+      <button class="mode" data-mode="evaluation" role="tab" data-public="Player evaluation" aria-selected="false">
         <span class="mode-t">Evaluation</span>
         <span class="mode-q">How good was the observed decision?</span>
       </button>
-      <button class="mode" data-mode="game_solution" role="tab" aria-selected="false">
+      <button class="mode" data-mode="game_solution" role="tab" data-public="Nash equilibrium" aria-selected="false">
         <span class="mode-t">Game solution</span>
         <span class="mode-q">What does the strategic equilibrium recommend?</span>
       </button>
@@ -105,7 +105,18 @@
       <div id="eval-plot"></div>
       <p class="empty" id="eval-empty" hidden></p>
     </div>
-    <div class="layers">
+    <div class="showlayers" id="show-layers" hidden>
+      <button class="disclosure sub" id="show-layers-toggle" aria-expanded="false">
+        <span class="chev" id="show-layers-chev">▸</span>
+        <span class="label">Layers</span>
+      </button>
+      <div class="showlayers-body" id="show-layers-body" hidden>
+        <label class="check"><input type="checkbox" data-showlayer="trail" checked> Run</label>
+        <label class="check"><input type="checkbox" data-showlayer="tether" checked> Marking</label>
+        <label class="check"><input type="checkbox" data-showlayer="labels" checked> Shirt numbers</label>
+      </div>
+    </div>
+    <div class="layers" id="layers-row">
       <label class="check"><input type="checkbox" data-layer="trail" checked> Runner movement</label>
       <label class="check"><input type="checkbox" data-layer="tether" checked> Defender response</label>
       <label class="check"><input type="checkbox" data-layer="wake" checked> Space map</label>
@@ -137,7 +148,11 @@
   </section>
 
   <aside class="dock">
-    <div class="card">
+    <div class="card legend" id="legend-card" hidden>
+      <ul id="legend-list"></ul>
+    </div>
+
+    <div class="card" id="roles-card">
       <div class="group attack">
         <div class="group-label">Attack</div>
         <div class="slot" id="slot-runner" data-role="runner">
@@ -163,7 +178,7 @@
       </div>
     </div>
 
-    <div class="card stat">
+    <div class="card stat" id="stat-card">
       <div class="label" id="stat-label">Available space</div>
       <div class="stat-value" id="stat-value">—</div>
       <div id="chart" class="chart"></div>
@@ -258,7 +273,7 @@
       <div id="candidates"></div>
     </div>
 
-    <div class="card notes">
+    <div class="card notes" id="notes-card">
       <div class="label">Notes</div>
       <div id="notes" class="muted"></div>
     </div>

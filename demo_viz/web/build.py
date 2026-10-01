@@ -66,7 +66,8 @@ def build(out: Path, data_dir: Path = WEB_DATA, clean: bool = True,
 #: in the build like any other file but are never fetched until that mode is
 #: opened, so counting them in the first load would overstate it.
 ON_DEMAND = ("js/policy.js", "js/evalstrip.js", "js/figure.js",
-             "js/arrows.js", "js/obso.js", "js/release.js")
+             "js/arrows.js", "js/obso.js", "js/release.js",
+             "js/ranking.js", "js/chart.js")
 
 
 def report(out: Path) -> str:

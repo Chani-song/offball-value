@@ -405,3 +405,134 @@ colours and its layer defaults are unchanged, and a diff of the dark rules
 shows it: the theme work is additive (`PAPER_THEME`, `setTheme`, the
 `body[data-paper]` block) plus the substitution of `this.theme` for the
 module-level palette inside `Pitch`, which resolves to the same values there.
+
+## 10. The commands, and the football words for them (2026-10-01)
+
+The public showcase names the solver's commands in football. Those names are
+only defensible if they describe the action, so this section is the trace,
+read from `origin/kyuhyeok-dev@99bddd8`. `js/public.js` points here.
+
+**The solved studies run the compass set.** `jobs/solve_evaluation.sbatch:28`,
+`jobs/solve_figure2_panels.sbatch:27` and `jobs/solve_defender_grid.sbatch:42`
+all pass `--commands compass` (`andrew-*/scripts/run.py:47`). The *relative*
+set — `"toward ball"`, `"cut off runner"`, `"hold between"` — exists and is
+tested, but is **not** what `eval_v1_2v1`, `eval_v1_3v1` or the figure panels
+ran, so it is not what this demo reads.
+
+**One five-element set, shared by every body**, stated against the attack
+direction (`agile_motion.advance:182-193`; the repo's own transcription is
+`src/offball_value/stage3_read.py:32`):
+
+| index | direction | |
+| --- | --- | --- |
+| 0 | `(0, 0)` | desired velocity zero |
+| 1 | `(1, 0)` | forward, along the attack |
+| 2 | `(0, 1)` | lateral |
+| 3 | `(-1, 0)` | backward |
+| 4 | `(0, -1)` | the other lateral |
+
+Carrier, runner, teammate and defender all get this same set. No diagonals.
+
+**The defender's names are descriptions, not action names.**
+`stage3_read.name_move_targets` names each compass move after whichever line —
+to the ball, to the runner, to the beneficiary, to the defended goal — it
+points along most by cosine, `"sideways"` when none reaches 0.3. The same index
+can take different names in different states, which is why `public.js` maps
+names and not indices, and why two indices can share a name (S05 at 0.0 s has
+`toward ball` on both commands 3 and 4).
+
+| solver name | public | why it is accurate |
+| --- | --- | --- |
+| `toward ball` | Close down | moves along the line to the man on the ball |
+| `toward runner` | Track runner | moves along the line to the runner |
+| `toward goal` | Drop | moves toward the goal he is defending |
+| `toward beneficiary` | Cover teammate | 3v1 only; see below |
+| `sideways` | Slide across | a lateral move with no line to name it after |
+
+**Command 0 is braking, not holding.** It sets desired velocity to zero, and
+`agile_motion.steer` then applies maximum deceleration *along the current
+heading* (`cap = physics.braking`), so a defender already moving keeps sliding
+the same way while he slows. The research code calls it `"slow down"` for
+exactly that reason (`stage3_read.py:56-59`). The figure splits it by whether
+speed reached zero inside the 0.6 s: `Slow down NN%` while still moving,
+`Stop NN%` at rest (`render_figure2_abstract.py:411-415`), and the demo ports
+the test (`hypot(end_velocity) == 0`).
+
+It is not a convention either. The imported solver **validates** it, in
+`mit_ssac2027_ref/src/defensive_positioning/models.py:125-126`:
+
+```python
+if not directions or directions[0] != (0.0, 0.0):
+    raise ValueError("the first command must brake to rest: (0, 0)")
+```
+
+and names it on the field itself, `models.py:98`: *"Zero desired velocity
+brakes; the other commands point at compass axes."* There is no configuration
+of this solver in which command 0 is anything but the brake.
+
+**So the showcase does not call it "Hold".** "Hold" would claim he held his
+position; the model says he braked. Both themes keep "Slow down" and "Stop",
+which are already football English.
+
+**One note on where the numbers come from.** The fork's agile path never reads
+`maximum_acceleration`; `agile_motion.steer` uses `physics.speed_up`,
+`braking` and `turning` only. The production runs took them from
+`data/processed/physics_limits/agile_p999_nodelay.json` (braking 7.39 m/s²),
+and that file sets `defender_delay_s = 0.0` — so **the demo must never narrate
+a defender reaction delay**, and today it does not.
+
+**The imported solver is not vendored.** `defensive_positioning` lives in the
+sibling checkout `mit_ssac2027_ref/src/`, not in this repository, so anything
+needing `GameConfig`, `FiniteGame` or `motion.advance` is read from there.
+
+**The 3v1 third attacker is a player, not a label.** `fixedpasser/game.py:9-13`
+maps the receiver slot to the beneficiary and gives him his own five commands
+(`rollout.py:50-52` decodes the joint attack action as `divmod`), and the
+scripted passer may release to him — `game.py:58` `RECEIVERS = ("runner",
+"beneficiary")`. `DESIGN.md:11-13`: *"The defender's dilemma: follow the
+runner, or guard the beneficiary."* `render_figure2_abstract.py:148-150` draws
+him as the **teammate**, so the showcase uses that word too — in the legend and
+in "Cover teammate".
+
+In a **2v1** this body does not exist: the ball carrier *is* the beneficiary
+(`stage3_read.py:97-104`), which is why S05's legend reads "Kownacki — On ball".
+
+**The attackers' names** come from `extract_panel_policy.compass_name:66-73`:
+`stop`, `forward`, `left`, `back`, `right`, against the attack direction. The
+showcase gives these football words only where a word is already printed — an
+off-ball attacker's arrow carries its percentage alone in both themes, because
+the arrow is already showing the direction.
+
+**Not ported, deliberately:** the relative command set's names. No study this
+demo reads was solved with it.
+
+## 11. Two audiences, two vocabularies (2026-10-01)
+
+The showcase and the explorer now differ in what they *say*, not only in how
+they look. One predicate decides it — `isPublic()` in `app.js`, true while the
+Submission showcase is open — and `js/public.js` holds every public word.
+
+| | Showcase | Explorer |
+| --- | --- | --- |
+| Modes | Play · Dilemma · Player evaluation · Nash equilibrium | Observed · Counterfactual · Evaluation · Game solution |
+| Caption | `29:20 · <the reviewer's sentence>` | `29:20 · shot 10 · Kownacki · SAVED · …` |
+| Selector | `Fortuna Düsseldorf vs SSV Jahn Regensburg · 29:20` | `S05 · … · 5/5 · Human-reviewed` |
+| Cast | a three-line legend | the role dock, drag and drop |
+| Commands | Close down · Track runner · Drop · Cover teammate | toward ball · toward runner · toward goal · toward beneficiary |
+| Sidebar | the mode's own card | scene, player, decision, mode, clip, source |
+| Layers | one collapsed control, three marks | the row plus Advanced |
+| Panel | Dilemma · Defender · Attack · If the defender froze | nine rows plus the provenance string |
+
+**No identifier reaches the showcase.** `S05`, shot numbers, `Human-reviewed`,
+`Solver-derived`, `Auto triplet`, the `5/5` badge, frame numbers and the
+provenance string are all explorer or Details copy. Measured on S05 across the
+four modes, the showcase went from 1290 visible words to 380 — **71% less**.
+
+**One defect this closed.** The clicked-player block followed `state.inspect`
+while the decision and evaluation rows followed the curated story role, so
+clicking any background player relabelled half the card — a probe reproduced
+it: clicking #3 A. Hoffmann made the panel read "#3 A. Hoffmann · Role:
+Runner" beside "Runner · #10 D. Ginczek". In the showcase a click now changes
+nothing (the cast is curated and there is no picker), and the clicked-player
+block is not part of the public panel at all. The explorer keeps click-to-pick,
+where reassigning the cast is the point.
