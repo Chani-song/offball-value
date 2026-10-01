@@ -108,10 +108,11 @@ options in its docstring and `--help`.
      --frames --value-fade 0 --value-grids $GRIDS \
      --flow-grids $GRIDS --flow-color "#FF8000" --flow-alpha 0.4 \
      --defender-names short --label-gap 0.35 --title "" \
+     --value-key "preferred defender position" --value-key-size 10 --head-size 12 --attack-size 10 \
      --output out/showcase_v1/figure_multi/S05_figure2.png
-   python scripts/add_caption.py --input out/showcase_v1/figure_multi/S05_figure2.png \
+   python scripts/add_caption.py --size 11.5 --input out/showcase_v1/figure_multi/S05_figure2.png \
      --output out/showcase_v1/abstract_figures/S05_figure2_caption.png --number "Figure 2." \
-     --text "Nash equilibrium choices during an off-ball play at three successive moments.\nPercentages are action probabilities; orange lines show the defender's expected movement from each starting position."
+     --text "Nash equilibrium choices during an off-ball play at 0.0 s, 0.6 s and 1.2 s. Percentages are action probabilities. Orange lines show the defender's expected movement from each starting position. Gray dotted lines and hollow markers show the players' actual movement over the next 0.6 s. Shading is the attack's expected threat in equilibrium if the defender started at that spot (darker = lower threat)."
    PYTHONPATH=src:scripts python scripts/analyze_eval.py \
      --solved out/runs/eval_v1_2v1 out/runs/eval_v1_3v1 \
      --panels data/processed/eval_v1/panels --output data/processed/eval_v1/analysis

@@ -132,6 +132,14 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--label-gap", type=float, default=0.0,
                    help="m of clear ground every label keeps from the labels placed before it (0: may touch, the "
                         "first version; 1.2 s 'Stop 22%%' and '47%%' then read as one phrase)")
+    p.add_argument("--value-key", default="better start for the defender",
+                   help="the background key's words after 'darker:' / 'lighter:'")
+    p.add_argument("--attack-size", type=float, default=FS_KEY,
+                   help="the 'attack' word, pt; its arrow scales with it")
+    p.add_argument("--head-size", type=float, default=FS_PANEL,
+                   help="the moments' labels (0.0 s ...), pt (2026-10-01: 12 = Figure 1's panel titles)")
+    p.add_argument("--value-key-size", type=float, default=FS_KEY - 0.5,
+                   help="its font size, pt (2026-10-01: 7 pt read small once the figure was scaled to an A4 page)")
     p.add_argument("--flow-color", default=st.DEFENCE, help="its colour")
     p.add_argument("--flow-alpha", type=float, default=0.2, help="its opacity (0.2 = 80%% transparent)")
     return p.parse_args()
@@ -566,17 +574,18 @@ def value_background(ax, pts, norm, fade=0.0):
               interpolation="bilinear", zorder=0.3)
 
 
-def value_key(fig, W, y_in, margin):
+def value_key(fig, W, y_in, margin, words="better start for the defender", size=FS_KEY - 0.5):
     """A small gradient and one line, bottom left of the white strip."""
     from matplotlib.colors import LinearSegmentedColormap
     H = fig.get_size_inches()[1]
-    kax = fig.add_axes((margin / W, (y_in - 0.035) / H, 0.42 / W, 0.07 / H))
+    k = size / (FS_KEY - 0.5)                      # the swatch grows with the words
+    kax = fig.add_axes((margin / W, (y_in - 0.035 * k) / H, 0.42 * k / W, 0.07 * k / H))
     kax.imshow(np.linspace(0, 1, 64)[None, :], aspect="auto", cmap=LinearSegmentedColormap.from_list("bg", [BG_LOW, BG_HIGH]))
     kax.set_xticks([]); kax.set_yticks([])
     for sp in kax.spines.values():
         sp.set_linewidth(0.4); sp.set_color(st.FAINT)
     shade = "darker" if BG_DARK_FOR == "defender" else "lighter"
-    fig.text((margin + 0.48) / W, y_in / H, f"{shade}: better start for the defender", fontsize=FS_KEY - 0.5,
+    fig.text((margin + 0.48 * k) / W, y_in / H, f"{shade}: {words}", fontsize=size,
              color=st.MUTED, ha="left", va="center")
 
 
@@ -615,7 +624,10 @@ def main() -> None:
     margin, gap, title_in, head_in, key_in = 0.05, 0.08, 0.30, 0.20, 0.36 if args.legend else 0.0
     if not args.title:                             # --title "": no title row (the caption names the figure)
         title_in = 0.0
+    head_in += (args.head_size - FS_PANEL) / 72    # a larger moment label gets its own room
     foot_in = 0.05 if args.no_match_line else 0.22   # the white strip under the panels for the match line
+    key_grow = max(0.0, (args.value_key_size - (FS_KEY - 0.5)) / 72) if args.value_grids else 0.0
+    foot_in += key_grow                            # a larger key gets its own room; the row moves up by half
     n = len(scenes)
     m_per_in = sum(widths) / (W - 2 * margin - (n - 1) * gap)
     ph = span_y / m_per_in
@@ -665,32 +677,33 @@ def main() -> None:
         dump["panels"].append(drawn)
         axes.append(ax)
         fig.text(left / W, (foot_in + key_in + ph + 0.05) / H, f"{dt:.1f} s", color=st.INK,
-                 fontsize=FS_PANEL, fontweight="bold", ha="left", va="bottom")
+                 fontsize=args.head_size, fontweight="bold", ha="left", va="bottom")
         left += pw + gap
     # the attack's direction: a word and the figures' own arrow, right-aligned on the title row -- or, with no
     # title (2026-10-01, the user's call), on the moments' row, sitting on the same line as "0.0 s" ...
-    arrow_in = 0.28
+    ka = args.attack_size / FS_KEY                 # the arrow grows with the word
+    arrow_in = 0.28 * ka
     if args.title:
         y_title = (H - title_in / 2) / H
         fig.text(margin / W, y_title, args.title, color=st.INK, fontsize=FS_TITLE, fontweight="bold",
                  ha="left", va="center")
-        fig.text((W - margin - arrow_in - 0.05) / W, y_title, "attack", color=st.MUTED, fontsize=FS_KEY,
-                 ha="right", va="center")
+        fig.text((W - margin - arrow_in - 0.05 * ka) / W, y_title, "attack", color=st.MUTED,
+                 fontsize=args.attack_size, ha="right", va="center")
         y_arrow = y_title
     else:
-        word = fig.text((W - margin - arrow_in - 0.05) / W, (foot_in + key_in + ph + 0.05) / H, "attack",
-                        color=st.MUTED, fontsize=FS_KEY, ha="right", va="bottom")
+        word = fig.text((W - margin - arrow_in - 0.05 * ka) / W, (foot_in + key_in + ph + 0.05) / H, "attack",
+                        color=st.MUTED, fontsize=args.attack_size, ha="right", va="bottom")
         ext = word.get_window_extent(renderer)
         y_arrow = (ext.y0 + ext.y1) / 2 / fig.dpi / H
     st.fig_arrow(fig, ((W - margin - arrow_in) / W, y_arrow), ((W - margin) / W, y_arrow), color=st.MUTED,
-                 lw=st.MOVE_LW * 0.7)
+                 lw=st.MOVE_LW * 0.7 * ka)
     if args.legend:
         legend(fig, W, foot_in + key_in / 2, m_per_pt, renderer)
     if grids:
-        value_key(fig, W, 0.07, margin)
+        value_key(fig, W, 0.07 + key_grow / 2, margin, args.value_key, args.value_key_size)
     if not args.no_match_line:                     # the scene's start (the first panel, the solver's t = 0)
         note = st.match_line(scenes[0][1]["code"], scenes[0][1]["frame"])
-        st.match_note(fig, note, W - margin, 0.07)
+        st.match_note(fig, note, W - margin, 0.07 + key_grow / 2)
         print(f"match line: {note}")
     st.check_text(fig)
     args.output.parent.mkdir(parents=True, exist_ok=True)
