@@ -97,6 +97,34 @@ function arrowsLib() {
   return null;
 }
 
+let panelModule = null;
+let panelLoading = false;
+
+/** The public panel, fetched on the showcase's first render. */
+function panelLib() {
+  if (panelModule) return panelModule;
+  if (!panelLoading) {
+    panelLoading = true;
+    import("./panel.js").then((module) => { panelModule = module; render(); });
+  }
+  return null;
+}
+
+/**
+ * Everything the public panel reads, in one object.
+ *
+ * It holds no state of its own, so this is the whole seam: change what the
+ * panel shows by changing these, never by reaching back into app.js.
+ */
+function panelContext() {
+  return {
+    state, el: $, NUMBER, surnameOf, SHAPE_CLASS, PUBLIC_ROLE, ROLE_COLOUR,
+    compareLib, compareFor, swapSpec, solverFor, panelAt, storyFor,
+    metricsAtFrame, presentSeries, publicObservedRow, ordinal, percent,
+    compareWith, isPublic, solverRolesAt, freezeIndex,
+  };
+}
+
 let compareModule = null;
 let compareLoading = false;
 
@@ -214,6 +242,8 @@ const state = {
   // solver and evaluation number keyed to it -- cannot move.
   compare: null,             // { defender } | { teammate } | null
   compareData: null,         // { sceneId, payload } from data/compare
+  space: true,               // Dilemma draws the space the run opened
+  viewChosen: false,         // true once the reader picks Full pitch or Focus
   field: false,              // Figure 2's defender-start shading and move field
   grids: null,               // { code, moments: Map<dt, grid|null> } once asked
   solver: null,              // { sceneId, state } once the solver layer is used
@@ -251,6 +281,7 @@ function urlState() {
     time: params.get("t"),
     swap: params.get("swap") === "1",
     showcase: params.get("showcase"),   // open a curated case study by its id
+    explorer: params.get("explorer") === "1",  // the research interface
     fit: params.get("fit"),
     about: params.get("about") === "1",
     mode: params.get("mode"),          // space | gain | obso
@@ -338,7 +369,9 @@ async function boot() {
     state.showcaseFilter = defaultFilter(state.showcase);
     // a collection only makes sense when there are two of them
     $("collection-control").hidden = false;
-    if (wanted && wanted.scene) state.collection = "explorer";
+    // ?scene=... or ?explorer=1 opens the research interface; nothing in the
+    // public header does, which is what keeps the public header public
+    if (wanted && (wanted.scene || wanted.explorer)) state.collection = "explorer";
     if (wanted && wanted.showcase) state.showcaseId = wanted.showcase;
   } else {
     state.collection = "explorer";
@@ -488,9 +521,27 @@ function render() {
       .filter((r) => r.gain > 0.05).slice(0, 3).map((r) => r.id);
   }
 
+  // Dilemma's whole point, drawn: the space the run opened for the teammate
+  // in question -- the curated one, or whoever is being compared. Same
+  // quantity as "Space created", same influence cache, shown on the pitch.
+  const dilemmaSpace = isPublic() && state.mode === "counterfactual"
+    && state.space && selection.defenders.length;
+  const spaceFor = state.compare?.teammate
+    ? [state.compare.teammate] : selection.beneficiaries;
   const mode = $("wake-mode").value;
   const threat = mode === "obso" ? obsoSurface(index) : null;
-  if (state.layers.has("wake") && threat) {
+  if (dilemmaSpace && spaceFor.length) {
+    // "what would this defender's reaction have opened": the same held-defender
+    // device, pointed at whoever is being compared
+    const hold = state.compare?.defender
+      ? [{ playerId: state.compare.defender, freezeIndex: freeze, mode: "hold" }]
+      : swap;
+    const factual = cache.combined(spaceFor, slot);
+    const counter = cache.combined(spaceFor, slot, hold);
+    pitch.drawField(cache.grid,
+                    factual.field.map((v, i) => Math.max(v - counter.field[i], 0)),
+                    scene);
+  } else if (state.layers.has("wake") && threat) {
     // frame-level threat: it does not move when the roles change, so it is
     // drawn in its own colour rather than the beneficiary's
     pitch.drawField(threat.grid, threat.values, scene, { colour: tint("obso") });
@@ -525,12 +576,16 @@ function render() {
   if (state.layers.has("trail") && selection.runner) {
     pitch.drawTrail(scene, selection.runner, index);
   }
+  // comparing a defender moves the marking line and the held-defender ghost
+  // onto him, so the click changes the pitch and not only a number
+  const markers = state.compare?.defender ? [state.compare.defender]
+                                          : selection.defenders;
   if (state.layers.has("tether") && selection.runner) {
-    pitch.drawTether(scene, selection.runner, selection.defenders, index,
+    pitch.drawTether(scene, selection.runner, markers, index,
                      { labels: state.layers.has("labels") });
   }
   if (state.layers.has("ghost")) {
-    pitch.drawGhost(scene, cache, selection.defenders, index, freeze,
+    pitch.drawGhost(scene, cache, markers, index, freeze,
                     { labels: state.layers.has("labels") });
   }
   renderDilemma(index);
@@ -562,7 +617,12 @@ function render() {
   renderAnalysis(index, slot, threat, fan);
   renderAdvanced();
   renderMoments();
-  renderCompareBar();
+  const panelUi = isPublic() ? panelLib() : null;
+  if (panelUi) {
+    const context = panelContext();
+    panelUi.renderLegend(context);
+    panelUi.renderMetrics(context, slot);
+  }
   renderTicks();
   renderEvalStrip(index);
   $("readout").textContent = `${scene.times[index] >= 0 ? "+" : ""}${scene.times[index].toFixed(2)} s`;
@@ -919,7 +979,6 @@ function renderAnalysis(index, slot, threat, fan) {
 
   // ---- the rest of the paper story ----
   renderDecision(index);
-  renderEvidence(slot);
   renderCounterfactual();
   renderEvaluation();
   renderClipSummary();
@@ -933,7 +992,6 @@ function renderAnalysis(index, slot, threat, fan) {
     $("analysis-label").textContent = MODE_TITLE[state.mode] || "Analysis";
     $("analysis-hint").textContent = player ? `#${player.shirt}` : "";
   }
-  renderLegend();
 }
 
 // ---------------------------------------------------------------------------
@@ -961,10 +1019,7 @@ const MODE_SECTIONS = {
  * block goes too: the showcase's cast is curated and nothing repoints it.
  */
 const PUBLIC_SECTIONS = {
-  observed: [],
-  counterfactual: ["an-counterfactual", "an-evidence"],
-  evaluation: ["an-decision", "an-evaluation"],
-  game_solution: ["an-solver"],
+  observed: [], counterfactual: [], evaluation: [], game_solution: [],
 };
 
 const MODE_TITLE = {
@@ -1057,6 +1112,11 @@ function setMode(mode, quiet = false) {
   // a comparison belongs to Dilemma: leaving it returns to the curated play,
   // because nothing outside Dilemma has numbers for anyone else
   if (mode !== "counterfactual") state.compare = null;
+  // Nash opens in Focus: the equilibrium options are too dense to read across
+  // a whole pitch. A view the reader chose themselves is kept.
+  if (mode === "game_solution" && isPublic() && !state.viewChosen) setView("focus");
+  const space = $("space-control");
+  if (space) space.hidden = !(isPublic() && mode === "counterfactual");
   renderMoments();
   if (!quiet) render();
 }
@@ -1068,19 +1128,6 @@ function setMode(mode, quiet = false) {
  * is nothing between them to show: the evaluation solves a fresh game at each
  * real moment and none in between.
  */
-/** "Comparing Thalhammer · Reset", shown only while a comparison is open. */
-function renderCompareBar() {
-  const bar = $("compare-bar");
-  if (!bar) return;
-  const other = state.compare?.defender || state.compare?.teammate || null;
-  const on = isPublic() && state.mode === "counterfactual" && Boolean(other);
-  bar.hidden = !on;
-  if (!on) return;
-  const player = state.scene?.byId.get(other);
-  $("compare-what").textContent = player
-    ? `Comparing ${surnameOf(player)}` : "Comparing";
-}
-
 function renderMoments() {
   const node = $("moment-pick");
   if (!node) return;
@@ -1314,10 +1361,10 @@ function renderBundlePolicy(index, data) {
   const found = panelAt(data, index);
   if (!found) return;
   const { scene } = state;
-  // one label ledger for the whole panel, so a defender's label steps aside
-  // from an attacker's too -- at 1.2 s "Stop 22%" and "47%" used to read as
-  // one phrase (render_figure2_abstract --label-gap 0.35)
-  const placed = [];
+  // one layout for the whole panel, so a defender's label steps aside from an
+  // attacker's and from every player marker, not only from its own body's
+  const layout = new lib.LabelLayout(state.pitch);
+  blockPlayers(layout, index);
   const gap = figure.FIGURE2.labelGapM;
   for (const [role, body] of Object.entries(found.panel.bodies || {})) {
     const colour = figure.ROLE_COLOR[body.solver_role] || figure.PAPER.attack;
@@ -1345,7 +1392,7 @@ function renderBundlePolicy(index, data) {
       }));
     if (options.length) {
       lib.drawActionArrows(state.pitch, playerPoint(scene, body.pos), options, {
-        colour, labelFloor: figure.MIN_P, labelGap: gap, placed,
+        colour, labelFloor: figure.MIN_P, labelGap: gap, layout,
         // a move leaves the marker with clear ground, as the figure does
         clearM: markerClearance(figure, body.solver_role),
       });
@@ -1359,8 +1406,30 @@ function renderBundlePolicy(index, data) {
     lib.drawPassChoice(state.pitch, ball, playerPoint(scene, pass.target),
                        isPublic() ? publicPassLabel(pass.prob)
                                   : figure.passLabel(pass.prob,
-                                                     { received: Boolean(pass.to) }));
+                                                     { received: Boolean(pass.to) }),
+                       layout);
   }
+}
+
+/**
+ * Every drawn player is ground a label may not be written over.
+ *
+ * The marker and the shirt number inside it, for all 22, at the radii
+ * `drawPlayers` actually uses -- so a percentage never lands on a number, in
+ * any scene, at any moment, at any width.
+ */
+function blockPlayers(layout, index) {
+  const { scene, selection, pitch } = state;
+  if (!scene) return;
+  const k = Math.max(pitch.k, 0.62);
+  for (const player of scene.players) {
+    const position = playerAt(scene, player, index);
+    if (!position) continue;
+    const role = selection.roleOf(player.id);
+    layout.blockDisc(position[0], position[1], (role ? 1.55 : 1.2) * k * 1.1);
+  }
+  const ball = ballAt(scene, index);
+  if (ball) layout.blockDisc(ball[0], ball[1], 0.8 * k);
 }
 
 /**
@@ -1584,75 +1653,6 @@ function renderCounterfactual() {
     pair.append(card);
   }
   contractRows($("an-cf-change"), [block.value_change], metricText);
-}
-
-/**
- * Why this is a dilemma, in three lines -- and, while comparing, in six.
- *
- * Marking distance and reaction time are read from `data/compare`, which the
- * repository's own `dynamic_marking` and `role_logic` produced at export time.
- * Space created is the influence cache's own number, computed here the way
- * every other space figure in this demo is. None of the three is an extraction
- * criterion; the curated cast was picked by hand.
- */
-function renderEvidence(slot) {
-  if (!section("an-evidence", isPublic())) return;
-  const { scene, selection, cache } = state;
-  const node = $("an-evidence-rows");
-  const note = $("an-evidence-note");
-  const lib = compareLib();
-  const payload = compareFor();
-  const defenderId = selection.defenders[0];
-  const teammateId = selection.beneficiaries[0];
-  const other = state.compare?.defender || state.compare?.teammate || null;
-  const who = (id) => {
-    const player = scene?.byId.get(id);
-    return player ? surnameOf(player) : "\u2014";
-  };
-
-  const entries = [];
-  if (lib && payload) {
-    const curatedRow = lib.defenderRow(payload, defenderId);
-    const otherRow = state.compare?.defender
-      ? lib.defenderRow(payload, state.compare.defender) : null;
-    const pair = (label, mine, theirs) => entries.push([
-      label, theirs == null ? mine : `${mine}   vs   ${theirs}`,
-    ]);
-    pair("Marking distance", lib.metres(curatedRow?.marking_distance_m),
-         otherRow ? lib.metres(otherRow.marking_distance_m) : null);
-    pair("Reaction", lib.reactionText(curatedRow),
-         otherRow ? lib.reactionText(otherRow) : null);
-  } else {
-    entries.push(["Marking distance", "\u2026"]);
-    entries.push(["Reaction", "\u2026"]);
-  }
-
-  // space created: the same quantity the explorer's stat shows, for whichever
-  // teammate is in question
-  if (cache && defenderId) {
-    const swap = swapSpec();
-    const spaceOf = (id) => (id
-      ? cache.combined([id], slot).value - cache.combined([id], slot, swap).value
-      : null);
-    const mine = spaceOf(teammateId);
-    const theirs = state.compare?.teammate ? spaceOf(state.compare.teammate) : null;
-    const show = (value) => {
-      if (value == null) return "\u2014";
-      const rounded = Math.abs(value) < 0.05 ? 0 : value;
-      return `${rounded > 0 ? "+" : ""}${NUMBER(rounded, 1)} m\u00b2`;
-    };
-    entries.push(["Space created",
-                  theirs == null ? show(mine) : `${show(mine)}   vs   ${show(theirs)}`]);
-  }
-  rows(node, entries);
-
-  const comparing = Boolean(other);
-  note.hidden = !comparing;
-  if (comparing) {
-    const curated = state.compare?.defender ? defenderId : teammateId;
-    note.textContent = `${who(curated)} and ${who(other)} `
-      + "\u2014 the play itself is unchanged.";
-  }
 }
 
 /**
@@ -2055,31 +2055,6 @@ function renderBundleRows(data, node, policy, provenance) {
   const panel = found.panel;
   const d = panel.dilemma || {};
   const s = panel.static || {};
-  if (isPublic()) {
-    // the arrows on the pitch already are the recommendation, so the card
-    // answers the one thing they cannot: whether this really is a dilemma.
-    // The equilibrium value, the certificate gap and the provenance string
-    // are the explorer's, and Details carries the method.
-    const pub = [
-      ["Dilemma", d.is_dilemma ? "yes" : "no"],
-      ["Defender", d.defender_mixed ? "mixed" : "one choice"],
-      ["Attack", d.attack_mixed ? "mixed" : "one choice"],
-    ];
-    if (s.static_attack_appeared != null) {
-      // the Results paragraph: an attack looks better against a defender held
-      // to his observed command than against one who may answer
-      pub.push(["Attack, defender frozen", NUMBER(s.static_attack_appeared, 2)]);
-      pub.push(["Attack, defender answers", NUMBER(s.static_attack_responsive, 2)]);
-      if (s.static_attack_loss_rel != null) {
-        pub.push(["Overstated by",
-                  `${NUMBER(100 * s.static_attack_loss_rel, 1)}%`]);
-      }
-    }
-    rows(node, pub);
-    policy.hidden = true;
-    provenance.hidden = true;
-    return;
-  }
   const entries = [
     ["Decision", `${panel.dt.toFixed(1)} s`
       + (found.exact ? "" : " \u00b7 nearest solved moment")],
@@ -2238,13 +2213,10 @@ function applyPublicChrome(showcase) {
   $("brand-name").textContent = showcase ? "Off-ball Movement" : "Off-the-ball value";
   $("brand-sub").hidden = showcase;
   $("btn-source").textContent = showcase ? "Details" : "Source";
-  for (const button of document.querySelectorAll("#collection .seg-btn")) {
-    const full = button.dataset.collection === "showcase"
-      ? "Submission showcase" : "Full explorer";
-    button.textContent = showcase
-      ? (button.dataset.collection === "showcase" ? "Showcase" : "Explorer")
-      : full;
-  }
+  // the public header is the match and Details. The explorer is not a mode a
+  // reader chooses between -- it is the research interface, reached with
+  // ?explorer=1 (or any ?scene=), and the switch back is there, not here.
+  $("collection-control").hidden = showcase;
   // the micro-headings describe the interface, not the football
   $("collection-label").hidden = showcase;
   $("showcase-label").hidden = showcase;
@@ -2268,8 +2240,9 @@ function applyPublicChrome(showcase) {
   }
 
   $("layers-row").hidden = showcase;
-  $("compare-bar").hidden = true;
-  $("show-layers").hidden = !showcase;
+  // two public layers, each where it means something -- no checkbox wall
+  $("show-layers").hidden = true;
+  $("space-control").hidden = !(showcase && state.mode === "counterfactual");
   $("roles-card").hidden = showcase;
   $("legend-card").hidden = !showcase;
   $("stat-card").hidden = showcase;
@@ -2633,42 +2606,6 @@ function renderDefenderField(index) {
                     { colour: lib.FLOW.colour, alpha: lib.FLOW.alpha });
 }
 
-function renderLegend() {
-  const list = $("legend-list");
-  if (!list) return;
-  list.replaceChildren();
-  if (!isPublic()) return;
-  const { scene } = state;
-  const roles = solverRolesAt(state.frame) || {};
-  const seen = new Set();
-  const order = ["runner", "ball carrier", "beneficiary", "defender"];
-  const entries = [];
-  for (const [playerId, solverRole] of Object.entries(roles)) {
-    const player = scene?.byId.get(playerId);
-    const name = PUBLIC_ROLE[solverRole];
-    if (!player || !name || seen.has(playerId)) continue;
-    seen.add(playerId);
-    entries.push({ player, solverRole, name });
-  }
-  entries.sort((a, b) => order.indexOf(a.solverRole) - order.indexOf(b.solverRole));
-  for (const entry of entries) {
-    const row = document.createElement("li");
-    const mark = document.createElement("span");
-    mark.className = `lgmark is-${SHAPE_CLASS[entry.solverRole] || "circle"}`;
-    mark.style.background = entry.solverRole === "defender"
-      ? (state.pitch?.roles?.defender || ROLE_COLOUR.defender)
-      : (state.pitch?.roles?.runner || ROLE_COLOUR.runner);
-    const who = document.createElement("span");
-    who.className = "lgname";
-    who.textContent = `${surnameOf(entry.player)}`;
-    const what = document.createElement("span");
-    what.className = "lgrole";
-    what.textContent = entry.name;
-    row.append(mark, who, what);
-    list.appendChild(row);
-  }
-}
-
 /** The marker shape each solver role is drawn with, as a CSS class. */
 const SHAPE_CLASS = {
   "ball carrier": "circle", runner: "diamond",
@@ -2860,7 +2797,11 @@ function hintsExpanded() {
 
 function bindControls() {
   for (const button of document.querySelectorAll("#view-toggle .seg")) {
-    button.addEventListener("click", () => { setView(button.dataset.view); render(); });
+    button.addEventListener("click", () => {
+      state.viewChosen = true;        // their choice outlives a mode change
+      setView(button.dataset.view);
+      render();
+    });
   }
   $("hints-toggle").addEventListener("click", () => {
     state.hintsOpen = !hintsExpanded();
@@ -2953,6 +2894,10 @@ function bindControls() {
   $("compare-reset").addEventListener("click", clearCompare);
   $("field-on").addEventListener("change", (event) => {
     state.field = event.target.checked;
+    render();
+  });
+  $("space-on").addEventListener("change", (event) => {
+    state.space = event.target.checked;
     render();
   });
 
@@ -3083,8 +3028,23 @@ function bindStory() {
   }
 }
 
+let sheetLoaded = false;
+
+/**
+ * The method sheet, fetched the first time it is opened.
+ *
+ * It is a page of prose that no first paint needs, so it is not in the shell.
+ * A failed fetch leaves the sheet's own links and footer, which is a usable
+ * fallback rather than an empty dialog.
+ */
 function openSheet(open) {
   $("source-sheet").hidden = !open;
+  if (!open || sheetLoaded) return;
+  sheetLoaded = true;
+  fetch("details.html")
+    .then((response) => (response.ok ? response.text() : null))
+    .then((html) => { if (html) $("sheet-body").innerHTML = html; })
+    .catch(() => { sheetLoaded = false; });
 }
 
 function togglePlay() {

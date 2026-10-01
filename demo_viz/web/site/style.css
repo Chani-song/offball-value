@@ -660,10 +660,8 @@ body.is-public select {
 }
 
 /* one voice, three sizes */
-body.is-public .mode-t { font-size: 14px; font-weight: 600; letter-spacing: 0; }
 body.is-public .mode { padding: 13px 16px; }
 body.is-public .scene-head h1 { font-size: 19px; font-weight: 600; }
-body.is-public #subtitle { font-size: 13px; color: #555555; }
 body.is-public .brand-name { font-size: 15px; font-weight: 600; letter-spacing: 0; }
 body.is-public .top { padding: 10px 18px; gap: 18px; }
 
@@ -690,34 +688,104 @@ body.is-public .top { padding: 10px 18px; gap: 18px; }
 .showlayers { padding: 10px 2px 2px; }
 .showlayers-body { display: flex; gap: 16px; flex-wrap: wrap; padding-top: 8px; }
 body.is-public .showlayers .label {
-  text-transform: none; letter-spacing: 0.01em; font-size: 11.5px;
-  font-weight: 600; color: var(--text2);
+  text-transform: none; letter-spacing: 0.01em; font-size: var(--t-body);
+  font-weight: 600; color: #555555;
 }
-body.is-public .check { font-size: 12px; }
 
 /* the sidebar carries one story, not a record of the pipeline */
 body.is-public .an-section h4 {
-  font-size: 11px; color: #9A9A9A; text-transform: none; letter-spacing: 0.01em;
+  font-size: var(--t-body); color: #555555; text-transform: none;
+  letter-spacing: 0.01em;
 }
-body.is-public .analysis dt { font-size: 12.5px; color: #555555; }
-body.is-public .analysis dd { font-size: 13px; }
+body.is-public .analysis dt { font-size: var(--t-body); color: #555555; }
+body.is-public .analysis dd { font-size: var(--t-body); }
 body.is-public .facts dt { text-transform: none; letter-spacing: 0.01em; }
-body.is-public .roleb { font-size: 12px; }
+body.is-public .roleb { font-size: var(--t-body); }
 /* one heading per card: the card title already names the mode, and a public
    card shows one section */
 body.is-public .an-section h4 { display: none; }
 body.is-public .an-section + .an-section { border-top: 0; margin-top: 2px; }
 
 /* --- Dilemma's comparison -------------------------------------------- */
-.comparebar {
-  display: flex; align-items: center; gap: 10px; padding: 9px 2px 2px;
-}
-.cmp-what { font-size: 12.5px; color: var(--text2); }
 body.is-public .an-section .pending { font-style: normal; }
 /* "5.8 m   vs   8.1 m": the curated value first, the compared one after */
 body.is-public #an-evidence-rows dd { white-space: pre-wrap; }
-body.is-public #an-evidence-note {
-  margin-top: 7px; font-size: 11.5px; color: #9A9A9A;
-  border-left: 2px solid var(--grid); padding-left: 8px;
-}
+
 body.is-public .player { cursor: pointer; }
+
+/* =======================================================================
+   The public demo, 2026-10-01: an interactive figure
+   -----------------------------------------------------------------------
+   Minimum sizes are a contract, not a suggestion. Nothing public is set
+   below 15px, numbers are 17px or more, and a crowded layout is solved by
+   moving things, never by shrinking the type.
+   ======================================================================= */
+body.is-public {
+  --t-body: 15px;      /* any public UI text          */
+  --t-name: 16px;      /* a player's name             */
+  --t-head: 17px;      /* a section heading           */
+  --t-num:  19px;      /* a number the reader is here for */
+  --t-title: 21px;     /* the match                   */
+}
+
+/* the panel is a working surface, not a margin */
+body.is-public .dock { flex: 0 0 clamp(330px, 27vw, 460px); gap: 12px; }
+body.is-public main { gap: 16px; padding: 16px 22px 18px 22px; }
+
+body.is-public .scene-head h1 { font-size: var(--t-title); font-weight: 600; }
+body.is-public #subtitle { font-size: var(--t-body); color: #555555; }
+body.is-public .mode-t { font-size: var(--t-head); font-weight: 600; }
+body.is-public .btn,
+body.is-public .seg,
+body.is-public .seg-btn,
+body.is-public select,
+body.is-public .check { font-size: var(--t-body); }
+body.is-public .readout { font-size: var(--t-body); }
+body.is-public .ticks i::after { font-size: var(--t-body); color: #555555; }
+
+/* --- the panel's one voice ------------------------------------------- */
+body.is-public .panel-h {
+  margin: 0 0 10px 0; font-size: var(--t-head); font-weight: 600;
+  color: var(--text); letter-spacing: 0;
+}
+body.is-public .card { padding: 14px 16px; }
+
+/* --- players: big rows, obviously clickable -------------------------- */
+.players ul { list-style: none; margin: 0; padding: 0; }
+.players li {
+  display: grid; grid-template-columns: 20px 1fr auto; gap: 12px;
+  align-items: center; padding: 10px 8px; border-radius: 8px;
+  font-size: var(--t-name); cursor: pointer; border: 1px solid transparent;
+}
+.players li:hover { background: #F4F4F4; }
+.players li.is-on { border-color: var(--grid); background: #F7F7F7; }
+.players li.is-compared { border-color: currentColor; background: #FFFFFF; }
+.players .lgname { color: var(--text); font-weight: 500; }
+.players .lgrole { color: #555555; font-size: var(--t-body); }
+.players .lgmark { width: 13px; height: 13px; justify-self: center; }
+.players .lgmark.is-circle { border-radius: 50%; }
+.players .lgmark.is-diamond { transform: rotate(45deg); }
+.players .lgmark.is-square { border-radius: 1px; }
+.players .lgmark.is-triangle {
+  width: 0; height: 0; background: none !important;
+  border-left: 7px solid transparent; border-right: 7px solid transparent;
+  border-bottom: 13px solid currentColor;
+}
+.panel-foot { margin-top: 12px; }
+
+/* --- metrics: the numbers are the point ------------------------------ */
+.metrics .m-row { padding: 9px 0; }
+.metrics .m-row + .m-row { border-top: 1px solid var(--grid); }
+.metrics .m-label { font-size: var(--t-body); color: #555555; }
+.metrics .m-value {
+  font-size: var(--t-num); font-weight: 600; color: var(--text);
+  font-variant-numeric: tabular-nums; margin-top: 2px;
+}
+.metrics .m-pair { display: flex; align-items: baseline; gap: 10px; }
+.metrics .m-was {
+  font-size: var(--t-body); color: #777777; font-variant-numeric: tabular-nums;
+}
+.metrics .m-was::before { content: "was "; }
+
+/* --- public tab strip ------------------------------------------------- */
+body.is-public .mode { padding: 14px 18px; }

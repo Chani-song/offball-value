@@ -5,6 +5,8 @@
 // opens Counterfactual or Game solution. They take the Pitch as an argument
 // rather than extending it, so the deferred module owns no prototype state.
 
+export { LabelLayout } from "./labels.js";
+import { LabelLayout } from "./labels.js";
 import { P } from "./palette.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -61,17 +63,12 @@ function leaveMarker(pts, reachM) {
   return [[ax + (bx - ax) * hi, ay + (by - ay) * hi], ...pts.slice(i + 1)];
 }
 
-/** Do two boxes overlap, once `gap` is added round the placed one? */
-function collides(box, placed, gap) {
-  return placed.some(([x0, y0, x1, y1]) =>
-    box[0] < x1 + gap && box[2] > x0 - gap && box[1] < y1 + gap && box[3] > y0 - gap);
-}
-
 export function drawActionArrows(pitch, origin, options, {
   colour = P.defender, length = 4.2, labelFloor = 0, labels = true,
-  widthOf = null, scale = 1, labelGap = 0, clearM = 0, placed = null,
+  widthOf = null, scale = 1, labelGap = 0, clearM = 0, layout = null,
 } = {}) {
   const k = Math.max(pitch.k, 0.62);
+  layout = layout || new LabelLayout(pitch);
   const group = pitch.add("passes", "g", { class: "action-arrows" });
   // labels are placed heaviest first, so the probability that matters most
   // keeps the spot it wants and lighter ones step aside -- upstream's order
@@ -80,7 +77,6 @@ export function drawActionArrows(pitch, origin, options, {
   // so it takes whatever the moves leave free (`o["prob"] - 1.0` there).
   const priority = (o) => (o.probability ?? 0) - (o.stop && o.rests ? 1 : 0);
   const order = [...options].sort((a, b) => priority(b) - priority(a));
-  const taken = placed || [];
 
   for (const option of order) {
     // the path wins; aim + length is the declared fallback
@@ -148,39 +144,21 @@ export function drawActionArrows(pitch, origin, options, {
     if (!labels || !option.label) continue;
     if (p != null && p < labelFloor) continue;
 
-    // deterministic placement: try the arrow tip, then step outward along the
-    // arrow, then to its two sides. The first position clear of every label
-    // already placed wins; nothing is hidden and nothing is random.
-    const size = 1.45 * k;
-    const w = option.label.length * size * 0.56;
-    const h = size * 1.15;
+    // every label goes through the layout engine: real rendered boxes,
+    // deterministic candidates, nothing written over a marker or another
+    // label, and a leader line when a crowded panel pushes one far out
     const ux = dx / n;
     const uy = dy / n;
-    let bx = 0;
-    let by = 0;
-    for (const [sx, sy] of [[0, 0], [1, 0], [2, 0], [0, 1], [0, -1],
-                            [1, 1], [1, -1], [3, 0], [0, 2], [0, -2]]) {
-      const ox = ux * sx * labelGap + -uy * sy * labelGap;
-      const oy = uy * sx * labelGap + ux * sy * labelGap;
-      const [cx, cy] = option.stop && option.rests ? pts[0] : [x1, y1];
-      const left = cx + ux * 1.0 * k + ox - (ux >= 0 ? 0 : w);
-      const top = cy + uy * 1.0 * k + oy - h / 2;
-      if (!collides([left, top, left + w, top + h], taken, labelGap)) {
-        bx = ox; by = oy; break;
-      }
-    }
-    // a resting stop is labelled on the player, not at the path's end
-    const [ax0, ay0] = option.stop && option.rests ? pts[0] : [x1, y1];
-    const lx = ax0 + ux * 1.0 * k + bx;
-    const ly = ay0 + uy * 1.0 * k + by;
-    taken.push([lx - (ux >= 0 ? 0 : w), ly - h / 2,
-                lx + (ux >= 0 ? w : 0), ly + h / 2]);
-    const text = pitch.add("labels", "text", {
-      x: lx, y: ly + 0.4 * k,
-      "text-anchor": ux >= 0 ? "start" : "end",
-      "font-size": size, fill: colour, class: "action-label",
-    }, option.label);
-    group.appendChild(text);
+    const anchorAt = option.stop && option.rests ? pts[0] : [x1, y1];
+    const text = layout.place(option.label, {
+      anchor: anchorAt,
+      // a resting command has no direction of its own, so its label is free to
+      // go wherever the moves leave room, starting away from the pitch centre
+      dir: option.stop && option.rests ? [ux || 1, uy] : [ux, uy],
+      size: 1.45 * k, colour, gap: Math.max(labelGap, 0.22 * k),
+    });
+    // `place` already put it in the labels layer, above every mark: moving it
+    // into the arrow group would drop it under the players again
   }
   return group;
 }
@@ -190,7 +168,7 @@ export function drawActionArrows(pitch, origin, options, {
  * from the ball to the target. Only ever drawn from a real release policy --
  * the five-ray explorer has its own geometry and its own layer.
  */
-export function drawPassChoice(pitch, from, to, label) {
+export function drawPassChoice(pitch, from, to, label, layout = null) {
   const k = Math.max(pitch.k, 0.62);
   const group = pitch.add("passes", "g", { class: "pass-choice" });
   const line = document.createElementNS(SVG_NS, "line");
@@ -209,10 +187,12 @@ export function drawPassChoice(pitch, from, to, label) {
   group.appendChild(circle(to[0], to[1], 0.55 * k,
                            { fill: "none", stroke: ink, "stroke-width": 0.22 * k }));
   if (label) {
-    group.appendChild(pitch.add("labels", "text", {
-      x: to[0], y: to[1] - 1.2 * k, "text-anchor": "middle",
-      "font-size": 1.45 * k, fill: ink, class: "pass-label",
-    }, label));
+    const engine = layout || new LabelLayout(pitch);
+    engine.place(label, {
+      anchor: to,
+      dir: [to[0] - from[0], to[1] - from[1]],
+      size: 1.45 * k, colour: ink, className: "pass-label", gap: 0.3 * k,
+    });
   }
   return group;
 }

@@ -644,3 +644,94 @@ that line.
 For S05 the curated defender is also the tightest marker of the runner
 (5.8 m against 8.1 m for the next-nearest, #8 Thalhammer), which is the
 evidence the mode exists to show.
+
+## 15. The label layout engine (2026-10-01)
+
+`js/labels.js`. One rule: no two visible labels overlap, and none sits on a
+player marker, a shirt number or a pass label — at every solved moment, in
+every public scene, in Focus and Full pitch, at every width.
+
+It is not a set of offsets tuned for a panel. Nothing in it knows which scene
+it is drawing.
+
+1. **Anchor** — the action's own point: an arrow's tip, or the player himself
+   for a command that ends at rest.
+2. **Candidates** — rings at `[1.15, 1.9, 2.8, 3.9, 5.2, 6.8]` marker units,
+   each swept through `[0, ∓28, ∓56, ∓84, ∓115, ∓145, 180]°` from the action's
+   own direction, so the first tries are where a reader would look.
+3. **Box** — `node.getBBox()` on the text already in the DOM, at the real font
+   size. Never a character count: "47%" and "Track runner 31%" are not the
+   same width per character.
+4. **Rejection** — anything overlapping a blocked box (every player marker and
+   shirt number, seeded by `blockPlayers`) or an already-placed label.
+5. **Choice** — the first survivor. If every ring is crowded, the
+   least-overlapping candidate is used rather than dropping the label: an
+   action without its percentage is worse than a tight one.
+6. **Leader** — a label past the second ring gets a thin line back to its
+   action, so a percentage is never orphaned.
+
+Placement order is upstream's: heaviest probability first, a resting stop last
+(`prob − 1.0`), so the number that matters keeps the spot it wants.
+
+**Text is never shrunk to resolve a collision.** The size that arrives is the
+size that is drawn; a crowded panel moves labels out or draws a leader.
+
+One layout serves a whole panel, so a defender's label steps aside from an
+attacker's and from every marker — not only from its own body's labels.
+
+**Tested by rendering, not by reading the source.**
+`tests/test_label_collisions.py` builds the site, opens it in headless Chrome,
+and walks 7 scenes × 3 solved moments × 2 views × 2 widths, reading back every
+label's real `getBBox()`. A layout that is clean in one screenshot is not what
+this asks for.
+
+## 16. Two interfaces, one build (2026-10-01)
+
+The public demo and the research explorer are the same build and the same
+data. `isPublic()` is the only switch, and the header no longer offers it:
+
+| | public | explorer |
+| --- | --- | --- |
+| reached by | the site root | `?explorer=1`, or any `?scene=` |
+| header | the match, and Details | collection, scene, effect, roles, Source |
+| panel | Players, then the open mode's numbers | the analysis sections |
+| layers | Space (Dilemma), Defender field (Nash, when data exist) | the row plus Advanced |
+| type | 15 px floor, 19 px numbers, 21 px match | the research sizes |
+
+Removing the switch from the header is not removing the explorer: every
+research control, layer and section is still built and still reachable, and a
+test holds both halves of that.
+
+**Modes load with their mode.** `panel.js` (the public panel), `compare.js`
+(the tracking evidence), `labels.js` (the layout engine), `grid.js` (the
+defender field), plus policy, the evaluation strip, the figure conventions,
+the arrow language, the OBSO stack, the pass model, the rankings and the
+chart. The initial load carries the shell and the index, and the guard in
+`tests/test_paper_story.py` was not raised for this pass.
+
+## 17. What the public demo is for (2026-10-01)
+
+An interactive figure, not a dashboard and not a figure viewer. Four tabs:
+
+**Play** — the landing state. The cast, the run, the timeline, nothing to read.
+
+**Dilemma** — why this is one. Figure 1's Follow / Stay from the solver's own
+0.6 s paths, the marking line, the run trail, and the space the run opened for
+the teammate, drawn from the influence cache. Clicking any other defender or
+attacker puts him beside the curated one: the marking line and the space field
+move onto him, and the three numbers show his value with the curated one
+beneath it. `Reset` or leaving the mode returns to the curated play.
+
+**Nash equilibrium** — what the game recommends. Focus opens by default
+(§15); the three solved moments are a picker, with nothing between them; the
+equilibrium options carry football names and their probabilities; the real
+next 0.6 s is grey dotted to a hollow marker; and the panel carries the
+Results paragraph — fixed defence, responding defence, overestimate.
+
+**Player evaluation** — how the actual choice compared: observed, rank,
+equilibrium probability, regret.
+
+**Comparison safety.** A comparison lives in `state.compare` and is never
+written to `state.selection`, so no solver probability, rank, regret or
+equilibrium value can move with it — those exist for the curated cast only.
+Entering Nash or Player evaluation clears it. Three tests hold that.

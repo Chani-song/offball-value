@@ -687,8 +687,10 @@ class StoryUiTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as out:
             root = Path(build(Path(out) / "site"))
-            names = [p.name for p in root.rglob("*.html")]
-        self.assertEqual(["index.html"], names)
+            names = sorted(p.name for p in root.rglob("*.html"))
+        # the page, and the method sheet it fetches when Details is opened --
+        # no harness, no bench, no debug page
+        self.assertEqual(["details.html", "index.html"], names)
 
 
 class SolverReleaseLibraryTests(unittest.TestCase):
@@ -784,10 +786,22 @@ class LazyComponentTests(unittest.TestCase):
         from demo_viz.web.build import ON_DEMAND
 
         head = self.app[:self.app.index("const $ =")]
-        for path in ON_DEMAND:
-            name = path.rsplit("/", 1)[-1]
+        deferred = {path.rsplit("/", 1)[-1] for path in ON_DEMAND
+                    if path.endswith(".js")}
+        self.assertIn("details.html", ON_DEMAND)
+        self.assertIn('fetch("details.html")', self.app)
+        for name in sorted(deferred):
             self.assertNotIn(name, head, name)
-            self.assertIn(f'import("./{name}")', self.app, name)
+            if f'import("./{name}")' in self.app:
+                continue
+            # or it is reached only through another deferred module, which is
+            # just as lazy: labels.js arrives with arrows.js
+            importers = {
+                other for other in deferred
+                if other != name
+                and f'"./{name}"' in (SITE / "js" / other).read_text()
+            }
+            self.assertTrue(importers, f"{name} is deferred but nothing fetches it")
 
     def test_the_strip_is_not_fetched_when_there_is_nothing_to_draw(self):
         """Today that means it is never fetched at all."""
@@ -1329,7 +1343,8 @@ class ScientificModeTests(unittest.TestCase):
         self.markup = (SITE / "index.html").read_text()
 
     def test_the_dilemma_shows_three_quantities_and_not_the_heuristic_score(self):
-        block = self.app[self.app.index("function renderEvidence"):]
+        panel = (SITE / "js" / "panel.js").read_text()
+        block = panel[panel.index("function dilemmaMetrics"):]
         block = block[:block.index("\n/**")]
         for label in ("Marking distance", "Reaction", "Space created"):
             self.assertIn(f'"{label}"', block, label)
@@ -1384,13 +1399,23 @@ class ScientificModeTests(unittest.TestCase):
         self.assertIn('fill: "none"', block)              # a hollow marker
 
     def test_the_static_comparison_is_shown_whole(self):
-        """Section 14: both values and the overstatement, not just the ratio."""
+        """Section 22: both values and the overestimate, not just the ratio."""
 
-        block = self.app[self.app.index("function renderBundleRows"):]
-        block = block[:block.index("\n/**")] if "\n/**" in block else block
-        for label in ("Attack, defender frozen", "Attack, defender answers",
-                      "Overstated by"):
+        panel = (SITE / "js" / "panel.js").read_text()
+        block = panel[panel.index("function nashMetrics"):]
+        block = block[:block.index("\n/**")]
+        for label in ("Fixed defence", "Responding defence", "Overestimate"):
             self.assertIn(f'"{label}"', block, label)
+
+    def test_the_nash_panel_reads_only_the_solved_panel(self):
+        """Nothing here may recompute or interpolate a solver value."""
+
+        panel = (SITE / "js" / "panel.js").read_text()
+        block = panel[panel.index("function nashMetrics"):]
+        block = block[:block.index("\n/**")]
+        self.assertIn("c.panelAt(data, c.state.frame)", block)
+        for banned in ("Math.", "interpolat", "* 0.5", "+ 1"):
+            self.assertNotIn(banned, block, banned)
 
     def test_no_selection_checks_block_exists(self):
         """S05 fails the isolation filter, so nothing may imply it was extracted."""
@@ -1398,3 +1423,78 @@ class ScientificModeTests(unittest.TestCase):
         for banned in ("Selection checks", "isolation", "passes the filter",
                        "extraction"):
             self.assertNotIn(banned, self.markup, banned)
+
+
+class PublicShellTests(unittest.TestCase):
+    """Sections 1-6: the public header, the panel, and the type sizes."""
+
+    def setUp(self):
+        self.app = (SITE / "js" / "app.js").read_text()
+        self.css = (SITE / "style.css").read_text()
+        self.markup = (SITE / "index.html").read_text()
+
+    def test_the_collection_switch_is_not_in_the_public_header(self):
+        block = self.app[self.app.index("function applyPublicChrome"):]
+        block = block[:block.index("\n/**")]
+        self.assertIn('$("collection-control").hidden = showcase', block)
+
+    def test_the_explorer_is_still_reachable(self):
+        """Removed from the header, not from the build."""
+
+        self.assertIn('params.get("explorer")', self.app)
+        self.assertIn('wanted.scene || wanted.explorer', self.app)
+        self.assertIn('data-collection="explorer"', self.markup)
+
+    def test_public_type_sizes_meet_the_lower_bounds(self):
+        block = self.css[self.css.index("body.is-public {"):]
+        block = block[:block.index("}")]
+        wanted = {"--t-body": 15, "--t-name": 16, "--t-head": 17,
+                  "--t-num": 17, "--t-title": 20}
+        for token, floor in wanted.items():
+            line = next(l for l in block.splitlines() if token in l)
+            size = float(re.search(r"(\d+(?:\.\d+)?)px", line).group(1))
+            self.assertGreaterEqual(size, floor, f"{token} is {size}px")
+
+    def test_no_public_rule_sets_text_below_the_floor(self):
+        """A 10-12px helper line is what the pass exists to remove."""
+
+        small = []
+        for rule in re.findall(r"body\.is-public[^{]*\{[^}]*\}", self.css):
+            for size in re.findall(r"font-size:\s*(\d+(?:\.\d+)?)px", rule):
+                if float(size) < 15:
+                    small.append(rule.split("{")[0].strip() + f" -> {size}px")
+        self.assertEqual([], small, "\n".join(small))
+
+    def test_the_panel_is_wide_enough_to_work_in(self):
+        rule = next(r for r in re.findall(r"body\.is-public \.dock \{[^}]*\}", self.css))
+        self.assertIn("clamp(330px", rule)
+
+    def test_the_player_rows_are_clickable_and_large(self):
+        rule = next(r for r in re.findall(r"\.players li \{[^}]*\}", self.css))
+        self.assertIn("cursor: pointer", rule)
+        self.assertIn("var(--t-name)", rule)
+
+
+class DilemmaInteractionTests(unittest.TestCase):
+    """Sections 9-12, 32: a click changes the pitch, not only a number."""
+
+    def setUp(self):
+        self.app = (SITE / "js" / "app.js").read_text()
+
+    def test_the_marking_line_follows_the_compared_defender(self):
+        block = self.app[self.app.index("const markers = state.compare?.defender"):]
+        block = block[:block.index("renderDilemma")]
+        self.assertIn("pitch.drawTether(scene, selection.runner, markers", block)
+        self.assertIn("pitch.drawGhost(scene, cache, markers", block)
+
+    def test_the_space_field_is_drawn_for_the_teammate_in_question(self):
+        block = self.app[self.app.index("const dilemmaSpace"):]
+        block = block[:block.index("} else if")]
+        self.assertIn("state.compare?.teammate", block)
+        self.assertIn("pitch.drawField(cache.grid", block)
+
+    def test_nash_opens_in_focus(self):
+        block = self.app[self.app.index("function setMode"):]
+        block = block[:block.index("\n/**")]
+        self.assertIn('setView("focus")', block)
+        self.assertIn("state.viewChosen", block)

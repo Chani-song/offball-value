@@ -1,0 +1,141 @@
+<!-- The method, fetched when Details is opened: it is a page of prose that
+     no first paint needs, and keeping it out of index.html keeps it out of
+     every visitor's initial load. -->
+    <dl class="facts">
+      <dt class="tag-measured">Measured</dt>
+      <dd>Player and ball positions from IDSSE Bundesliga tracking at 25 Hz.
+          <b>Available space</b> is the beneficiary's goal-weighted residual space under
+          the observed defensive configuration. <b>Space created</b> is that quantity
+          minus the same one with the selected defenders replaced by a no-reaction
+          baseline. Both come from <code>offball_value.goal_weighted_influence</code> on
+          the Fernández &amp; Bornn (2018) influence surface. The browser recomputes them
+          for whichever players you pick; they agree with the Python implementation to
+          float64 precision.</dd>
+
+      <dt class="tag-solver">Current solver</dt>
+      <dd><b>Completion proxy</b> is the pass model the solver runs: a 33-feature
+          logistic on kick-time positions, from Andrew's
+          <code>ExpectedPass</code> (<code>experimental_pass.json</code>). The artifact
+          declares <code>validation_status: experimental_proxy</code> and
+          <code>target_semantics: annotated_receipt_proxy</code>, and the loader refuses
+          it unless a caller explicitly opts in — the solver CLI passes
+          <code>--allow-proxy-labels</code>. <i>Its receiver labels are proxy annotations,
+          not validated pass-completion labels</i>, which is why it is called a proxy here
+          and never a pass success probability.<br>
+          <b>Positional threat</b> is the solver's own payoff component
+          (<code>positional_threat_all</code>), bounded to [0.2, 1]. Its own documentation
+          says the scale need not be a probability.<br>
+          <b>Release payoff</b> is what the solver uses as the terminal value of a release:
+          <code>legal × completion proxy × positional threat</code>. Legality is a gate —
+          an offside or off-pitch target keeps its completion proxy and takes a payoff of
+          zero. Offside uses the second-last defender of the whole defending side, and the
+          model is shown that whole side, as the pipeline's 2v1 wrapper does.<br>
+          All four are computed by the research implementation at export time and read
+          here; nothing is recomputed in the browser.</dd>
+
+      <dt class="tag-explanatory">Exploratory</dt>
+      <dd><b>Explore pass model</b> draws five targets — a 90° sector centred on the
+          attacking direction, cut into five 25 m rays and clipped to the pitch — from
+          whoever is within 2.5 m of the ball and at least 0.5 m closer to it than anyone
+          else. <b>These targets are the demo's own geometry, not the solver's action
+          space</b>: they were not generated, proposed or ranked by the research pipeline,
+          and they are never labelled best or recommended. The solver's own 18 releases are
+          built from the receiver instead (<code>receiver + direction × offset</code>) and
+          belong to states this demo does not publish. Pointing our rays at the real model
+          explores its response surface; the values are real, the targets are ours.</dd>
+
+      <dt class="tag-derived">Derived</dt>
+      <dd><b>Kinematic reachable area</b> is <code>action_space.solve_endpoint_motion</code>: one
+          constant acceleration for a chosen duration, then cruise, over a <b>2.0 s</b>
+          horizon at up to <b>9 m/s</b> and <b>3.5 m/s²</b>, tested on the 1 m action grid
+          and required to stay inside the pitch. It is where the motion model says a
+          player could arrive — <i>model reachability, not an observed or estimated
+          probability</i>. The repository also implements a richer steering model
+          (<code>steering_reachable</code>, tangential and normal control with
+          plant-and-cut) which the defender-response pipeline uses; it costs about 9.5 s
+          for one player at one frame, so it is not what this layer draws.</dd>
+
+      <dt class="tag-solver">Solver</dt>
+      <dd><b>Solver solution</b> is output from the exact 2v1 game in
+          <code>mit_ssac2027</code> — a separate repository and a batch job, never run in
+          the browser. Trajectories, equilibrium value, certificate gap and root action
+          probabilities are read from the artifact as produced, with the run's repository,
+          commit, state index and policy fingerprint attached. <b>No solver artifact exists
+          for any scene in this demo</b>, so every scene reports <i>Not computed for this
+          scene</i>. Nothing is substituted in its place: a generated trajectory is not a
+          solver result.</dd>
+
+      <dt class="tag-measured">Dilemma evidence</dt>
+      <dd><b>Marking distance</b> is <code>dynamic_marking.marking_sample</code>'s
+          <code>weighted_error_m</code>: the defender's distance from the goal-side
+          point 1.5 m in front of the runner's position 0.4 s ahead, plus twice any
+          displacement onto the wrong side of him, meaned over the frames from the
+          run's onset. Lower is tighter.<br>
+          <b>Reaction</b> is <code>role_logic.defender_reaction_index</code>: the
+          repository's kinematic onset detector where it fires, otherwise the first
+          moment he is moving at 1.5 m/s with his motion pointing at that goal-side
+          point, held for 0.40 s. "Already pursuing" means the rule was satisfied as
+          the run began.<br>
+          <b>Space created</b> is the beneficiary's goal-weighted residual space now,
+          minus the same with the defender in question held to his position at the
+          run's onset.<br>
+          <i>These describe a play. They are not how it was chosen:</i> the showcase's
+          runner, defender and teammate are a reviewer's labels, and the scenes were
+          picked by hand.</dd>
+
+      <dt class="tag-human">Human-reviewed</dt>
+      <dd><b>Submission showcase</b> is a curated set of 21 dilemma scenes. The
+          runner, defender and beneficiary shown when a case study opens are the
+          reviewers' own labels, and the <b>5/5</b>-style badge is what two reviewers
+          each scored it out of five — <i>human reviewer ratings, not a model output,
+          not a probability</i>. Five entries are solver-derived states whose tracking
+          is not part of this published demo; they are listed with that reason rather
+          than shown. The <b>Full explorer</b> collection keeps all 45 annotated
+          scenes.</dd>
+
+      <dt class="tag-human">Human</dt>
+      <dd>Which players are runner, defender and beneficiary comes from manual
+          annotation of 45 scenes (<code>shot_annotations.xlsx</code>, effect
+          <i>strong</i> and <i>medium</i>). The notes are a reviewer's qualitative
+          comment, not a metric.</dd>
+
+      <dt class="tag-explanatory">Explanatory</dt>
+      <dd>The held defender is a what-if device, not a learned or optimised defensive
+          response — this repository has none. <b>Reacts most</b> is an exploratory
+          geometric heuristic on the goal-side marking target, not a research-pipeline
+          output. Run starts come from the repository's kinematic onset detector where
+          it fires, otherwise from a labelled acceleration cue.</dd>
+
+      <dt class="tag-explanatory">Not yet computed</dt>
+      <dd>The <b>Counterfactual</b> and <b>Evaluation</b> modes are built around
+          quantities the research code does not implement yet: the relative rank of
+          the observed action among feasible alternatives, its similarity to the
+          optimal action, regret against that optimum, the paired static/responsive
+          comparison on one scale, frame-by-frame player scoring and clip-level
+          aggregation. <i>None of these is estimated, approximated or stood in for
+          here.</i> Each field states its own reason, and a field with no value
+          cannot carry a number — the contract that produces this page refuses to
+          construct one. When the evaluation pipeline lands, the fields populate
+          from it with the producer's own definition version attached.<br>
+          The one <code>regret</code> that does exist in the repository belongs to a
+          different lineage — it compares defender options under the legacy OBSO
+          stack — and is deliberately not shown here as if it were this quantity.</dd>
+
+      <dt class="tag-muted">Legacy / reference diagnostic</dt>
+      <dd>An OBSO stack — pitch control × ball transition × a static EPV grid — is
+          implemented in this repository and still covered by its tests, but it is
+          <b>not part of the current solver's release payoff</b> and is no longer shown
+          in this interface. The version of the demo built around it is preserved on the
+          <code>backup/ssac-obso-demo</code> branch.</dd>
+
+      <dt class="tag-muted">Not shown</dt>
+      <dd>No calibrated xT, pass probability, dribble probability or learned threat
+          surface is drawn, because this repository does not produce one.</dd>
+    </dl>
+
+    <p class="sheet-links">
+      <a href="https://github.com/Chani-song/offball-value">Repository</a>
+      <a href="https://github.com/Chani-song/offball-value/blob/main/demo_viz/INTERACTIVE_REPORT.md">Explorer notes</a>
+      <a href="https://github.com/Chani-song/offball-value/blob/main/demo_viz/OVERNIGHT_REPORT.md">What the counterfactual measures</a>
+    </p>
+    

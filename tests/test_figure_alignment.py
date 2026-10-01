@@ -718,11 +718,32 @@ class LabelPlacementTests(unittest.TestCase):
             self.assertNotIn(banned, self.arrows, banned)
 
     def test_candidate_offsets_are_a_fixed_ordered_list(self):
-        self.assertIn("[[0, 0], [1, 0], [2, 0], [0, 1], [0, -1]", self.block)
+        """The engine's rings and turns, not offsets tuned for one panel."""
+
+        labels = (SITE / "js" / "labels.js").read_text()
+        self.assertIn("const RINGS = [", labels)
+        self.assertIn("const TURNS = [0, -28, 28", labels)
+        for banned in ("Math.random", "Date.now"):
+            self.assertNotIn(banned, labels, banned)
 
     def test_a_label_keeps_clear_of_the_ones_already_placed(self):
-        self.assertIn("collides(", self.block)
+        labels = (SITE / "js" / "labels.js").read_text()
+        self.assertIn("get obstacles()", labels)
+        self.assertIn("this.blocked.concat(this.placed)", labels)
         self.assertIn("labelGap", self.block)
+
+    def test_the_box_is_measured_not_estimated(self):
+        """A character count is wrong for "47%" against "Track runner 31%"."""
+
+        labels = (SITE / "js" / "labels.js").read_text()
+        self.assertIn("node.getBBox()", labels)
+
+    def test_a_label_is_never_shrunk_to_fit(self):
+        labels = (SITE / "js" / "labels.js").read_text()
+        place = labels[labels.index("  place(text, {"):]
+        # the size that arrives is the size that is drawn
+        self.assertIn('"font-size": size', place)
+        self.assertNotIn("size *", place.split('"font-size": size')[0])
 
     def test_heaviest_first_and_a_resting_stop_last(self):
         """Upstream places by `prob - 1.0` for a stop at rest."""

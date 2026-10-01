@@ -67,7 +67,10 @@ def build(out: Path, data_dir: Path = WEB_DATA, clean: bool = True,
 #: opened, so counting them in the first load would overstate it.
 ON_DEMAND = ("js/policy.js", "js/evalstrip.js", "js/figure.js",
              "js/arrows.js", "js/obso.js", "js/release.js",
-             "js/ranking.js", "js/chart.js", "js/compare.js", "js/grid.js")
+             "js/ranking.js", "js/chart.js", "js/compare.js", "js/grid.js",
+             "js/panel.js", "js/labels.js",
+             # the method sheet: prose, fetched when Details is opened
+             "details.html")
 
 
 def report(out: Path) -> str:

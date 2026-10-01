@@ -249,14 +249,16 @@ class NoPassModelClaimTests(unittest.TestCase):
     def test_obso_is_only_mentioned_as_a_legacy_diagnostic(self):
         """If the public page names OBSO at all, it must disown it."""
 
-        markup = (SITE / "index.html").read_text()
+        markup = ((SITE / "index.html").read_text()
+                  + (SITE / "details.html").read_text())
         for match in re.finditer(r"OBSO", markup):
             window = markup[max(0, match.start() - 400):match.end() + 400]
             self.assertIn("Legacy / reference diagnostic", window)
             self.assertIn("not part of the current solver", window)
 
     def test_nothing_public_is_labelled_xt(self):
-        markup = (SITE / "index.html").read_text()
+        markup = ((SITE / "index.html").read_text()
+                  + (SITE / "details.html").read_text())
         self.assertNotIn("xT threat", markup)
         self.assertNotIn("xT surface", markup)
         for match in re.finditer(r"xT", markup):
@@ -264,13 +266,15 @@ class NoPassModelClaimTests(unittest.TestCase):
             self.assertIn("No calibrated", window)
 
     def test_the_fan_is_described_as_the_demo_own_geometry(self):
-        markup = (SITE / "index.html").read_text()
+        markup = ((SITE / "index.html").read_text()
+                  + (SITE / "details.html").read_text())
         self.assertIn("Explore pass model", markup)
         self.assertIn("not the solver", markup)
         self.assertIn("never labelled best or recommended", markup)
 
     def test_the_source_panel_explains_the_current_solver_chain(self):
-        markup = (SITE / "index.html").read_text()
+        markup = ((SITE / "index.html").read_text()
+                  + (SITE / "details.html").read_text())
         for phrase in ("Completion proxy", "Positional threat", "Release payoff",
                        "experimental_proxy", "--allow-proxy-labels"):
             self.assertIn(phrase, markup, phrase)
@@ -345,7 +349,8 @@ class CandidateConstantTests(unittest.TestCase):
             self.assertIn(name, source, name)
 
     def test_the_layer_is_off_by_default(self):
-        markup = (SITE / "index.html").read_text()
+        markup = ((SITE / "index.html").read_text()
+                  + (SITE / "details.html").read_text())
         match = re.search(r'<input type="checkbox" data-layer="passes"([^>]*)>', markup)
         self.assertIsNotNone(match, "the Candidate passes layer is missing")
         self.assertNotIn("checked", match.group(1))
@@ -357,7 +362,8 @@ class CandidateConstantTests(unittest.TestCase):
         The version of the demo built around it is on backup/ssac-obso-demo.
         """
 
-        markup = (SITE / "index.html").read_text()
+        markup = ((SITE / "index.html").read_text()
+                  + (SITE / "details.html").read_text())
         options = re.findall(r'<option value="([a-z]+)"', markup)
         self.assertEqual(["space", "gain"], options)
         self.assertNotIn(">OBSO threat<", markup)
