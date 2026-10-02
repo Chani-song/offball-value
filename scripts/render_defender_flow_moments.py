@@ -59,7 +59,8 @@ MM = 1 / 25.4
 MESH = 0.25                     # m, the interpolation mesh
 SPACING = 0.8                   # m, streamplot's cell: about the closest two lines come
 LW_MIN, LW_MAX = 0.35, 1.1      # pt, a line where the average move is ~0 .. the longest of the three panels
-ARROW = 0.65                    # streamplot arrowsize: a head 3.2 pt long, smaller than Figure 1's on these thin lines
+ARROW = 0.9                     # streamplot arrowsize: an open chevron ~3 pt long and wide (2026-10-01; was 0.65 for
+                                # the filled head) -- smaller than Figure 1's on these thin lines
 COLOR = st.DEFENCE
 FRAME, FRAME_LW = "#8C8C8C", 0.8    # Figure 2 v4's panel frames
 

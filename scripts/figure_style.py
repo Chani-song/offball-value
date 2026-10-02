@@ -147,8 +147,12 @@ def key_hollow(ax, xy, role, color=MUTED, lw=0.8, z=6.5):
     ax.plot(*xy, m, ms=ms, mfc="none", mec=color, mew=lw, zorder=z)
 
 
+OTHER_ALPHA = 0.5       # players outside the game: their team's colour at 50% opacity (2026-10-01, the team: at full
+                         # colour they drew the eye; the 45% tint before that read as blurred)
+
+
 def other_player(ax, xy, side, z=3):
-    ax.plot(*xy, "o", ms=OTHER_D, color=TEAM[side], mec=PAGE, mew=0.5, zorder=z)
+    ax.plot(*xy, "o", ms=OTHER_D, color=TEAM[side], mec=PAGE, mew=0.5, alpha=OTHER_ALPHA, zorder=z)
 
 
 def ball(ax, xy, z=8.5):
@@ -172,7 +176,12 @@ BALL_DASH = (5.0, 2.8)           # pt on / off, the same at every width (divided
                                  # matplotlib scales a dash pattern by the line width)
 REAL_LW = 0.8                    # pt, a real (tracked) move shown for comparison (Figure 2)
 REAL_DOTS = (0.9, 1.7)
-HEAD = ArrowStyle("-|>", head_length=0.5, head_width=0.2)
+HEAD_OPEN = True        # 2026-10-01, the team: every head an open chevron ">" (two strokes in the line's own width),
+                        # not a filled triangle; as wide as the old triangle, shorter (so the arms open ~30 deg)
+HEAD = (ArrowStyle("->", head_length=0.35, head_width=0.2) if HEAD_OPEN else
+        ArrowStyle("-|>", head_length=0.5, head_width=0.2))
+HEAD_LW_MAX = 1.0       # pt: an open head's strokes never wider than this (the team: from ~25% -- 1.2 pt -- up, chevrons
+                        # in the line's own width read as heavy); a wider line runs on into the chevron instead
 
 
 def head_scale(lw: float) -> float:
@@ -208,10 +217,11 @@ def _cut(pts, back):
 
 
 def arrow(ax, pts, color, lw, *, dashed=False, dots=False, alpha=1.0, z=6, mpp=None):
-    """A path (metres, drawn through every point given) ending in one small filled '-|>' head. The head
-    sits on the path's last head-length, pointing along that chord -- the last stretch of the move, not
-    its last tracking step. The shaft stops a little inside the head, so the head's tip is never widened
-    by the line's butt end. Returns the head's tip."""
+    """A path (metres, drawn through every point given) ending in one small head (HEAD: an open chevron since
+    2026-10-01, before that a filled '-|>'). The head sits on the path's last head-length, pointing along
+    that chord -- the last stretch of the move, not its last tracking step. A filled head: the shaft stops a
+    little inside it, so its tip is never widened by the line's butt end; an open head: the shaft stops at
+    its base and the head's own stroke (the line's width) carries on to the tip. Returns the head's tip."""
     mpp = mpp or metres_per_point(ax)
     pts = [tuple(p) for p in pts]
     shaft, base = _cut(pts, head_length(lw) * mpp)
@@ -220,18 +230,23 @@ def arrow(ax, pts, color, lw, *, dashed=False, dots=False, alpha=1.0, z=6, mpp=N
     n = math.hypot(*u) or 1.0
     tuck = (base[0] + u[0] / n * 0.35 * head_length(lw) * mpp, base[1] + u[1] / n * 0.35 * head_length(lw) * mpp)
     ls = (0, (BALL_DASH[0] / lw, BALL_DASH[1] / lw)) if dashed else (0, REAL_DOTS) if dots else "-"
-    ax.add_line(Line2D(*zip(*(shaft + [tuck])), color=color, lw=lw, alpha=alpha, zorder=z, ls=ls,
-                       solid_capstyle="butt", dash_capstyle="butt", solid_joinstyle="round"))
-    ax.add_patch(FancyArrowPatch(base, tip, arrowstyle=HEAD, mutation_scale=head_scale(lw), lw=0.4,
-                                 color=color, alpha=alpha, shrinkA=0, shrinkB=0, zorder=z + 0.05,
-                                 joinstyle="miter"))
+    head_lw = min(lw, HEAD_LW_MAX) if HEAD_OPEN else 0.4
+    if HEAD_OPEN and lw > head_lw:
+        # the wide line runs on inside the chevron to where the chevron is as wide as the line
+        half = math.atan(HEAD.head_width / HEAD.head_length)
+        shaft, _ = _cut(pts, lw / 2 / math.tan(half) * mpp)
+    ax.add_line(Line2D(*zip(*(shaft if HEAD_OPEN else shaft + [tuck])), color=color, lw=lw, alpha=alpha, zorder=z,
+                       ls=ls, solid_capstyle="butt", dash_capstyle="butt", solid_joinstyle="round"))
+    ax.add_patch(FancyArrowPatch(base, tip, arrowstyle=HEAD, mutation_scale=head_scale(lw),
+                                 lw=head_lw, color=color, alpha=alpha, shrinkA=0, shrinkB=0,
+                                 zorder=z + 0.05, joinstyle="round" if HEAD_OPEN else "miter", capstyle="butt"))
     return tip
 
 
 def fig_arrow(fig, a, b, *, color=FAINT, lw=0.9):
     """An arrow in figure fractions (the tree's connectors, the attack direction): the same head."""
     fig.add_artist(FancyArrowPatch(a, b, transform=fig.transFigure, arrowstyle=HEAD,
-                                   mutation_scale=head_scale(lw), lw=lw, color=color, shrinkA=0, shrinkB=0,
+                                   mutation_scale=head_scale(lw), lw=min(lw, HEAD_LW_MAX) if HEAD_OPEN else lw, color=color, shrinkA=0, shrinkB=0,
                                    capstyle="butt", joinstyle="miter"))
 
 

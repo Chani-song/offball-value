@@ -134,6 +134,25 @@ def parse_args() -> argparse.Namespace:
                         "first version; 1.2 s 'Stop 22%%' and '47%%' then read as one phrase)")
     p.add_argument("--value-key", default="better start for the defender",
                    help="the background key's words after 'darker:' / 'lighter:'")
+    p.add_argument("--min-arrow", type=float, default=0.0,
+                   help="pt: a move showing less than this outside its player's marker is stretched until it shows "
+                        "this much (shape kept, length not to scale); 0 = every path to scale")
+    p.add_argument("--no-leader", nargs="*", default=[], metavar="DT|TEXT",
+                   help="that label goes only where it needs no leader line (within LEADER of what it names)")
+    p.add_argument("--two-line", nargs="*", default=[], metavar="DT|TEXT",
+                   help="that label on two lines, its last word (the %%) under the rest")
+    p.add_argument("--pass-under-moves", action="store_true",
+                   help="draw the ball's line under the players' moves (a dribble crossing it stays in front)")
+    p.add_argument("--straight", nargs="*", default=[], metavar="DT:ROLE:COMMAND",
+                   help="draw that move as a straight arrow along its --exit-angle (its path's curl dropped)")
+    p.add_argument("--stretch-to", nargs="*", default=[], metavar="DT:ROLE:COMMAND=PT",
+                   help="as --min-arrow for one move, with its own length, e.g. 0.0:runner:3=20")
+    p.add_argument("--exit-angle", nargs="*", default=[], metavar="DT:ROLE:COMMAND=DEG",
+                   help="turn that move about its player so it leaves his marker at DEG (0 toward goal, 90 up, -90 "
+                        "down), e.g. 1.2:defender:3=-90; ROLE with _ for spaces (ball_carrier)")
+    p.add_argument("--label-at", nargs="*", default=[], metavar="DT|TEXT=X,Y",
+                   help="pin the label with exactly this text in that moment's panel, centred at (X, Y) pitch metres "
+                        "(the others are placed around it), e.g. \"0.0|Defender=30.25,-7.55\"")
     p.add_argument("--attack-size", type=float, default=FS_KEY,
                    help="the 'attack' word, pt; its arrow scales with it")
     p.add_argument("--head-size", type=float, default=FS_PANEL,
@@ -211,6 +230,8 @@ class Placer:
     role names always last) and the one with the least total cost is drawn."""
 
     STEP, REACH, ORDERS = 0.15, 5.0, 60
+    dt = ""                                            # this panel's moment, "0.0" (set in draw_panel)
+    pins = {}                                          # label text -> centre (m), this panel's --label-at
     GAP = 0.0                                          # m round a placed label that later labels keep clear of
 
     def __init__(self, ax, renderer, m_per_pt):
@@ -241,12 +262,16 @@ class Placer:
         self.disc(tip, st.head_width(lw_pt) / 2 * self.mpp + 0.05)
 
     def add(self, rank, anchor, direction, text, style, leader):
+        key = text                                     # --label-at / --no-leader / --two-line name a label by its text
+        if (self.dt, key) in TWO_LINE:                 # "To goal 31%" -> "To goal" over "31%"
+            text = "\n".join(text.rsplit(" ", 1))
         t = self.ax.text(*anchor, text, ha="center", va="center", **style)
         ext = t.get_window_extent(self.r)
         pad = 2 * BOX_PAD * style["fontsize"] if "bbox" in style else 0.0
         px_to_m = self.mpp * 72 / self.ax.figure.dpi
         w, h = ext.width * px_to_m + pad * self.mpp + 0.12, ext.height * px_to_m + pad * self.mpp + 0.08
-        self.todo.append(dict(rank=rank, anchor=anchor, direction=direction, w=w, h=h, artist=t, leader=leader))
+        self.todo.append(dict(rank=rank, anchor=anchor, direction=direction, w=w, h=h, artist=t, leader=leader,
+                              key=key, near=(self.dt, key) in NO_LEADER))
 
     @staticmethod
     def _free(x0, y0, x1, y1, walls):
@@ -268,6 +293,8 @@ class Placer:
         inside = (x0 >= self.x0 + 0.1) & (x1 <= self.x1 - 0.1) & (y0 >= self.y0 + 0.1) & (y1 <= self.y1 - 0.1)
         gap = np.hypot(np.maximum.reduce([x0 - ax_, np.zeros_like(x0), ax_ - x1]),
                        np.maximum.reduce([y0 - ay_, np.zeros_like(y0), ay_ - y1]))
+        if item.get("near"):                           # --no-leader: only spots close enough to need no leader
+            inside = inside & (gap <= LEADER)
         off = np.hypot(self.di, self.dj)
         cos = np.where(off > 0, (self.di * dx + self.dj * dy) / np.where(off > 0, off, 1.0), 1.0)
         cost = gap + 0.5 * (1.0 - cos)                     # 0 straight ahead, +1 m right behind
@@ -311,6 +338,18 @@ class Placer:
         return total, out
 
     def place(self):
+        for item in [t for t in self.todo if t["key"] in self.pins]:
+            # a label pinned by --label-at: drawn where asked, a fixed obstacle for the others
+            cx, cy = self.pins[item["key"]]
+            box = (cx - item["w"] / 2, cy - item["h"] / 2, cx + item["w"] / 2, cy + item["h"] / 2)
+            item["artist"].set_position((cx, cy))
+            g = self.GAP
+            self.solid.append((box[0] - g, box[1] - g, box[2] + g, box[3] + g))
+            ex, ey = self._end(item["anchor"], box)
+            if item["leader"] and not item["near"] and math.dist(item["anchor"], (ex, ey)) > LEADER:
+                self.ax.plot([item["anchor"][0], ex], [item["anchor"][1], ey], color=item["leader"], lw=0.5,
+                             alpha=0.9, zorder=8, solid_capstyle="butt")
+            self.todo.remove(item)
         base = sorted(self.todo, key=lambda t: -t["rank"])
         names = [t for t in base if t["leader"] is None]            # role names: always after the numbers
         movable = [t for t in base if t["leader"] is not None]
@@ -318,7 +357,11 @@ class Placer:
         orders = [base] + [rng.sample(movable, len(movable)) + names for _ in range(self.ORDERS)]
         total, out = min((self._run(o) for o in orders), key=lambda r: r[0])
         if out is None:
-            raise SystemExit("no room for every label")
+            walls, stuck = np.array(self.solid, dtype=float).reshape(-1, 4), []
+            for item in base:                          # which label finds no spot even on its own
+                if self._search(item, walls, np.zeros((0, 4))) is None:
+                    stuck.append(item["key"])
+            raise SystemExit(f"no room for every label ({self.dt} s; no spot at all for: {stuck or 'none alone'})")
         for item, (_, centre, box, gap) in out:
             item["artist"].set_position(centre)
             if gap > LEADER and item["leader"]:
@@ -364,6 +407,57 @@ def clear_of(pts, role, mpp):
     return leave(pts, tuple(pts[0]), lambda u: (st.marker_edge(role, u) + st.MOVE_GAP) * mpp)
 
 
+# --min-arrow / --exit-angle (2026-10-01, the team's call): a move so short that it barely leaves its player's marker
+# (0.0 s runner back 3%: 0.33 m; 0.6 s defender toward ball 43%: 0.57 m) is stretched about its start until MIN_ARROW pt
+# of it show -- its shape kept, its length then not to scale -- and a move named in EXIT_ANGLE is turned about its
+# player so it leaves his marker at that angle (0 = toward goal, 90 = up, -90 = down: the 1.2 s defender's toward
+# ball 47% leaves at 4:30 under his momentum and is drawn leaving at 6 o'clock).
+MIN_ARROW = 0.0                         # pt, set in main
+LABEL_AT = {}                           # ("0.0", label text) -> (x, y) m, set in main from --label-at
+STRETCH_TO = {}                         # ("0.0", role, command) -> pt shown, overriding MIN_ARROW (--stretch-to)
+STRAIGHT = set()                        # ("0.6", role, command): drawn straight at its --exit-angle (--straight)
+NO_LEADER = set()                       # ("0.0", label text): placed close enough to its anchor to need no leader
+TWO_LINE = set()                        # ("0.0", label text): name over the % (--two-line)
+PASS_UNDER = False                      # --pass-under-moves: the ball's line under the players' moves
+EXIT_ANGLE = {}                         # ("1.2", role, command) -> degrees, set in main
+
+
+def visible_pt(pts, role, mpp):
+    shown = clear_of(pts, role, mpp)
+    return sum(math.dist(a, b) for a, b in zip(shown, shown[1:])) / mpp
+
+
+def drawn_path(s, o, mpp):
+    """(path drawn, stretch factor, turn in degrees) for a move -- the solver's own path unless MIN_ARROW or
+    EXIT_ANGLE apply to it."""
+    pts = [tuple(p) for p in o["path"]]
+    c, k, turn = pts[0], 1.0, 0.0
+    scale = lambda f: [(c[0] + (x - c[0]) * f, c[1] + (y - c[1]) * f) for x, y in pts]
+    least = STRETCH_TO.get((f"{s['dt']:.1f}", o["role"], o["command"]), MIN_ARROW)
+    if least > 0 and visible_pt(pts, o["role"], mpp) < least:
+        lo, hi = 1.0, 2.0
+        while visible_pt(scale(hi), o["role"], mpp) < least:
+            hi *= 2
+        for _ in range(40):
+            mid = (lo + hi) / 2
+            lo, hi = (mid, hi) if visible_pt(scale(mid), o["role"], mpp) < least else (lo, mid)
+        k, pts = hi, scale(hi)
+    want = EXIT_ANGLE.get((f"{s['dt']:.1f}", o["role"], o["command"]))
+    if want is not None and (f"{s['dt']:.1f}", o["role"], o["command"]) in STRAIGHT:
+        # --straight: a straight arrow leaving at that angle, as long as the path drawn above (its shape not kept)
+        L = sum(math.dist(a, b) for a, b in zip(pts, pts[1:]))
+        t = math.radians(want)
+        pts = [(c[0] + L * f * math.cos(t), c[1] + L * f * math.sin(t)) for f in np.linspace(0.0, 1.0, 25)]
+        return pts, k, want - math.degrees(math.atan2(o["path"][-1][1] - c[1], o["path"][-1][0] - c[0]))
+    if want is not None:
+        e = clear_of(pts, o["role"], mpp)[0]
+        t = math.radians(want) - math.atan2(e[1] - c[1], e[0] - c[0])
+        cs, sn = math.cos(t), math.sin(t)
+        pts = [(c[0] + (x - c[0]) * cs - (y - c[1]) * sn, c[1] + (x - c[0]) * sn + (y - c[1]) * cs) for x, y in pts]
+        turn = math.degrees(t)
+    return pts, k, turn
+
+
 # --defender-names: the solver's per-state names of the defender's commands (extract_panel_policy), in English
 DEFENDER_NAME = {"toward goal": "Toward goal", "toward ball": "Toward ball", "toward runner": "Toward runner"}
 DEFENDER_NAMES = "none"                 # set in main
@@ -372,6 +466,8 @@ DEFENDER_NAMES = "none"                 # set in main
 def draw_panel(ax, s: dict, first: bool, m_per_pt: float, renderer, drawn: dict):
     st.pitch(ax, *((BG_LINE, BG_LINE_LW) if PITCH_OVER_VALUE else ()))
     lab = Placer(ax, renderer, m_per_pt)
+    lab.pins = {text: xy for (t, text), xy in LABEL_AT.items() if t == f"{s['dt']:.1f}"}
+    lab.dt = f"{s['dt']:.1f}"
 
     for x, y, side in s["others"]:                 # everyone else: a smaller disc, his team's tint
         st.other_player(ax, (x, y), side, z=2)
@@ -410,6 +506,7 @@ def draw_panel(ax, s: dict, first: bool, m_per_pt: float, renderer, drawn: dict)
                     lw=max(1.0, 0.7 * lw), solid_capstyle="butt", zorder=z)
             lab.disc((ex, ey), half)
         else:
+            pts, stretch, turn = drawn_path(s, o, m_per_pt)
             shown = clear_of(pts, o["role"], m_per_pt)
             st.arrow(ax, shown, color, lw, z=z, mpp=m_per_pt)
             lab.head(pts[-1], lw)
@@ -436,8 +533,10 @@ def draw_panel(ax, s: dict, first: bool, m_per_pt: float, renderer, drawn: dict)
         lab.add(o["prob"] - (1.0 if at_rest else 0.0), pts[0] if at_rest else pts[-1], d, text,
                 pct_style(color), color)
         drawn["options"].append({"role": o["role"], "command": o["command"], "prob": o["prob"], "label": text,
-                                 "lw": lw, "path": pts, "stop": o["stop"], "rests": o["rests"],
+                                 "lw": lw, "path": o["path"], "stop": o["stop"], "rests": o["rests"],
                                  "drawn_from": None if o["stop"] else list(shown[0])})
+        if not o["stop"] and (stretch != 1.0 or turn):
+            drawn["options"][-1].update(drawn_path=pts, stretched=stretch, turned_deg=turn)
 
     # passes (2026-10-01, the user's call): the ball's line solid charcoal (Figure 1's), leaving the passer clear of
     # his marker, labelled "Pass NN%"; the receiver's run onto it in his colour, labelled "receive NN%" -- one joint
@@ -459,7 +558,7 @@ def draw_panel(ax, s: dict, first: bool, m_per_pt: float, renderer, drawn: dict)
             labels.append(f"receive {pct}")
         passer = "ball carrier" if s["passer"] is None else "ball carrier"
         line = clear_of([(bx, by), (tx, ty)], passer, m_per_pt)
-        st.arrow(ax, line, st.BALL_MOVE, lw, z=6, mpp=m_per_pt)
+        st.arrow(ax, line, st.BALL_MOVE, lw, z=4.9 if PASS_UNDER else 6, mpp=m_per_pt)
         lab.head((tx, ty), lw)
         lab.line(line, lw)
         (px, py) = line[0]
@@ -602,6 +701,33 @@ def main() -> None:
     for r in csv.DictReader(args.tracking.open(encoding="utf-8")):
         track[int(r["frame_id"])][r["object_id"]] = r
     scenes = [(dt, scene(p, track)) for dt, p in panels]
+    for dt, s in scenes:
+        s["dt"] = dt
+    global MIN_ARROW
+    MIN_ARROW = args.min_arrow
+    global PASS_UNDER
+    PASS_UNDER = args.pass_under_moves
+    for spec in args.no_leader:                    # DT|TEXT
+        t, text = spec.split("|", 1)
+        NO_LEADER.add((f"{float(t):.1f}", text))
+    for spec in args.two_line:                     # DT|TEXT
+        t, text = spec.split("|", 1)
+        TWO_LINE.add((f"{float(t):.1f}", text))
+    for spec in args.straight:                     # DT:ROLE:COMMAND
+        t, role, cmd = spec.split(":")
+        STRAIGHT.add((f"{float(t):.1f}", role.replace("_", " "), int(cmd)))
+    for spec in args.stretch_to:                   # DT:ROLE:COMMAND=PT, e.g. 0.0:runner:3=20
+        where, pt = spec.split("=")
+        t, role, cmd = where.split(":")
+        STRETCH_TO[(f"{float(t):.1f}", role.replace("_", " "), int(cmd))] = float(pt)
+    for spec in args.label_at:                     # DT|TEXT=X,Y, e.g. "0.0|Defender=30.25,-7.55"
+        where, xy = spec.rsplit("=", 1)
+        t, text = where.split("|", 1)
+        LABEL_AT[(f"{float(t):.1f}", text)] = tuple(float(v) for v in xy.split(","))
+    for spec in args.exit_angle:                   # DT:ROLE:COMMAND=DEGREES, e.g. 1.2:defender:3=-90
+        where, deg = spec.split("=")
+        t, role, cmd = where.split(":")
+        EXIT_ANGLE[(f"{float(t):.1f}", role.replace("_", " "), int(cmd))] = float(deg)
     grids = {k: value_grid(v) for k, v in (a.split("=", 1) for a in args.value_grids)}
     global PITCH_OVER_VALUE, BG_DARK_FOR, DEFENDER_NAMES
     DEFENDER_NAMES = args.defender_names

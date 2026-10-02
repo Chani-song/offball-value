@@ -95,9 +95,9 @@ options in its docstring and `--help`.
 7. **Figures and numbers.**
 
    ```bash
-   PYTHONPATH=andrew-passer2on1 python scripts/render_figure1_dilemma.py \
+   PYTHONPATH=andrew-passer2on1 python scripts/render_figure1_dilemma.py --title-size 12 \
      --output out/showcase_v1/figure1_S05/S05_figure1.png
-   python scripts/add_caption.py --input out/showcase_v1/figure1_S05/S05_figure1.png \
+   python scripts/add_caption.py --size 11.5 --margin-in 0.08 --input out/showcase_v1/figure1_S05/S05_figure1.png \
      --output out/showcase_v1/abstract_figures/S05_figure1_caption.png --number "Figure 1." \
      --text "An off-ball run creates a defensive dilemma: follow the runner or stay with the ball carrier."
    G=data/processed/showcase_v1/defender_grid_S05
@@ -109,6 +109,14 @@ options in its docstring and `--help`.
      --flow-grids $GRIDS --flow-color "#FF8000" --flow-alpha 0.4 \
      --defender-names short --label-gap 0.35 --title "" \
      --value-key "preferred defender position" --value-key-size 10 --head-size 12 --attack-size 10 \
+     --min-arrow 10 --stretch-to 0.0:runner:3=20 --exit-angle 1.2:defender:3=-90 0.6:defender:4=-143 \
+     --straight 0.6:defender:4 --pass-under-moves \
+     --label-at "0.0|To runner 30%=30.0,-5.35" "0.0|Defender=30.3,-8.0" "0.0|Stop 39%=30.22,-6.75" \
+       "0.0|3%=32.9,-1.92" "0.0|Dribble 100%=24.31,-10.02" "1.2|Dribble 70%=30.5,-5.15" \
+       "1.2|To ball 47%=35.0,-9.8" "1.2|Dribble 30%=31.9,-9.7" "1.2|Stop 22%=36.4,-7.95" \
+     --two-line "0.0|To goal 31%" "1.2|Dribble 30%" "1.2|Dribble 70%" "1.2|To ball 47%" "1.2|Stop 22%" \
+     --no-leader "0.0|Dribble 100%" "0.0|To goal 31%" "0.0|To runner 30%" "1.2|Dribble 30%" \
+       "1.2|Stop 22%" "1.2|11%" \
      --output out/showcase_v1/figure_multi/S05_figure2.png
    python scripts/add_caption.py --size 11.5 --input out/showcase_v1/figure_multi/S05_figure2.png \
      --output out/showcase_v1/abstract_figures/S05_figure2_caption.png --number "Figure 2." \
