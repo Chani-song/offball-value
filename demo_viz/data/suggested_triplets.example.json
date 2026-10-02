@@ -1,0 +1,197 @@
+{
+  "_comment": [
+    "EXAMPLE FILE - not research pipeline output.",
+    "Produced by demo_viz.core.role_logic.auto_triplet: for every attacker it",
+    "takes the opponents whose motion most resembles a reaction to that run,",
+    "and the teammate who gains the most goal-weighted residual space when",
+    "that opponent is replaced by a no-reaction baseline, then keeps the",
+    "triplet with the largest gain.",
+    "It exists so the app's Pipeline mode is testable before the research",
+    "pipeline emits triplets of its own. Drop a real file at",
+    "data/processed/pipeline_triplets.json and it takes priority."
+  ],
+  "generated_at": "2026-09-21T11:05:16",
+  "generator": "demo_viz.core.role_logic.auto_triplet",
+  "scenes": [
+    {
+      "clip_id": "J03WOH:shot_006_P1_1054",
+      "runner": [
+        "29"
+      ],
+      "defender": [
+        "18"
+      ],
+      "beneficiary": [
+        "3"
+      ],
+      "space_gain": 7.36,
+      "run_start_index": 97,
+      "run_start_method": "peak acceleration"
+    },
+    {
+      "clip_id": "J03WOH:shot_010_P1_1759",
+      "runner": [
+        "9"
+      ],
+      "defender": [
+        "8"
+      ],
+      "beneficiary": [
+        "29"
+      ],
+      "space_gain": 5.682,
+      "run_start_index": 13,
+      "run_start_method": "run onset detector"
+    },
+    {
+      "clip_id": "J03WOY:shot_002_P1_0580",
+      "runner": [
+        "9"
+      ],
+      "defender": [
+        "29"
+      ],
+      "beneficiary": [
+        "8"
+      ],
+      "space_gain": 8.522,
+      "run_start_index": 89,
+      "run_start_method": "run onset detector"
+    },
+    {
+      "clip_id": "J03WOY:shot_011_P2_0903",
+      "runner": [
+        "34"
+      ],
+      "defender": [
+        "23"
+      ],
+      "beneficiary": [
+        "5"
+      ],
+      "space_gain": 13.271,
+      "run_start_index": 36,
+      "run_start_method": "run onset detector"
+    },
+    {
+      "clip_id": "J03WPY:shot_018_P2_1375",
+      "runner": [
+        "9"
+      ],
+      "defender": [
+        "15"
+      ],
+      "beneficiary": [
+        "15"
+      ],
+      "space_gain": 5.304,
+      "run_start_index": 171,
+      "run_start_method": "peak acceleration"
+    },
+    {
+      "clip_id": "J03WMX:shot_001_P1_0102",
+      "runner": [
+        "6"
+      ],
+      "defender": [
+        "38"
+      ],
+      "beneficiary": [
+        "28"
+      ],
+      "space_gain": 6.248,
+      "run_start_index": 20,
+      "run_start_method": "run onset detector"
+    },
+    {
+      "clip_id": "J03WMX:shot_003_P1_0730",
+      "runner": [
+        "28"
+      ],
+      "defender": [
+        "25"
+      ],
+      "beneficiary": [
+        "24"
+      ],
+      "space_gain": 8.754,
+      "run_start_index": 40,
+      "run_start_method": "peak acceleration"
+    },
+    {
+      "clip_id": "J03WMX:shot_014_P2_1448",
+      "runner": [
+        "22"
+      ],
+      "defender": [
+        "7"
+      ],
+      "beneficiary": [
+        "4"
+      ],
+      "space_gain": 6.966,
+      "run_start_index": 11,
+      "run_start_method": "peak acceleration"
+    },
+    {
+      "clip_id": "J03WMX:shot_017_P2_1743",
+      "runner": [
+        "40"
+      ],
+      "defender": [
+        "37"
+      ],
+      "beneficiary": [
+        "2"
+      ],
+      "space_gain": 2.659,
+      "run_start_index": 10,
+      "run_start_method": "peak acceleration"
+    },
+    {
+      "clip_id": "J03WN1:shot_002_P1_0057",
+      "runner": [
+        "9"
+      ],
+      "defender": [
+        "30"
+      ],
+      "beneficiary": [
+        "25"
+      ],
+      "space_gain": 9.625,
+      "run_start_index": 32,
+      "run_start_method": "run onset detector"
+    },
+    {
+      "clip_id": "J03WN1:shot_007_P1_1361",
+      "runner": [
+        "30"
+      ],
+      "defender": [
+        "11"
+      ],
+      "beneficiary": [
+        "5"
+      ],
+      "space_gain": 12.08,
+      "run_start_index": 64,
+      "run_start_method": "run onset detector"
+    },
+    {
+      "clip_id": "J03WN1:shot_014_P1_2696",
+      "runner": [
+        "11"
+      ],
+      "defender": [
+        "5"
+      ],
+      "beneficiary": [
+        "8"
+      ],
+      "space_gain": 7.683,
+      "run_start_index": 119,
+      "run_start_method": "run onset detector"
+    }
+  ]
+}

@@ -1,0 +1,64 @@
+<!doctype html>
+<!-- Latency harness: not published. Run by demo_viz/web/validate.py --bench.
+     The scene payloads are inlined and all work is synchronous, because Chrome's
+     virtual-time mode freezes the clock during async work and would report zero. -->
+<html><head><meta charset="utf-8"><title>bench</title></head>
+<body><pre id="out">running</pre>
+<script type="module">
+import { InfluenceCache } from "./js/influence.js";
+import { rankBeneficiaries, rankDefenders } from "./js/ranking.js";
+
+const PLAN = JSON.parse(document.getElementById("plan").textContent);
+
+function timed(fn, runs) {
+  fn();                                   // warm up / pay one-off costs
+  const start = performance.now();
+  for (let i = 0; i < runs; i += 1) fn();
+  return (performance.now() - start) / runs;
+}
+
+const rows = [];
+for (const entry of PLAN.scenes) {
+  const t0 = performance.now();
+  const scene = JSON.parse(entry.json);
+  scene.byId = new Map(scene.players.map((p) => [p.id, p]));
+  scene.flip = scene.attacking_direction < 0;
+  scene.attackers = scene.players.filter((p) => p.side === "attack");
+  scene.defenders = scene.players.filter((p) => p.side === "defend");
+  const parsed = performance.now() - t0;
+
+  const t1 = performance.now();
+  const cache = new InfluenceCache(scene, { every: 5 });
+  const built = performance.now() - t1;
+
+  const attackers = scene.attackers.filter((p) => !p.gk);
+  const defenders = scene.defenders.filter((p) => !p.gk);
+  const runner = attackers[0].id;
+  const freeze = (scene.onsets[runner] || { index: 0 }).index;
+  const slot = cache.slotFor(freeze);
+
+  // the first residual pays for every player's influence surface
+  const t2 = performance.now();
+  cache.combined([attackers[1].id], slot,
+                 [{ playerId: defenders[0].id, freezeIndex: freeze, mode: "hold" }]);
+  const firstResidual = performance.now() - t2;
+
+  let i = 0;
+  const roleSwitch = timed(() => {
+    i += 1;
+    cache.combined([attackers[i % attackers.length].id], slot,
+                   [{ playerId: defenders[i % defenders.length].id,
+                      freezeIndex: freeze, mode: "hold" }]);
+  }, 40);
+  const rankD = timed(() => rankDefenders(scene, runner, freeze), 5);
+  const rankB = timed(() => rankBeneficiaries(
+    cache, scene, runner, [defenders[0].id], freeze, slot), 3);
+
+  rows.push({
+    scene_id: scene.scene_id, parse_ms: parsed, cache_ms: built,
+    first_residual_ms: firstResidual, role_switch_ms: roleSwitch,
+    rank_defenders_ms: rankD, rank_beneficiaries_ms: rankB,
+  });
+}
+document.getElementById("out").textContent = JSON.stringify({ rows });
+</script></body></html>

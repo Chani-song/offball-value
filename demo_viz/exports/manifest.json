@@ -1,0 +1,281 @@
+{
+  "generated_at": "2026-09-21T02:46:03-0400",
+  "inputs": {
+    "idsse_dir": "/Users/chanisong/idsse_shots/idsse-data",
+    "annotations_xlsx": "/Users/chanisong/Research/offball_demo/shot_annotations.xlsx",
+    "clip_dir": "/Users/chanisong/idsse_shots/output/ALL_SHOT_CLIPS"
+  },
+  "scenes": [
+    {
+      "scene_id": "J03WOH:shot_006_P1_1054",
+      "stem": "preview",
+      "source": "annotation",
+      "effect": "strong",
+      "title": "Fortuna Düsseldorf vs SSV Jahn Regensburg",
+      "roles": {
+        "runner": [
+          "7"
+        ],
+        "defender": [
+          "11"
+        ],
+        "beneficiary": [
+          "34"
+        ]
+      },
+      "moments": {
+        "shot": 0.0,
+        "onset": -2.88,
+        "reaction": -0.4,
+        "space": -1.4,
+        "beneficiary": 1.6
+      },
+      "moment_methods": {
+        "onset": "run_onset.detect_kinematic_run_onsets",
+        "reaction": "demo_viz geometric_pursuit_rule on dynamic_marking goal-side target"
+      },
+      "beat_adjustments": {
+        "space": 1.55
+      },
+      "scores": {
+        "value_gain_peak": 4.19,
+        "beneficiary_residual_peak": 34.415,
+        "beneficiary_residual_start": 11.77
+      },
+      "window_frames": [
+        36174,
+        36449
+      ],
+      "video": "/Users/chanisong/idsse_shots/output/ALL_SHOT_CLIPS/J03WOH_shot_006_P1_1054.mp4",
+      "files": [
+        "/Users/chanisong/Research/offball_demo/offball-value/demo_viz/exports/preview_frame.png",
+        "/Users/chanisong/Research/offball_demo/offball-value/demo_viz/exports/preview_beat_0_play.png",
+        "/Users/chanisong/Research/offball_demo/offball-value/demo_viz/exports/preview_beat_1_runner.png",
+        "/Users/chanisong/Research/offball_demo/offball-value/demo_viz/exports/preview_beat_2_defender.png",
+        "/Users/chanisong/Research/offball_demo/offball-value/demo_viz/exports/preview_beat_3_space.png",
+        "/Users/chanisong/Research/offball_demo/offball-value/demo_viz/exports/preview_beat_4_beneficiary.png",
+        "/Users/chanisong/Research/offball_demo/offball-value/demo_viz/exports/preview.mp4",
+        "/Users/chanisong/Research/offball_demo/offball-value/demo_viz/exports/preview.gif",
+        "/Users/chanisong/Research/offball_demo/offball-value/demo_viz/exports/preview.html"
+      ]
+    },
+    {
+      "scene_id": "J03WOH:shot_010_P1_1759",
+      "stem": "J03WOH_shot_010_P1_1759",
+      "source": "annotation",
+      "effect": "strong",
+      "title": "Fortuna Düsseldorf vs SSV Jahn Regensburg",
+      "roles": {
+        "runner": [
+          "10",
+          "7"
+        ],
+        "defender": [
+          "23",
+          "11"
+        ],
+        "beneficiary": [
+          "9"
+        ]
+      },
+      "moments": {
+        "shot": 0.0,
+        "onset": -6.36,
+        "reaction": -5.08,
+        "space": -3.0,
+        "beneficiary": -5.0
+      },
+      "moment_methods": {
+        "onset": "run_onset.detect_kinematic_run_onsets",
+        "reaction": "run_onset.detect_kinematic_run_onsets"
+      },
+      "beat_adjustments": {
+        "beneficiary": 2.33
+      },
+      "scores": {
+        "value_gain_peak": 2.237,
+        "beneficiary_residual_peak": 11.681,
+        "beneficiary_residual_start": 11.681
+      },
+      "window_frames": [
+        53792,
+        54067
+      ],
+      "video": "/Users/chanisong/idsse_shots/output/ALL_SHOT_CLIPS/J03WOH_shot_010_P1_1759.mp4",
+      "files": [
+        "/Users/chanisong/Research/offball_demo/offball-value/demo_viz/exports/J03WOH_shot_010_P1_1759_frame.png",
+        "/Users/chanisong/Research/offball_demo/offball-value/demo_viz/exports/J03WOH_shot_010_P1_1759_beat_0_play.png",
+        "/Users/chanisong/Research/offball_demo/offball-value/demo_viz/exports/J03WOH_shot_010_P1_1759_beat_1_runner.png",
+        "/Users/chanisong/Research/offball_demo/offball-value/demo_viz/exports/J03WOH_shot_010_P1_1759_beat_2_defender.png",
+        "/Users/chanisong/Research/offball_demo/offball-value/demo_viz/exports/J03WOH_shot_010_P1_1759_beat_3_space.png",
+        "/Users/chanisong/Research/offball_demo/offball-value/demo_viz/exports/J03WOH_shot_010_P1_1759_beat_4_beneficiary.png",
+        "/Users/chanisong/Research/offball_demo/offball-value/demo_viz/exports/J03WOH_shot_010_P1_1759_beat_5_exploit.png",
+        "/Users/chanisong/Research/offball_demo/offball-value/demo_viz/exports/J03WOH_shot_010_P1_1759.mp4",
+        "/Users/chanisong/Research/offball_demo/offball-value/demo_viz/exports/J03WOH_shot_010_P1_1759.gif",
+        "/Users/chanisong/Research/offball_demo/offball-value/demo_viz/exports/J03WOH_shot_010_P1_1759.html"
+      ]
+    },
+    {
+      "scene_id": "J03WOY:shot_002_P1_0580",
+      "stem": "J03WOY_shot_002_P1_0580",
+      "source": "annotation",
+      "effect": "strong",
+      "title": "Fortuna Düsseldorf vs F.C. Hansa Rostock",
+      "roles": {
+        "runner": [
+          "23"
+        ],
+        "defender": [
+          "6",
+          "34"
+        ],
+        "beneficiary": [
+          "9"
+        ]
+      },
+      "moments": {
+        "shot": 0.0,
+        "onset": -3.32,
+        "reaction": -1.92,
+        "space": 0.0,
+        "beneficiary": 1.8
+      },
+      "moment_methods": {
+        "onset": "run_onset.detect_kinematic_run_onsets",
+        "reaction": "demo_viz geometric_pursuit_rule on dynamic_marking goal-side target"
+      },
+      "beat_adjustments": {},
+      "scores": {
+        "value_gain_peak": 0.76,
+        "beneficiary_residual_peak": 27.159,
+        "beneficiary_residual_start": 13.25
+      },
+      "window_frames": [
+        24325,
+        24600
+      ],
+      "video": "/Users/chanisong/idsse_shots/output/ALL_SHOT_CLIPS/J03WOY_shot_002_P1_0580.mp4",
+      "files": [
+        "/Users/chanisong/Research/offball_demo/offball-value/demo_viz/exports/J03WOY_shot_002_P1_0580_frame.png",
+        "/Users/chanisong/Research/offball_demo/offball-value/demo_viz/exports/J03WOY_shot_002_P1_0580_beat_0_play.png",
+        "/Users/chanisong/Research/offball_demo/offball-value/demo_viz/exports/J03WOY_shot_002_P1_0580_beat_1_runner.png",
+        "/Users/chanisong/Research/offball_demo/offball-value/demo_viz/exports/J03WOY_shot_002_P1_0580_beat_2_defender.png",
+        "/Users/chanisong/Research/offball_demo/offball-value/demo_viz/exports/J03WOY_shot_002_P1_0580_beat_3_space.png",
+        "/Users/chanisong/Research/offball_demo/offball-value/demo_viz/exports/J03WOY_shot_002_P1_0580_beat_4_beneficiary.png",
+        "/Users/chanisong/Research/offball_demo/offball-value/demo_viz/exports/J03WOY_shot_002_P1_0580.mp4",
+        "/Users/chanisong/Research/offball_demo/offball-value/demo_viz/exports/J03WOY_shot_002_P1_0580.gif",
+        "/Users/chanisong/Research/offball_demo/offball-value/demo_viz/exports/J03WOY_shot_002_P1_0580.html"
+      ]
+    },
+    {
+      "scene_id": "J03WOY:shot_011_P2_0903",
+      "stem": "J03WOY_shot_011_P2_0903",
+      "source": "annotation",
+      "effect": "strong",
+      "title": "F.C. Hansa Rostock vs Fortuna Düsseldorf",
+      "roles": {
+        "runner": [
+          "18"
+        ],
+        "defender": [
+          "25",
+          "15"
+        ],
+        "beneficiary": [
+          "34"
+        ]
+      },
+      "moments": {
+        "shot": 0.0,
+        "onset": -7.48,
+        "reaction": -7.48,
+        "space": -6.2,
+        "beneficiary": 1.8
+      },
+      "moment_methods": {
+        "onset": "run_onset.detect_kinematic_run_onsets",
+        "reaction": "run_onset.detect_kinematic_run_onsets"
+      },
+      "beat_adjustments": {
+        "onset": 0.58,
+        "reaction": 1.13
+      },
+      "scores": {
+        "value_gain_peak": 0.056,
+        "beneficiary_residual_peak": 15.495,
+        "beneficiary_residual_start": 12.247
+      },
+      "window_frames": [
+        122387,
+        122662
+      ],
+      "video": "/Users/chanisong/idsse_shots/output/ALL_SHOT_CLIPS/J03WOY_shot_011_P2_0903.mp4",
+      "files": [
+        "/Users/chanisong/Research/offball_demo/offball-value/demo_viz/exports/J03WOY_shot_011_P2_0903_frame.png",
+        "/Users/chanisong/Research/offball_demo/offball-value/demo_viz/exports/J03WOY_shot_011_P2_0903_beat_0_play.png",
+        "/Users/chanisong/Research/offball_demo/offball-value/demo_viz/exports/J03WOY_shot_011_P2_0903_beat_1_runner.png",
+        "/Users/chanisong/Research/offball_demo/offball-value/demo_viz/exports/J03WOY_shot_011_P2_0903_beat_2_defender.png",
+        "/Users/chanisong/Research/offball_demo/offball-value/demo_viz/exports/J03WOY_shot_011_P2_0903_beat_3_space.png",
+        "/Users/chanisong/Research/offball_demo/offball-value/demo_viz/exports/J03WOY_shot_011_P2_0903_beat_4_beneficiary.png",
+        "/Users/chanisong/Research/offball_demo/offball-value/demo_viz/exports/J03WOY_shot_011_P2_0903.mp4",
+        "/Users/chanisong/Research/offball_demo/offball-value/demo_viz/exports/J03WOY_shot_011_P2_0903.gif",
+        "/Users/chanisong/Research/offball_demo/offball-value/demo_viz/exports/J03WOY_shot_011_P2_0903.html"
+      ]
+    },
+    {
+      "scene_id": "J03WPY:shot_018_P2_1375",
+      "stem": "J03WPY_shot_018_P2_1375",
+      "source": "annotation",
+      "effect": "strong",
+      "title": "Fortuna Düsseldorf vs 1. FC Nürnberg",
+      "roles": {
+        "runner": [
+          "9",
+          "25"
+        ],
+        "defender": [
+          "4",
+          "13"
+        ],
+        "beneficiary": [
+          "11"
+        ]
+      },
+      "moments": {
+        "shot": 0.0,
+        "onset": -1.16,
+        "reaction": -1.16,
+        "space": 0.4,
+        "beneficiary": 0.6
+      },
+      "moment_methods": {
+        "onset": "demo_viz peak-acceleration cue (no detector onset in window)",
+        "reaction": "demo_viz geometric_pursuit_rule on dynamic_marking goal-side target"
+      },
+      "beat_adjustments": {
+        "reaction": 0.55
+      },
+      "scores": {
+        "value_gain_peak": 1.051,
+        "beneficiary_residual_peak": 13.879,
+        "beneficiary_residual_start": 3.985
+      },
+      "window_frames": [
+        134184,
+        134459
+      ],
+      "video": "/Users/chanisong/idsse_shots/output/ALL_SHOT_CLIPS/J03WPY_shot_018_P2_1375.mp4",
+      "files": [
+        "/Users/chanisong/Research/offball_demo/offball-value/demo_viz/exports/J03WPY_shot_018_P2_1375_frame.png",
+        "/Users/chanisong/Research/offball_demo/offball-value/demo_viz/exports/J03WPY_shot_018_P2_1375_beat_0_play.png",
+        "/Users/chanisong/Research/offball_demo/offball-value/demo_viz/exports/J03WPY_shot_018_P2_1375_beat_1_runner.png",
+        "/Users/chanisong/Research/offball_demo/offball-value/demo_viz/exports/J03WPY_shot_018_P2_1375_beat_2_defender.png",
+        "/Users/chanisong/Research/offball_demo/offball-value/demo_viz/exports/J03WPY_shot_018_P2_1375_beat_3_space.png",
+        "/Users/chanisong/Research/offball_demo/offball-value/demo_viz/exports/J03WPY_shot_018_P2_1375_beat_4_beneficiary.png",
+        "/Users/chanisong/Research/offball_demo/offball-value/demo_viz/exports/J03WPY_shot_018_P2_1375.mp4",
+        "/Users/chanisong/Research/offball_demo/offball-value/demo_viz/exports/J03WPY_shot_018_P2_1375.gif",
+        "/Users/chanisong/Research/offball_demo/offball-value/demo_viz/exports/J03WPY_shot_018_P2_1375.html"
+      ]
+    }
+  ]
+}

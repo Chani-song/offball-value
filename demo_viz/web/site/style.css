@@ -1,0 +1,921 @@
+:root {
+  --ink: #05090A;
+  --panel: #0C1315;
+  --grid: #24352C;
+  --text: #F4F6F3;
+  --text2: #A9B6AE;
+  --muted: #6B7A72;
+  --runner: #FF2D87;
+  --defender: #FFA62B;
+  --beneficiary: #5CE8F5;
+  --attack: #D9CFB8;
+  --defend: #5F7392;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--ink);
+  color: var(--text);
+  font: 13px/1.45 Helvetica, "Helvetica Neue", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+body { display: flex; flex-direction: column; overflow: hidden; }
+body.dragging { cursor: grabbing; user-select: none; }
+
+/* ------------------------------------------------------------------ top bar */
+/* A very wide screen should not stretch a 105 x 68 pitch into a letterbox,
+   so the whole layout is capped and centred. */
+.top, main {
+  width: 100%; max-width: 1840px; margin-inline: auto;
+}
+.top {
+  display: flex; align-items: flex-end; gap: 20px;
+  padding: 12px 20px 11px 20px; border-bottom: 1px solid var(--grid);
+  flex: 0 0 auto;
+}
+.brand { display: flex; flex-direction: column; line-height: 1.1; margin-right: 4px; }
+.brand-name { font-weight: 700; letter-spacing: -0.01em; }
+.brand-sub { color: var(--muted); font-size: 11px; }
+.control { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.control.grow { flex: 1 1 auto; }
+.control > label, .label {
+  color: var(--muted); font-size: 10px; font-weight: 700;
+  letter-spacing: 0.1em; text-transform: uppercase;
+}
+.row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.spacer { flex: 1 1 auto; }
+.muted { color: var(--muted); font-size: 11px; }
+
+select, .mini {
+  background: var(--ink); color: var(--text); border: 1px solid var(--grid);
+  border-radius: 7px; padding: 7px 10px; font: inherit; font-size: 12px;
+  min-width: 260px; max-width: 460px;
+}
+.mini { min-width: 0; padding: 4px 8px; font-size: 11px; }
+select:focus { outline: none; border-color: var(--text2); }
+
+.btn {
+  background: var(--panel); color: var(--text); border: 1px solid var(--grid);
+  border-radius: 7px; padding: 6px 11px; font: inherit; font-size: 12px;
+  font-weight: 600; cursor: pointer;
+}
+.btn:hover { border-color: var(--text2); }
+.btn.accent { color: var(--beneficiary); border-color: var(--beneficiary); }
+.btn.ghost { background: transparent; text-decoration: none; }
+.btn.small { padding: 5px 9px; font-size: 11px; }
+.btn.square { width: 38px; padding: 6px 0; text-align: center; }
+.btn.pill { border-radius: 999px; padding: 3px 12px; font-size: 11px; }
+.repo { align-self: center; color: var(--text2); }
+
+.segmented {
+  display: inline-flex; border: 1px solid var(--grid); border-radius: 8px;
+  overflow: hidden; background: var(--ink); flex: 0 0 auto;
+}
+.seg {
+  background: transparent; color: var(--muted); border: 0; cursor: pointer;
+  font: inherit; font-size: 11.5px; font-weight: 600; padding: 5px 11px;
+}
+.seg + .seg { border-left: 1px solid var(--grid); }
+.seg:hover { color: var(--text2); }
+.seg.is-on { background: var(--panel); color: var(--text); }
+
+.check { display: inline-flex; align-items: center; gap: 6px; color: var(--text2);
+         font-size: 12px; cursor: pointer; white-space: nowrap; }
+.check input { accent-color: var(--beneficiary); margin: 0; }
+
+/* -------------------------------------------------------------------- main */
+main {
+  flex: 1 1 auto; display: flex; gap: 14px; padding: 14px 20px 16px 20px;
+  min-height: 0;
+  /* The pitch is aspect-locked, so beyond this the card only grows letterbox.
+     1080p is unaffected; a 1440p screen stops stretching. */
+  max-height: 1090px;
+  /* Sit under the header rather than floating in the middle of a tall screen:
+     centring left a dead band above the pitch at 1440p. */
+  margin-block: 0 auto;
+}
+.pitch-card {
+  flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 9px;
+  background: var(--panel); border: 1px solid var(--grid); border-radius: 12px;
+  padding: 11px 13px 12px 13px;
+}
+.scene-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.scene-head { min-height: 26px; }
+.scene-head h1 { font-size: 17px; margin: 0; font-weight: 700; letter-spacing: -0.01em; }
+.scene-head p { margin: 0; color: var(--text2); font-size: 12.5px; }
+
+.pitch-wrap { position: relative; flex: 1 1 auto; min-height: 0; }
+.pitch-svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.player { cursor: grab; }
+.player .hit { cursor: grab; }
+.player.is-dragging { opacity: 0.4; }
+.shirt { pointer-events: none; font-weight: 700; user-select: none; }
+.pitch-label {
+  pointer-events: none; font-weight: 700; paint-order: stroke;
+  stroke: rgba(5, 9, 10, 0.72); stroke-width: 0.5px;
+}
+
+.timeline { display: flex; align-items: center; gap: 9px; }
+.timeline input[type=range] { width: 100%; accent-color: var(--beneficiary); }
+.track { position: relative; flex: 1 1 auto; }
+/* Marks on the scrubber are data, not pacing: a detected run start and the
+   annotated shot. They sit under the thumb and never intercept a drag. */
+.ticks { position: absolute; left: 0; right: 0; top: 50%; height: 16px;
+         margin-top: -8px; pointer-events: none; }
+.ticks i { position: absolute; top: 0; width: 2px; height: 16px; margin-left: -1px;
+           border-radius: 1px; opacity: 0.85; }
+.ticks i::after { content: attr(data-label); position: absolute; left: 4px; top: 1px;
+                  font-size: 9px; letter-spacing: 0.04em; color: var(--muted);
+                  white-space: nowrap; }
+.readout { font: 12px/1 ui-monospace, Menlo, monospace; color: var(--text2);
+           min-width: 72px; text-align: right; }
+.layers { display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+          padding-top: 2px; }
+/* the view select sits at the end of the row, and stays right-aligned if the
+   checkboxes wrap rather than dropping to a line of its own */
+.layers #wake-mode { margin-left: auto; }
+#passes-note { font-size: 11px; white-space: nowrap; }
+
+/* -------------------------------------------------------------------- dock */
+.dock {
+  flex: 0 0 clamp(316px, 23vw, 400px); display: flex; flex-direction: column;
+  gap: 11px; min-height: 0; overflow-y: auto; overflow-x: hidden;
+  scrollbar-width: thin;
+  justify-content: flex-start;
+}
+.card {
+  background: var(--panel); border: 1px solid var(--grid); border-radius: 12px;
+  padding: 11px 12px; flex: 0 0 auto;
+}
+.card.list { flex: 1 1 auto; overflow-y: auto; min-height: 60px; }
+.card.list.is-collapsed { flex: 0 0 auto; overflow: visible; min-height: 0; }
+.card.list.is-secondary { opacity: 0.72; }
+.card.list.is-secondary:hover, .card.list.is-secondary:focus-within { opacity: 1; }
+.disclosure {
+  display: flex; align-items: center; gap: 7px; width: 100%;
+  background: none; border: 0; padding: 0 0 2px 0; cursor: pointer;
+  color: inherit; font: inherit; text-align: left;
+}
+.disclosure .chev { color: var(--muted); font-size: 10px; width: 9px; }
+.disclosure:hover .label { color: var(--text2); }
+.disclosure .muted { margin-left: auto; }
+.card.notes { max-height: 132px; overflow-y: auto; }
+
+.group { border: 1px solid var(--grid); border-radius: 11px; padding: 9px; }
+.group.attack { background: rgba(217, 207, 184, 0.04); }
+.group.defence { background: rgba(95, 115, 146, 0.07); margin-top: 9px; }
+.group-label {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.09em;
+  text-transform: uppercase; margin-bottom: 7px;
+}
+.group.attack .group-label { color: var(--attack); }
+.group.defence .group-label { color: var(--defend); }
+
+.slot {
+  border: 1px dashed var(--grid); border-radius: 9px; padding: 7px 9px;
+  background: var(--ink); cursor: pointer;
+  transition: border-color .12s, background .12s, box-shadow .12s;
+}
+.slot:hover { border-color: var(--muted); }
+.slot.is-filled { border-style: solid; }
+.slot.is-armed { border-style: solid; background: rgba(255, 255, 255, 0.05); }
+#slot-runner.is-armed { border-color: var(--runner); box-shadow: 0 0 0 2px #FF2D8733; }
+#slot-beneficiary.is-armed { border-color: var(--beneficiary); box-shadow: 0 0 0 2px #5CE8F533; }
+#slot-defender.is-armed { border-color: var(--defender); box-shadow: 0 0 0 2px #FFA62B33; }
+/* while dragging: compatible slots wake up in their own colour, the rest
+   visibly stay out of play */
+.slot.is-droppable { border-style: solid; }
+#slot-runner.is-droppable { border-color: var(--runner); }
+#slot-beneficiary.is-droppable { border-color: var(--beneficiary); }
+#slot-defender.is-droppable { border-color: var(--defender); }
+.slot.is-blocked { opacity: 0.38; border-style: dashed; }
+.slot.is-over { background: rgba(255, 255, 255, 0.07); }
+#slot-runner.is-over { box-shadow: inset 0 0 0 2px var(--runner), 0 0 0 3px #FF2D8733; }
+#slot-beneficiary.is-over { box-shadow: inset 0 0 0 2px var(--beneficiary), 0 0 0 3px #5CE8F533; }
+#slot-defender.is-over { box-shadow: inset 0 0 0 2px var(--defender), 0 0 0 3px #FFA62B33; }
+.slot.is-swap { border-style: solid; border-color: var(--text2);
+                background: rgba(255, 255, 255, 0.06); }
+.drag-ghost.is-swap { background: var(--text2); }
+.slot-title {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.08em;
+  text-transform: uppercase; margin-bottom: 5px;
+}
+.slot-body { display: flex; flex-wrap: wrap; gap: 5px; min-height: 24px; align-items: center; }
+.slot-empty { color: var(--muted); font-size: 11px; }
+.swap-row { display: flex; justify-content: center; margin: 5px 0; }
+
+.chip {
+  display: inline-flex; align-items: center; gap: 6px; color: var(--ink);
+  border-radius: 6px; padding: 3px 5px 3px 8px; font-size: 11px; font-weight: 700;
+  white-space: nowrap; cursor: grab;
+}
+.chip-x { cursor: pointer; font-size: 13px; line-height: 11px; opacity: .6; }
+.chip-x:hover { opacity: 1; }
+
+.dock-meta { color: var(--muted); font-size: 11px; margin-top: 8px; }
+.teams {
+  display: flex; gap: 12px; margin-top: 7px; padding-top: 7px;
+  border-top: 1px solid var(--grid); color: var(--muted); font-size: 11px;
+}
+.key { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.key i { width: 10px; height: 10px; border-radius: 2px; flex: 0 0 10px; }
+.key span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.stat-value { font-size: 30px; font-weight: 700; line-height: 1.05; }
+.chart { margin-top: 4px; height: 116px; }
+.chart-svg { width: 100%; height: 116px; display: block; }
+.chart-empty { color: var(--muted); font-size: 11px; padding: 34px 0; text-align: center; }
+
+.cand {
+  display: flex; align-items: baseline; gap: 8px; padding: 5px 4px;
+  border-bottom: 1px solid var(--grid); cursor: pointer; border-radius: 5px;
+}
+.cand:hover { background: rgba(255, 255, 255, 0.04); }
+.cand.is-picked { background: var(--ink); }
+.cand-shirt { font-weight: 700; font-size: 12px; width: 34px; flex: 0 0 34px; }
+.cand-name { color: var(--text2); font-size: 12px; flex: 1 1 auto;
+             overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cand-value { color: var(--muted); font-size: 11px;
+              font-family: ui-monospace, Menlo, monospace; }
+
+.drag-ghost {
+  position: fixed; z-index: 90; pointer-events: none; transform: translate(-50%, -150%);
+  background: var(--text); color: var(--ink); border-radius: 6px;
+  padding: 4px 9px; font-size: 11px; font-weight: 700;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+}
+
+/* ------------------------------------------------------------- source sheet */
+.sheet {
+  position: fixed; inset: 0; z-index: 120; background: rgba(2, 5, 6, 0.72);
+  display: flex; align-items: center; justify-content: center; padding: 24px;
+}
+.sheet[hidden] { display: none; }
+.sheet-card {
+  background: var(--panel); border: 1px solid var(--grid); border-radius: 14px;
+  padding: 20px 22px; max-width: 720px; width: 100%;
+  max-height: 84vh; overflow-y: auto;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.6);
+}
+.sheet-head { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+.sheet-head h2 { margin: 0; font-size: 15px; font-weight: 700; flex: 1 1 auto; }
+.facts { margin: 0; display: grid; grid-template-columns: 104px 1fr; gap: 9px 16px; }
+.facts dt {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+  padding-top: 3px;
+}
+.facts dd {
+  margin: 0; color: var(--text2); font-size: 12.5px; line-height: 1.6;
+}
+.facts dd b { color: var(--text); font-weight: 600; }
+.facts code {
+  font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; color: var(--text2);
+  background: var(--ink); border: 1px solid var(--grid); border-radius: 4px;
+  padding: 0 4px;
+}
+.sheet-links { display: flex; gap: 16px; flex-wrap: wrap; margin: 18px 0 0 0; }
+.sheet-links a { color: var(--beneficiary); font-size: 12.5px; text-decoration: none; }
+.sheet-links a:hover { text-decoration: underline; }
+.sheet-foot { color: var(--muted); font-size: 11.5px; margin: 10px 0 0 0; }
+.tag-muted { color: var(--muted); }
+
+/* ------------------------------------------------------------------ footer */
+.tag-measured { color: var(--beneficiary); }
+.tag-human { color: var(--text2); }
+.tag-explanatory { color: var(--defender); }
+
+@media (max-width: 1100px) {
+  main { flex-direction: column; overflow-y: auto; }
+  body { overflow: auto; }
+  .dock { flex: 0 0 auto; overflow: visible; }
+  .pitch-wrap { height: 58vh; }
+  .top, main { max-width: none; }
+}
+
+/* ------------------------------------------------------------ analysis */
+/* A reading panel, not a dashboard: one column of label/value rows that
+   appear only when the layer or selection behind them is active. */
+.analysis dl { margin: 0; display: grid;
+               grid-template-columns: minmax(0, auto) minmax(0, 1fr); gap: 3px 12px; }
+.analysis dt { color: var(--text2); font-size: 11.5px; white-space: nowrap; }
+.analysis dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums;
+               font-size: 11.5px; color: var(--text); }
+.analysis dd.dim { color: var(--muted); }
+.an-section { padding: 9px 0 0 0; }
+.an-section + .an-section { border-top: 1px solid var(--grid); margin-top: 8px; }
+.an-section h4 { margin: 0 0 6px 0; font-size: 10px; letter-spacing: 0.09em;
+                 text-transform: uppercase; color: var(--muted); font-weight: 700; }
+.an-provenance { margin-top: 7px; font-size: 10.5px; color: var(--muted);
+                 line-height: 1.4; word-break: break-word; }
+.an-none { color: var(--muted); font-size: 11.5px; }
+.tag-derived { color: #9B8CFF; }
+.tag-solver { color: #7BE8A8; }
+
+/* ---------------------------------------------------------- collections */
+.seg { display: inline-flex; border: 1px solid var(--grid); border-radius: 8px;
+       overflow: hidden; }
+.seg-btn { background: transparent; color: var(--text2); border: 0; cursor: pointer;
+           font: inherit; font-size: 11.5px; padding: 6px 12px; }
+.seg-btn + .seg-btn { border-left: 1px solid var(--grid); }
+.seg-btn.is-on { background: var(--panel); color: var(--text); font-weight: 600; }
+.seg-btn:hover:not(.is-on) { color: var(--text); }
+
+/* filter pills; deliberately not .chip, which the role dock already owns */
+.chips { display: flex; gap: 5px; flex-wrap: wrap; }
+.fchip { background: transparent; border: 1px solid var(--grid); border-radius: 999px;
+         color: var(--text2); cursor: pointer; font: inherit; font-size: 10.5px;
+         padding: 3px 10px; white-space: nowrap; }
+.fchip.is-on { border-color: var(--beneficiary); color: var(--beneficiary); }
+.fchip:hover:not(.is-on) { color: var(--text); border-color: var(--text2); }
+
+/* .control is a flex box, so the plain hidden attribute would not hide it */
+[hidden] { display: none !important; }
+
+#showcase-scene { min-width: 268px; }
+#showcase-scene option:disabled { color: var(--muted); }
+.an-note { margin-top: 6px; font-size: 11px; color: var(--muted); line-height: 1.45; }
+.an-note.warn { color: var(--defender); }
+
+/* the release chain reads as a multiplication ending in one number */
+.analysis dd.strong { color: var(--text); font-weight: 700; }
+.analysis dd.gate { color: var(--defender); }
+.disclosure.sub { margin-top: 7px; padding: 0; font-size: 10.5px; color: var(--muted); }
+
+/* ---------------------------------------------------------------------------
+   the paper story: four modes over one scene
+
+   The mode bar is the primary control on the page. It is deliberately larger
+   and higher than the layer checkboxes: a reviewer should see the four
+   questions the paper asks before seeing anything that can be switched on.
+   --------------------------------------------------------------------------- */
+.modes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0;
+         border-bottom: 1px solid var(--grid); margin: -2px 0 12px 0; }
+.mode { background: transparent; border: 0; border-bottom: 2px solid transparent;
+        cursor: pointer; font: inherit; padding: 9px 12px 10px 12px;
+        text-align: left; display: flex; flex-direction: column; gap: 2px; }
+.mode + .mode { border-left: 1px solid var(--grid); }
+.mode-t { color: var(--text2); font-size: 12.5px; font-weight: 700;
+          letter-spacing: 0.01em; }
+.mode-q { color: var(--muted); font-size: 10.5px; line-height: 1.3; }
+.mode:hover .mode-t { color: var(--text); }
+.mode.is-on { border-bottom-color: var(--beneficiary); background: var(--panel); }
+.mode.is-on .mode-t { color: var(--beneficiary); }
+.mode.is-on .mode-q { color: var(--text2); }
+
+/* an unavailable paper value: a sentence, never a dash. It is quieter than a
+   real value and never mistakable for one. */
+/* A reason is a sentence, so it reads left-to-right like one -- the right
+   alignment that suits a column of numbers makes a paragraph ragged. */
+.pending { color: var(--muted) !important; font-style: italic;
+           font-size: 10.5px; line-height: 1.45; text-align: left !important;
+           font-variant-numeric: normal; }
+.empty { color: var(--muted); font-size: 11px; line-height: 1.5; margin: 8px 0 2px 0;
+         border-left: 2px solid var(--grid); padding-left: 9px; }
+
+/* the story role picker: this is a player picker, so it sits with the decision */
+.roleseg { display: flex; gap: 0; margin: 2px 0 8px 0;
+           border: 1px solid var(--grid); border-radius: 7px; overflow: hidden; }
+.roleb { flex: 1; background: transparent; border: 0; color: var(--muted);
+         cursor: pointer; font: inherit; font-size: 11px; padding: 5px 4px; }
+.roleb + .roleb { border-left: 1px solid var(--grid); }
+.roleb:hover { color: var(--text2); }
+.roleb.is-on { background: var(--panel); color: var(--text); font-weight: 700; }
+
+/* Static vs responsive, side by side, because the comparison is the point.
+   minmax(0, 1fr) on both axes: a grid item defaults to min-content width and
+   would otherwise push the card past the panel rather than wrap. */
+.cfpair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+          gap: 8px; margin-top: 8px; }
+.cfside { border: 1px solid var(--grid); border-radius: 8px; padding: 8px 9px;
+          min-width: 0; }
+.cfhead { color: var(--text2); font-size: 11px; font-weight: 700; line-height: 1.3; }
+.cfsem { color: var(--text2); font-size: 10px; line-height: 1.4; margin: 3px 0 6px 0; }
+.cfsem.pending { color: var(--muted); font-style: italic; }
+/* one column inside a narrow card: label over value reads, two columns do not */
+.cfside dl { margin: 0; grid-template-columns: minmax(0, 1fr); gap: 1px; }
+.cfside dt { font-size: 10px; color: var(--muted); }
+.cfside dd { text-align: left; }
+
+/* clip summary: one card per story role */
+.clipcards { display: grid; gap: 7px; }
+.clipcard { border: 1px solid var(--grid); border-radius: 8px; padding: 7px 9px;
+            min-width: 0; }
+.cliphead { color: var(--text2); font-size: 11px; font-weight: 700; margin-bottom: 3px; }
+.clipcard dl { margin: 0; }
+
+/* mixed policy: weight as a bar, but always with its name and its number, so
+   the reading never depends on colour or length alone */
+.polblock { margin-top: 9px; }
+.pol-h { color: var(--text2); font-size: 11px; font-weight: 700; margin-bottom: 4px; }
+.polrow { position: relative; display: flex; align-items: center; gap: 8px;
+          padding: 3px 7px; margin-bottom: 2px; border-radius: 5px;
+          background: rgba(92, 232, 245, 0.06); overflow: hidden; }
+.polbar { position: absolute; left: 0; top: 0; bottom: 0;
+          background: rgba(92, 232, 245, 0.20); }
+.polbar.is-release { background: rgba(255, 45, 135, 0.22); }
+.polname { position: relative; color: var(--text2); font-size: 10.5px; flex: 1;
+           white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.polvalue { position: relative; color: var(--text); font-size: 10.5px;
+            font-variant-numeric: tabular-nums; font-weight: 700; }
+.polrow.is-rest { background: transparent; border: 1px dashed var(--grid); }
+.polrow.is-rest .polvalue { color: var(--text2); font-weight: 400; }
+.an-provenance { color: var(--muted); font-size: 10px; margin-top: 6px;
+                 word-break: break-all; }
+
+/* the frame-by-frame evaluation strip, under the scrubber */
+.evalstrip { border-top: 1px solid var(--grid); margin-top: 8px; padding-top: 8px; }
+.evalstrip-head { display: flex; align-items: baseline; gap: 10px; }
+.evalstrip-title { color: var(--text2); font-size: 10px; font-weight: 700;
+                   letter-spacing: 0.06em; text-transform: uppercase; }
+#eval-readout { font-variant-numeric: tabular-nums; }
+.evalsvg { display: block; width: 100%; touch-action: none; }
+.evalbase { stroke: var(--grid); stroke-width: 1; }
+.evallabel { fill: var(--text2); font-size: 10.5px; }
+.evalnone { fill: var(--muted); font-size: 10px; font-style: italic; }
+.evalstem { stroke: rgba(92, 232, 245, 0.35); stroke-width: 1.5; }
+.evalline { fill: none; stroke: var(--beneficiary); stroke-width: 1.6; }
+.evaldot { fill: var(--beneficiary); }
+.evalnear { fill: none; stroke: var(--text); stroke-width: 1.6; }
+.evalmark { stroke: var(--runner); stroke-width: 1.4; }
+
+/* VISUAL GRAMMAR (section 29). Line style carries the distinction; colour only
+   reinforces it, so the four kinds stay apart in greyscale and under CVD.
+       observed                solid
+       static counterfactual   dotted
+       responsive / optimal    dashed
+       equilibrium policy      weighted (see .polbar and the arrow widths) */
+.path-observed { stroke-dasharray: none; }
+.path-static { stroke-dasharray: 1 4; stroke-linecap: round; }
+.path-responsive { stroke-dasharray: 7 4; }
+
+@media (max-width: 1100px) {
+  .modes { grid-template-columns: repeat(2, 1fr); }
+  .cfpair { grid-template-columns: 1fr; }
+}
+
+/* ---------------------------------------------------------------------------
+   Advanced layers
+
+   The research toggles are kept, not deleted -- they are how the demo is
+   inspected -- but a reviewer meeting the page should see the four questions
+   and a pitch, not eleven checkboxes. The header names any advanced layer that
+   is on while the panel is closed, because a story mode can switch one on and
+   the pitch must never change with no visible cause.
+   --------------------------------------------------------------------------- */
+.advanced { border-top: 1px solid var(--grid); margin-top: 8px; padding-top: 7px; }
+.advanced .disclosure { display: flex; align-items: center; gap: 6px;
+                        background: none; border: 0; cursor: pointer;
+                        font: inherit; padding: 0; }
+.advanced .disclosure .label { color: var(--text2); font-size: 10px;
+                               font-weight: 700; letter-spacing: 0.06em;
+                               text-transform: uppercase; }
+#adv-hint { font-size: 10.5px; }
+.adv-body { padding-top: 8px; }
+
+/* The case-study line: a curated summary, or the reviewer's note in quotes.
+   Quoted text is visibly someone's words, not the interface's. */
+.casestudy { color: var(--text2); font-size: 11.5px; line-height: 1.5;
+             margin: 0 0 8px 0; }
+.casestudy.quoted { color: var(--text2); font-style: italic;
+                    border-left: 2px solid var(--grid); padding-left: 9px; }
+
+/* Role colours moved out of inline styles so a theme can reach them. The Full
+   explorer keeps the annotation palette; body[data-paper] overrides below. */
+.slot-title[data-role="runner"] { color: var(--runner); }
+.slot-title[data-role="beneficiary"] { color: var(--beneficiary); }
+.slot-title[data-role="defender"] { color: var(--defender); }
+
+/* ===========================================================================
+   The Submission showcase: the paper's theme
+
+   `body[data-paper]` is set while the showcase collection is open and removed
+   for the Full explorer, which keeps the dark research theme above. The values
+   are figure_style.py's own at kyuhyeok-dev@139498a -- page #FFFFFF, pitch
+   #F7F7F7, lines #D0D0D0, ink #222222, secondary #666666, faint #B3B3B3,
+   attack #0000FF, defence #FF0000 -- so the page a reviewer reads beside
+   Figure 2 is drawn in Figure 2's colours.
+
+   Only presentation changes here. Every number, label and control is the same.
+   =========================================================================== */
+body[data-paper] {
+  --ink: #FFFFFF;          /* the page */
+  --panel: #FFFFFF;        /* cards */
+  --grid: #E4E4E4;         /* separators */
+  --text: #222222;
+  --text2: #666666;
+  --muted: #9A9A9A;
+  --runner: #0000FF;       /* both attackers are blue; shape carries the role */
+  --beneficiary: #0000FF;
+  --defender: #FF0000;
+  --attack: #0000FF;
+  --defend: #FF0000;
+  background: #FFFFFF;
+  color: #222222;
+}
+
+/* --- chrome: present, but quiet ---------------------------------------- */
+body[data-paper] .top {
+  background: #FFFFFF;
+  border-bottom: 1px solid var(--grid);
+  padding: 10px 20px 9px 20px;
+}
+body[data-paper] .brand-name { color: #222222; }
+body[data-paper] .brand-sub,
+body[data-paper] .control > label { color: #9A9A9A; }
+body[data-paper] select,
+body[data-paper] .btn,
+body[data-paper] .segmented,
+body[data-paper] .seg,
+body[data-paper] .fchip {
+  background: #FFFFFF;
+  border-color: var(--grid);
+  color: #444444;
+}
+body[data-paper] .btn:hover,
+body[data-paper] .fchip:hover:not(.is-on) { border-color: #9A9A9A; color: #222222; }
+body[data-paper] .btn.accent { color: #0000FF; border-color: #0000FF; }
+body[data-paper] .seg.is-on,
+body[data-paper] .seg-btn.is-on { background: #F2F2F2; color: #222222; }
+body[data-paper] .fchip.is-on { border-color: #0000FF; color: #0000FF; }
+/* the filters are a way back to the list, not part of the story */
+body[data-paper] .chips { opacity: 0.72; }
+body[data-paper] .chips:hover { opacity: 1; }
+
+/* --- the pitch card is the page's subject ------------------------------ */
+body[data-paper] .pitch-card,
+body[data-paper] .card {
+  background: #FFFFFF;
+  border: 1px solid var(--grid);
+  box-shadow: none;
+}
+body[data-paper] .pitch-wrap { background: #F7F7F7; }
+body[data-paper] .scene-head h1 { color: #222222; }
+body[data-paper] #subtitle { color: #666666; }
+
+/* --- the four modes --------------------------------------------------- */
+body[data-paper] .modes { border-bottom-color: var(--grid); }
+body[data-paper] .mode + .mode { border-left-color: var(--grid); }
+body[data-paper] .mode-t { color: #666666; }
+body[data-paper] .mode-q { color: #9A9A9A; }
+body[data-paper] .mode:hover .mode-t { color: #222222; }
+body[data-paper] .mode.is-on { background: #F7F7F7; border-bottom-color: #222222; }
+body[data-paper] .mode.is-on .mode-t { color: #222222; }
+body[data-paper] .mode.is-on .mode-q { color: #666666; }
+
+/* --- the side panel: the same information, less of a dashboard --------- */
+body[data-paper] .dock .card { border-color: var(--grid); }
+body[data-paper] .group-label,
+body[data-paper] .an-section h4,
+body[data-paper] .evalstrip-title,
+body[data-paper] .advanced .disclosure .label {
+  color: #9A9A9A;
+  letter-spacing: 0.04em;      /* the wide dashboard tracking reads as shouting */
+  font-weight: 600;
+}
+body[data-paper] .analysis dt { color: #666666; }
+body[data-paper] .analysis dd { color: #222222; }
+body[data-paper] .slot { background: #FFFFFF; border-color: var(--grid); }
+body[data-paper] .slot-title[data-role="runner"],
+body[data-paper] .slot-title[data-role="beneficiary"] { color: #0000FF; }
+body[data-paper] .slot-title[data-role="defender"] { color: #FF0000; }
+body[data-paper] .stat-value { color: #0000FF; }
+body[data-paper] .pending { color: #9A9A9A !important; }
+body[data-paper] .casestudy.quoted { border-left-color: var(--grid); color: #666666; }
+body[data-paper] .an-provenance { color: #9A9A9A; }
+body[data-paper] .cfside,
+body[data-paper] .clipcard { border-color: var(--grid); }
+body[data-paper] .empty { border-left-color: var(--grid); color: #9A9A9A; }
+
+/* --- policy bars, timeline, strip -------------------------------------- */
+body[data-paper] .polrow { background: rgba(0, 0, 255, 0.05); }
+body[data-paper] .polbar { background: rgba(0, 0, 255, 0.16); }
+body[data-paper] .polbar.is-release { background: rgba(255, 0, 0, 0.16); }
+body[data-paper] .polname { color: #666666; }
+body[data-paper] .polvalue { color: #222222; }
+body[data-paper] .evalbase { stroke: var(--grid); }
+body[data-paper] .evallabel { fill: #666666; }
+body[data-paper] .evalline, body[data-paper] .evaldot { stroke: #0000FF; fill: #0000FF; }
+body[data-paper] .evalstem { stroke: rgba(0, 0, 255, 0.35); }
+body[data-paper] .evalnear { stroke: #222222; }
+/* "now" is a time, not a side: red is the defender's everywhere else here */
+body[data-paper] .evalmark { stroke: #222222; }
+body[data-paper] input[type="range"] { accent-color: #0000FF; }
+body[data-paper] .check { color: #666666; }
+body[data-paper] .layers, body[data-paper] .advanced { border-top-color: var(--grid); }
+body[data-paper] .readout { color: #222222; }
+
+/* --- the source sheet --------------------------------------------------- */
+body[data-paper] .sheet { background: rgba(255, 255, 255, 0.86); }
+body[data-paper] .sheet-card { background: #FFFFFF; border-color: var(--grid); }
+body[data-paper] .sheet-card dd { color: #444444; }
+
+/* --- marks drawn on the pitch itself ------------------------------------ */
+/* The label halo exists so a number stays legible over a player or a line.
+   On the dark pitch it is the page colour; on the paper pitch it has to be
+   the paper, or every label wears a black chip. */
+body[data-paper] .pitch-label,
+body[data-paper] .pass-label {
+  paint-order: stroke; stroke: rgba(255, 255, 255, 0.9); stroke-width: 0.6px;
+}
+
+/* --- the showcase sidebar reads, it does not announce ------------------- */
+/* Every small label in the shell is uppercased with wide tracking, which is a
+   dashboard's voice. The showcase is a paper's: sentence case, a little
+   larger, and the tracking only where a label still has to read as a label. */
+body[data-paper] .label,
+body[data-paper] .control > label,
+body[data-paper] .group-label,
+body[data-paper] .slot-title,
+body[data-paper] .facts dt,
+body[data-paper] .an-section h4,
+body[data-paper] .evalstrip-title,
+body[data-paper] .advanced .disclosure .label {
+  text-transform: none; letter-spacing: 0.01em; font-size: 11px;
+  font-weight: 600;
+}
+body[data-paper] .control > label { font-size: 10.5px; color: #9A9A9A; }
+body[data-paper] .group-label { font-size: 11.5px; }
+body[data-paper] .an-section h4 { color: #9A9A9A; }
+/* the role dock is structure, not four boxes: one card, hairlines inside */
+body[data-paper] .group { background: #FFFFFF; }
+body[data-paper] .slot { border: 0; border-top: 1px solid var(--grid); }
+body[data-paper] .group .slot:first-of-type { border-top: 0; }
+
+/* =======================================================================
+   The public showcase
+   -----------------------------------------------------------------------
+   Everything under `body.is-public` is editorial: what is named, how much
+   of it there is, and what a reader is asked to look at first. The research
+   interface is one class away and keeps its own voice.
+   ======================================================================= */
+body.is-public,
+body.is-public button,
+body.is-public input,
+body.is-public select {
+  font-family: Helvetica, Arial, sans-serif;
+}
+
+/* one voice, three sizes */
+body.is-public .mode { padding: 13px 16px; }
+body.is-public .scene-head h1 { font-size: 19px; font-weight: 600; }
+body.is-public .brand-name { font-size: 15px; font-weight: 600; letter-spacing: 0; }
+body.is-public .top { padding: 10px 18px; gap: 18px; }
+
+/* the players legend: a shape, a name, a position */
+.legend ul { list-style: none; margin: 0; padding: 0; }
+.legend li {
+  display: grid; grid-template-columns: 16px 1fr auto; gap: 10px;
+  align-items: center; padding: 5px 0; font-size: 13px;
+}
+.legend li + li { border-top: 1px solid var(--grid); }
+.lgname { color: var(--text); }
+.lgrole { color: var(--text2); font-size: 12px; }
+.lgmark { width: 11px; height: 11px; justify-self: center; }
+.lgmark.is-circle { border-radius: 50%; }
+.lgmark.is-diamond { transform: rotate(45deg); }
+.lgmark.is-square { border-radius: 1px; }
+.lgmark.is-triangle {
+  width: 0; height: 0; background: none !important;
+  border-left: 6px solid transparent; border-right: 6px solid transparent;
+  border-bottom: 11px solid currentColor;
+}
+
+/* the one layers control, closed by default */
+.showlayers { padding: 10px 2px 2px; }
+.showlayers-body { display: flex; gap: 16px; flex-wrap: wrap; padding-top: 8px; }
+body.is-public .showlayers .label {
+  text-transform: none; letter-spacing: 0.01em; font-size: var(--t-body);
+  font-weight: 600; color: #555555;
+}
+
+/* the sidebar carries one story, not a record of the pipeline */
+body.is-public .an-section h4 {
+  font-size: var(--t-body); color: #555555; text-transform: none;
+  letter-spacing: 0.01em;
+}
+body.is-public .analysis dt { font-size: var(--t-body); color: #555555; }
+body.is-public .analysis dd { font-size: var(--t-body); }
+body.is-public .facts dt { text-transform: none; letter-spacing: 0.01em; }
+body.is-public .roleb { font-size: var(--t-body); }
+/* one heading per card: the card title already names the mode, and a public
+   card shows one section */
+body.is-public .an-section h4 { display: none; }
+body.is-public .an-section + .an-section { border-top: 0; margin-top: 2px; }
+
+/* --- Dilemma's comparison -------------------------------------------- */
+body.is-public .an-section .pending { font-style: normal; }
+/* "5.8 m   vs   8.1 m": the curated value first, the compared one after */
+body.is-public #an-evidence-rows dd { white-space: pre-wrap; }
+
+body.is-public .player { cursor: pointer; }
+
+/* =======================================================================
+   The public demo, 2026-10-01: an interactive figure
+   -----------------------------------------------------------------------
+   Minimum sizes are a contract, not a suggestion. Nothing public is set
+   below 15px, numbers are 17px or more, and a crowded layout is solved by
+   moving things, never by shrinking the type.
+   ======================================================================= */
+body.is-public {
+  --t-body: 15px;      /* any public UI text          */
+  --t-name: 16px;      /* a player's name             */
+  --t-head: 17px;      /* a section heading           */
+  --t-num:  19px;      /* a number the reader is here for */
+  --t-title: 21px;     /* the match                   */
+}
+
+/* the panel is a working surface, not a margin */
+body.is-public .dock { flex: 0 0 clamp(330px, 27vw, 460px); gap: 12px; }
+body.is-public main { gap: 16px; padding: 16px 22px 18px 22px; }
+
+body.is-public .scene-head h1 { font-size: var(--t-title); font-weight: 600; }
+body.is-public #subtitle { font-size: var(--t-body); color: #555555; }
+body.is-public .mode-t { font-size: var(--t-head); font-weight: 600; }
+body.is-public .btn,
+body.is-public .seg,
+body.is-public .seg-btn,
+body.is-public select,
+body.is-public .check { font-size: var(--t-body); }
+body.is-public .readout { font-size: var(--t-body); }
+body.is-public .ticks i::after { font-size: var(--t-body); color: #555555; }
+
+/* --- the panel's one voice ------------------------------------------- */
+body.is-public .panel-h {
+  margin: 0 0 10px 0; font-size: var(--t-head); font-weight: 600;
+  color: var(--text); letter-spacing: 0;
+}
+body.is-public .card { padding: 14px 16px; }
+
+/* --- players: big rows, obviously clickable -------------------------- */
+.players ul { list-style: none; margin: 0; padding: 0; }
+.players li {
+  display: grid; grid-template-columns: 20px 1fr auto; gap: 12px;
+  align-items: center; padding: 10px 8px; border-radius: 8px;
+  font-size: var(--t-name); cursor: pointer; border: 1px solid transparent;
+}
+.players li:hover { background: #F4F4F4; }
+.players li.is-on { border-color: var(--grid); background: #F7F7F7; }
+.players li.is-compared { border-color: currentColor; background: #FFFFFF; }
+.players .lgname { color: var(--text); font-weight: 500; }
+.players .lgrole { color: #555555; font-size: var(--t-body); }
+.players .lgmark { width: 13px; height: 13px; justify-self: center; }
+.players .lgmark.is-circle { border-radius: 50%; }
+.players .lgmark.is-diamond { transform: rotate(45deg); }
+.players .lgmark.is-square { border-radius: 1px; }
+.players .lgmark.is-triangle {
+  width: 0; height: 0; background: none !important;
+  border-left: 7px solid transparent; border-right: 7px solid transparent;
+  border-bottom: 13px solid currentColor;
+}
+.panel-foot { margin-top: 12px; }
+
+/* --- metrics: the numbers are the point ------------------------------ */
+.metrics .m-row { padding: 9px 0; }
+.metrics .m-row + .m-row { border-top: 1px solid var(--grid); }
+.metrics .m-label { font-size: var(--t-body); color: #555555; }
+.metrics .m-value {
+  font-size: var(--t-num); font-weight: 600; color: var(--text);
+  font-variant-numeric: tabular-nums; margin-top: 2px;
+}
+.metrics .m-pair { display: flex; align-items: baseline; gap: 10px; }
+.metrics .m-was {
+  font-size: var(--t-body); color: #777777; font-variant-numeric: tabular-nums;
+}
+.metrics .m-was::before { content: "was "; }
+
+/* --- public tab strip ------------------------------------------------- */
+body.is-public .mode { padding: 14px 18px; }
+
+/* =======================================================================
+   The research demo, 2026-10-01
+   -----------------------------------------------------------------------
+   Hierarchy by weight and size, never by grey: every public string is ink.
+   The floor is 15px and nothing responsive may go under it.
+   ======================================================================= */
+body.is-public {
+  --t-body: 15px;
+  --t-name: 16px;
+  --t-head: 17px;
+  --t-num:  19px;
+  --t-title: 20px;      /* the match */
+  --t-site: 26px;       /* the project */
+  --ink-1: #111111;     /* everything a reader reads */
+  --ink-2: #222222;     /* the same, one step back */
+}
+body.is-public .brand-name {
+  font-size: var(--t-site); font-weight: 700; color: var(--ink-1);
+  letter-spacing: -0.015em;
+}
+body.is-public .scene-head h1 {
+  font-size: var(--t-title); font-weight: 700; color: var(--ink-1);
+}
+body.is-public #subtitle {
+  font-size: var(--t-title); font-weight: 400; color: var(--ink-1);
+}
+body.is-public .mode-t { font-size: var(--t-head); color: var(--ink-2); }
+body.is-public .mode.is-on .mode-t { color: var(--ink-1); font-weight: 600; }
+
+/* the panel: ink, with weight doing the work */
+body.is-public .panel-h { color: var(--ink-1); }
+body.is-public .players .lgname { color: var(--ink-1); font-weight: 600; }
+body.is-public .players .lgrole { color: var(--ink-1); font-weight: 400; }
+body.is-public .players .lgshirt {
+  color: var(--ink-1); font-weight: 400; font-variant-numeric: tabular-nums;
+}
+body.is-public .metrics .m-label { color: var(--ink-1); font-weight: 400; }
+body.is-public .metrics .m-value { color: var(--ink-1); font-weight: 700; }
+body.is-public .metrics .m-was { color: var(--ink-2); font-weight: 400; }
+body.is-public .an-section h4,
+body.is-public .analysis dt,
+body.is-public .analysis dd,
+body.is-public .check,
+body.is-public .readout { color: var(--ink-1); }
+
+/* a player row: #10  Ginczek ............ Runner */
+.players li {
+  grid-template-columns: 20px auto 1fr auto; gap: 10px;
+}
+.players .lgshirt { font-size: var(--t-body); }
+
+/* --- a label stays readable over an arrow -------------------------------- */
+/* The paper gives every action label a white backing so it is never lost
+   behind a line. A halo does it without a box to position. */
+body.is-public .action-label,
+body.is-public .pass-label {
+  /* Figure 2 sets its labels straight on the shading. A hairline of page
+     colour is enough to keep a glyph off a line it crosses; anything wider
+     reads as a box around the words. */
+  paint-order: stroke;
+  stroke: #FFFFFF; stroke-width: 1.1px; stroke-linejoin: round;
+  font-weight: 600;
+}
+/* the attack direction: a mark, not a whisper */
+body.is-public .attack-dir { opacity: 1; }
+body.is-public .attack-dir-label { font-weight: 600; }
+
+/* --- the ranked actions ------------------------------------------------ */
+.options #options-list { display: flex; flex-direction: column; gap: 2px; }
+.optrow {
+  display: grid; grid-template-columns: 44px 1fr auto auto; gap: 10px;
+  align-items: center; width: 100%; text-align: left; cursor: pointer;
+  background: none; border: 1px solid transparent; border-radius: 8px;
+  padding: 9px 8px; font: inherit; color: inherit;
+}
+.optrow:hover { background: #F4F4F4; }
+.optrow.is-on { border-color: var(--grid); background: #F7F7F7; }
+body.is-public .optrank {
+  font-size: var(--t-body); color: var(--ink-1); font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+body.is-public .optname { font-size: var(--t-name); color: var(--ink-1); }
+body.is-public .optprob {
+  font-size: var(--t-name); color: var(--ink-1); font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.opttags { display: flex; gap: 5px; }
+.opttag {
+  font-style: normal; font-size: 12.5px; font-weight: 600; padding: 2px 7px;
+  border-radius: 999px; border: 1px solid var(--grid); color: var(--ink-1);
+}
+.opttag.is-best { border-color: var(--pick-best, #0000FF); color: var(--pick-best, #0000FF); }
+.opttag.is-played { border-color: #555555; }
+/* the two accents Player evaluation draws with: sky for the best-valued
+   option, pink for the one the reader picked. The row wears the colour its
+   line on the pitch is drawn in, so the pair needs no legend. */
+body.is-public { --pick-best: #00A8D8; --pick-sel: #FF2D8E; }
+.optrow.is-bestrow { box-shadow: inset 3px 0 0 var(--pick-best); }
+.optrow.is-picked { box-shadow: inset 3px 0 0 var(--pick-sel); }
+.optrow.is-on.is-picked { border-color: var(--pick-sel); background: #FFF2F8; }
+.optrow.is-on.is-bestrow { border-color: var(--pick-best); background: #EFF9FD; }
+
+/* --- the panel's numbers, one column or two ----------------------------- */
+#metrics-list.is-two-up .m-row,
+#metrics-list.is-two-up .m-head {
+  display: grid; grid-template-columns: 1fr auto auto;
+  gap: 14px; align-items: baseline;
+}
+#metrics-list.is-two-up .m-value { min-width: 92px; text-align: right; }
+body.is-public .m-col {
+  font-size: var(--t-body); color: #555555; font-weight: 600; text-align: right;
+  min-width: 92px;
+}
+#metrics-list.is-moments .m-row,
+#metrics-list.is-moments .m-head {
+  display: grid; grid-template-columns: 1fr repeat(var(--moment-cols, 3), auto);
+  gap: 12px; align-items: baseline;
+}
+#metrics-list.is-moments .m-value,
+body.is-public #metrics-list.is-moments .m-col { min-width: 54px; text-align: right; }
+/* every solved moment is shown; the one the playhead stands on is the loud one */
+body.is-public .m-value.is-other { color: #555555; font-weight: 500; }
+body.is-public .m-col.is-now { color: var(--ink-1); }
+.m-head { padding-bottom: 4px; border-bottom: 1px solid var(--grid); }
+body.is-public .m-value.is-was { color: #555555; font-weight: 500; }
+/* a change in space is blue when it grows and red when it shrinks, which is
+   the same two colours the pitch already uses for attack and defence */
+body.is-public .m-value.is-up { color: #0000FF; }
+body.is-public .m-value.is-down { color: #FF0000; }

@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Defender's Dilemma | SSAC 2027</title>
+<meta name="description" content="The Defender's Dilemma: Game-Theoretic Evaluation of Off-Ball Movement in Soccer. An interactive figure over real Bundesliga tracking and solved 2v1 and 3v1 games.">
+<meta property="og:title" content="The Defender's Dilemma | SSAC 2027">
+<meta property="og:description" content="Game-Theoretic Evaluation of Off-Ball Movement in Soccer.">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='13' fill='%23132019'/><circle cx='16' cy='16' r='5' fill='%23FF2D87'/></svg>">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <span class="brand-name" id="brand-name">Off-the-ball value</span>
+    <span class="brand-sub" id="brand-sub">explorer</span>
+  </div>
+  <div class="control" id="collection-control" hidden>
+    <label id="collection-label">Collection</label>
+    <div class="seg" id="collection">
+      <button class="seg-btn is-on" data-collection="showcase">Submission showcase</button>
+      <button class="seg-btn" data-collection="explorer">Full explorer</button>
+    </div>
+  </div>
+  <div class="control grow" id="showcase-control" hidden>
+    <label for="showcase-scene" id="showcase-label">Case study</label>
+    <div class="row">
+      <select id="showcase-scene"></select>
+      <div class="chips" id="showcase-filters"></div>
+    </div>
+  </div>
+  <div class="control" id="explorer-control">
+    <label for="scene">Scene</label>
+    <select id="scene"></select>
+  </div>
+  <div class="control" id="effect-control">
+    <label>Effect</label>
+    <div class="row">
+      <label class="check"><input type="checkbox" id="effect-strong" checked> Strong</label>
+      <label class="check"><input type="checkbox" id="effect-medium" checked> Medium</label>
+      <span class="muted" id="scene-count"></span>
+    </div>
+  </div>
+  <div class="control grow" id="roles-control">
+    <label>Roles</label>
+    <div class="row">
+      <button id="btn-annotation" class="btn">Annotation</button>
+      <button id="btn-auto" class="btn accent">Auto triplet</button>
+      <button id="btn-reset" class="btn">Reset</button>
+      <span class="muted" id="status" role="status"></span>
+    </div>
+  </div>
+  <button id="btn-source" class="btn ghost repo">Source</button>
+</header>
+
+<main>
+  <section class="pitch-card">
+    <nav class="modes" id="story-modes" role="tablist" aria-label="Story mode">
+      <button class="mode is-on" data-mode="observed" role="tab" data-public="1. Play" aria-selected="true">
+        <span class="mode-t">Observed</span>
+        <span class="mode-q">What happened?</span>
+      </button>
+      <button class="mode" data-mode="counterfactual" role="tab" data-public="2. Dilemma" aria-selected="false">
+        <span class="mode-t">Counterfactual</span>
+        <span class="mode-q">What else could the player have done?</span>
+      </button>
+      <button class="mode" data-mode="game_solution" role="tab" data-public="3. Nash equilibrium" aria-selected="false">
+        <span class="mode-t">Game solution</span>
+        <span class="mode-q">What does the strategic equilibrium recommend?</span>
+      </button>
+      <button class="mode" data-mode="evaluation" role="tab" data-public="4. Player evaluation" aria-selected="false">
+        <span class="mode-t">Evaluation</span>
+        <span class="mode-q">How good was the observed decision?</span>
+      </button>
+    </nav>
+    <div class="scene-head">
+      <h1 id="title">—</h1>
+      <p id="subtitle"></p>
+      <span class="spacer"></span>
+      <div class="segmented" id="view-toggle" role="group" aria-label="Pitch view">
+        <button class="seg is-on" data-view="full">Full pitch</button>
+        <button class="seg" data-view="focus">Focus</button>
+      </div>
+      <div class="segmented" id="moment-pick" role="group" aria-label="Solved moment" hidden></div>
+      <div class="segmented" id="sweep-pick" role="group" aria-label="Compare as" hidden></div>
+      <label class="check" id="space-control" hidden>
+        <input type="checkbox" id="space-on" checked> Space
+      </label>
+      <label class="check" id="field-control" hidden>
+        <input type="checkbox" id="field-on"> Defender field
+      </label>
+      <div class="segmented" id="solver-view" role="group" aria-label="Solver view" hidden>
+        <button class="seg is-on" data-solverview="policy">Solver policy</button>
+        <button class="seg" data-solverview="actual">Actual movement</button>
+        <button class="seg" data-solverview="overlay">Overlay</button>
+      </div>
+    </div>
+    <div id="pitch" class="pitch-wrap"></div>
+    <div class="timeline">
+      <button id="play" class="btn square">▶</button>
+      <button id="jump-run" class="btn small">Run</button>
+      <button id="jump-peak" class="btn small">Peak</button>
+      <div class="track">
+        <input type="range" id="time" min="0" max="1" value="0" step="1">
+        <div class="ticks" id="time-ticks"></div>
+      </div>
+      <span id="readout" class="readout">0.00 s</span>
+    </div>
+    <div class="evalstrip" id="eval-strip" hidden>
+      <div class="evalstrip-head">
+        <span class="evalstrip-title">Frame-by-frame evaluation</span>
+        <span class="muted" id="eval-readout"></span>
+      </div>
+      <div id="eval-plot"></div>
+      <p class="empty" id="eval-empty" hidden></p>
+    </div>
+    <div class="showlayers" id="show-layers" hidden>
+      <button class="disclosure sub" id="show-layers-toggle" aria-expanded="false">
+        <span class="chev" id="show-layers-chev">▸</span>
+        <span class="label">Layers</span>
+      </button>
+      <div class="showlayers-body" id="show-layers-body" hidden>
+        <label class="check"><input type="checkbox" data-showlayer="trail" checked> Run</label>
+        <label class="check"><input type="checkbox" data-showlayer="tether" checked> Marking</label>
+        <label class="check"><input type="checkbox" data-showlayer="labels" checked> Shirt numbers</label>
+      </div>
+    </div>
+    <div class="layers" id="layers-row">
+      <label class="check"><input type="checkbox" data-layer="trail" checked> Runner movement</label>
+      <label class="check"><input type="checkbox" data-layer="tether" checked> Defender response</label>
+      <label class="check"><input type="checkbox" data-layer="wake" checked> Space map</label>
+      <label class="check"><input type="checkbox" data-layer="ghost" checked> Defender if stayed</label>
+      <label class="check"><input type="checkbox" data-layer="labels" checked> Player numbers</label>
+      <select id="wake-mode" class="mini"
+              title="Available space and Space created follow the picked roles and describe the off-ball effect.">
+        <option value="space">Available space</option>
+        <option value="gain">Space created</option>
+      </select>
+    </div>
+    <div class="advanced">
+      <button class="disclosure sub" id="adv-toggle" aria-expanded="false">
+        <span class="chev" id="adv-chev">▸</span>
+        <span class="label">Advanced</span>
+        <span class="muted" id="adv-hint"></span>
+      </button>
+      <div class="layers adv-body" id="adv-body" hidden>
+        <label class="check"><input type="checkbox" data-layer="candidates" checked> Suggested players</label>
+        <label class="check"><input type="checkbox" data-layer="lane"> Passing lane</label>
+        <label class="check"><input type="checkbox" data-layer="paths"> Player movements</label>
+        <label class="check"><input type="checkbox" data-layer="reach"> Kinematic reachable area</label>
+        <label class="check"><input type="checkbox" data-layer="solver"> Solver solution</label>
+        <label class="check"><input type="checkbox" data-layer="commands"> Defender command set (5)</label>
+        <label class="check"><input type="checkbox" data-layer="passes"> Explore action value</label>
+        <span id="passes-note" class="muted" hidden></span>
+      </div>
+    </div>
+  </section>
+
+  <aside class="dock">
+    <div class="card players" id="legend-card" hidden>
+      <h2 class="panel-h">Players</h2>
+      <ul id="legend-list"></ul>
+      <div class="panel-foot" id="legend-foot" hidden>
+        <button class="btn" id="compare-reset">Reset</button>
+      </div>
+    </div>
+
+    <div class="card options" id="options-card" hidden>
+      <h2 class="panel-h">Options</h2>
+      <div id="options-list"></div>
+    </div>
+
+    <div class="card metrics" id="metrics-card" hidden>
+      <h2 class="panel-h" id="metrics-h">The dilemma</h2>
+      <div id="metrics-list"></div>
+    </div>
+
+    <div class="card" id="roles-card">
+      <div class="group attack">
+        <div class="group-label">Attack</div>
+        <div class="slot" id="slot-runner" data-role="runner">
+          <div class="slot-title" data-role="runner">Runner</div>
+          <div class="slot-body" id="body-runner"></div>
+        </div>
+        <div class="slot" id="slot-beneficiary" data-role="beneficiary">
+          <div class="slot-title" data-role="beneficiary">Beneficiary</div>
+          <div class="slot-body" id="body-beneficiary"></div>
+        </div>
+      </div>
+      <div class="group defence">
+        <div class="group-label">Defence</div>
+        <div class="slot" id="slot-defender" data-role="defender">
+          <div class="slot-title" data-role="defender">Defender</div>
+          <div class="slot-body" id="body-defender"></div>
+        </div>
+      </div>
+      <div class="dock-meta" id="dock-meta"></div>
+      <div class="teams">
+        <span class="key"><i style="background:#D9CFB8"></i><span id="team-attack"></span></span>
+        <span class="key"><i style="background:#5F7392"></i><span id="team-defend"></span></span>
+      </div>
+    </div>
+
+    <div class="card stat" id="stat-card">
+      <div class="label" id="stat-label">Available space</div>
+      <div class="stat-value" id="stat-value">—</div>
+      <div id="chart" class="chart"></div>
+    </div>
+
+    <div class="card analysis" id="analysis-card" hidden>
+      <button class="disclosure" id="analysis-toggle" aria-expanded="true">
+        <span class="chev" id="analysis-chev">▾</span>
+        <span class="label" id="analysis-label">Analysis</span>
+        <span class="muted" id="analysis-hint"></span>
+      </button>
+      <div id="analysis-body">
+        <section class="an-section" id="an-scene" hidden>
+          <h4>Scene</h4>
+          <p class="casestudy" id="an-casestudy" hidden></p>
+          <dl id="an-scene-rows"></dl>
+          <div class="an-note" id="an-scene-note" hidden></div>
+        </section>
+        <section class="an-section" id="an-player" hidden>
+          <h4>Player</h4>
+          <dl id="an-player-rows"></dl>
+        </section>
+        <section class="an-section" id="an-decision" hidden>
+          <h4>Current decision</h4>
+          <div class="roleseg" id="story-roles" role="group" aria-label="Story role"></div>
+          <dl id="an-decision-rows"></dl>
+        </section>
+        <section class="an-section" id="an-counterfactual" hidden>
+          <h4>Counterfactual</h4>
+          <dl id="an-cf-rows"></dl>
+          <div class="cfpair" id="cf-pair"></div>
+          <dl id="an-cf-change"></dl>
+        </section>
+        <section class="an-section" id="an-evaluation" hidden>
+          <h4>Player evaluation</h4>
+          <dl id="an-eval-rows"></dl>
+          <p class="empty" id="an-eval-note" hidden></p>
+        </section>
+        <section class="an-section" id="an-clip" hidden>
+          <h4>Clip summary</h4>
+          <div class="clipcards" id="clip-cards"></div>
+        </section>
+        <section class="an-section" id="an-solver" hidden>
+          <h4>Game solution</h4>
+          <dl id="an-solver-rows"></dl>
+          <div class="an-provenance" id="an-solver-prov" hidden></div>
+          <div id="an-policy" hidden>
+            <div class="polblock">
+              <div class="pol-h">Attack policy <span class="muted" id="pol-attack-kind"></span></div>
+              <div id="pol-attack"></div>
+            </div>
+            <div class="polblock">
+              <div class="pol-h">Defender policy <span class="muted" id="pol-defence-kind"></span></div>
+              <div id="pol-defence"></div>
+            </div>
+            <p class="an-note" id="pol-note"></p>
+          </div>
+        </section>
+        <section class="an-section" id="an-offball" hidden>
+          <h4>Off-ball context</h4>
+          <dl id="an-offball-rows"></dl>
+        </section>
+        <section class="an-section" id="an-pass" hidden>
+          <button class="disclosure sub" id="value-toggle" aria-expanded="false">
+            <span class="chev" id="value-chev">▸</span>
+            <span class="label">Action value details</span>
+            <span class="muted" id="value-hint"></span>
+          </button>
+          <div id="an-pass-body" hidden>
+          <dl id="an-pass-rows"></dl>
+          <div class="an-note" id="an-pass-note" hidden></div>
+          <button class="disclosure sub" id="details-toggle" aria-expanded="false" hidden>
+            <span class="chev" id="details-chev">▸</span>
+            <span class="label">Model details</span>
+          </button>
+          <dl id="an-detail-rows" hidden></dl>
+          </div>
+        </section>
+        <section class="an-section" id="an-source" hidden>
+          <h4>Source</h4>
+          <dl id="an-source-rows"></dl>
+        </section>
+      </div>
+    </div>
+
+    <div class="card list" id="hints-card">
+      <button class="disclosure" id="hints-toggle" aria-expanded="true">
+        <span class="chev" id="hints-chev">▾</span>
+        <span class="label" id="candidates-label">Hints</span>
+        <span class="muted" id="hints-count"></span>
+      </button>
+      <div id="candidates"></div>
+    </div>
+
+    <div class="card notes" id="notes-card">
+      <div class="label">Notes</div>
+      <div id="notes" class="muted"></div>
+    </div>
+  </aside>
+</main>
+
+<div class="sheet" id="source-sheet" hidden>
+  <div class="sheet-card" role="dialog" aria-modal="true" aria-label="Source and method">
+    <div class="sheet-head">
+      <h2>Source &amp; method</h2>
+      <button class="btn small" id="source-close">Close</button>
+    </div>
+
+    <div id="sheet-body"></div>
+
+    <p class="sheet-foot">Research prototype. Not a validated off-the-ball value metric,
+       player ranking or coaching recommendation.</p>
+  </div>
+</div>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
