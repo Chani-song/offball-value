@@ -1,0 +1,77 @@
+name: Deploy explorer to Pages
+
+# The static explorer is plain HTML/CSS/JS with no build step, so this workflow
+# only has to assemble the site with its exported scene data and upload it.
+# Requires one manual setting: Settings -> Pages -> Build and deployment ->
+# Source: "GitHub Actions".
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - "demo_viz/web/**"
+      - "demo_viz/web_data/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install the project
+        # demo_viz.web.build imports the package, which reaches numpy, so the
+        # runner needs the project installed even though the site itself is
+        # plain HTML/CSS/JS.
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[app]"
+
+      - name: Assemble the site
+        # demo_viz.web.build copies web/site plus the exported scene JSON into
+        # one folder. The exported data is committed, so no tracking data is
+        # needed here.
+        run: python -m demo_viz.web.build --out _site
+
+      - name: Check the build looks sane
+        run: |
+          test -f _site/index.html
+          test -f _site/js/influence.js
+          test -f _site/data/index.json
+          python - <<'PY'
+          import json, pathlib
+          scenes = json.loads(pathlib.Path("_site/data/index.json").read_text())["scenes"]
+          missing = [s["file"] for s in scenes
+                     if not pathlib.Path("_site/data", s["file"]).exists()]
+          assert not missing, f"missing scene files: {missing}"
+          print(f"{len(scenes)} scenes present")
+          PY
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
