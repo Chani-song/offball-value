@@ -313,8 +313,10 @@ class LeadSceneTests(unittest.TestCase):
     def test_regenerating_reproduces_the_committed_order(self):
         """The guard this replaces a hand edit with."""
 
-        from demo_viz.ingest_showcase import OUT, build
+        from demo_viz.ingest_showcase import DEFAULT_SOURCE, OUT, build
 
+        if not DEFAULT_SOURCE.exists():
+            self.skipTest(f"{DEFAULT_SOURCE.name} is local-only and not installed")
         committed = json.loads(OUT.read_text())
         rebuilt = build()
         self.assertEqual([s["order"] for s in committed["scenes"]],

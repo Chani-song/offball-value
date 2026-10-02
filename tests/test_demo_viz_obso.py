@@ -91,6 +91,7 @@ class ObsoParityTests(unittest.TestCase):
     """The browser's OBSO equals the Python reference at the sampled frames."""
 
     @unittest.skipIf(not _exported_scenes(), "no exported OBSO data")
+    @unittest.skipIf(demo_paths().annotations_xlsx is None, "no shot_annotations.xlsx")
     def test_browser_surface_matches_evaluate_reference_obso(self):
         from demo_viz.loader import load_scene
         from demo_viz.quantities import _frame_at, _velocities
@@ -159,6 +160,7 @@ class ObsoParityTests(unittest.TestCase):
         self.assertLess(worst, 0.02, f"worst relative error {worst:.4f}")
 
     @unittest.skipIf(not _exported_scenes(), "no exported OBSO data")
+    @unittest.skipIf(demo_paths().annotations_xlsx is None, "no shot_annotations.xlsx")
     def test_the_fan_is_five_rays_centred_on_the_attacking_direction(self):
         from demo_viz.loader import load_scene
         from demo_viz.web.validate import find_chrome, serve
