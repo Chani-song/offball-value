@@ -11,10 +11,15 @@ export function renderLegend(c) {
   const list = c.el("legend-list");
   if (!list) return;
   list.replaceChildren();
+  list.classList.remove("is-cast");
   const card = c.el("legend-card");
   if (card) card.hidden = !c.isPublic();
   if (!c.isPublic()) return;
   const { scene } = c.state;
+  // Dilemma is the mode that rewrites the cast, so there the list becomes the
+  // cast itself: a row per role, the curated player beside the one the reader
+  // put in his place, all three live at once
+  if (c.state.mode === "counterfactual") { renderCast(c, list); return; }
   const roles = c.solverRolesAt(c.state.frame) || {};
   const order = ["runner", "ball carrier", "beneficiary", "defender"];
   const seen = new Set();
@@ -280,6 +285,64 @@ function dilemmaMetrics(c, slot) {
 }
 
 /**
+ * Dilemma's cast, as two columns: the play as it happened, and the play the
+ * reader is building.
+ *
+ * Each role has its own Selected cell, and filling one leaves the other two
+ * alone -- a reader can ask "what if 7 made that run, 34 were the one it
+ * opened space for, and 19 were marking?" and read all three answers at once.
+ * Clicking a Selected cell arms that role; the next click on the pitch, or on
+ * a player in this list, fills it. Clicking a filled cell empties it.
+ */
+function renderCast(c, list) {
+  list.classList.add("is-cast");
+  const { scene, selection } = c.state;
+  const compare = c.state.compare || {};
+  const head = document.createElement("li");
+  head.className = "cast-head";
+  head.append(cell("", "cast-role"), cell("Default", "cast-col"),
+              cell("Selected", "cast-col"));
+  list.append(head);
+
+  const who = (id) => {
+    const player = id ? scene?.byId.get(id) : null;
+    return player ? `#${player.shirt} ${c.surnameOf(player)}` : null;
+  };
+  const rows = [
+    ["runner", "Runner", selection.runner],
+    ["teammate", "Teammate", selection.beneficiaries[0]],
+    ["defender", "Defender", selection.defenders[0]],
+  ];
+  for (const [role, label, curatedId] of rows) {
+    const row = document.createElement("li");
+    row.className = `cast-row${c.state.sweep === role ? " is-armed" : ""}`;
+    const colour = role === "defender"
+      ? (c.state.pitch?.roles?.defender || c.ROLE_COLOUR.defender)
+      : (c.state.pitch?.roles?.runner || c.ROLE_COLOUR.runner);
+    const name = cell(label, "cast-role");
+    name.style.color = colour;
+    const def = cell(who(curatedId) || "\u2014", "cast-def");
+    const chosenId = compare[role] || null;
+    const pick = document.createElement("button");
+    pick.type = "button";
+    pick.className = `cast-pick${chosenId ? " is-set" : ""}`
+      + `${c.state.sweep === role ? " is-armed" : ""}`;
+    pick.textContent = who(chosenId)
+      || (c.state.sweep === role ? "Pick a player" : "Choose");
+    pick.addEventListener("click", () => {
+      // a filled cell empties; an empty one arms this role for the next click
+      if (chosenId) c.compareWith(chosenId);
+      else c.state.sweep = role;
+      c.render();
+    });
+    row.append(name, def, pick);
+    list.append(row);
+  }
+  const foot = c.el("legend-foot");
+  if (foot) foot.hidden = !Object.keys(compare).length;
+}
+
+/**
  * The ranked options for the role and solved moment on screen.
  *
  * Clicking one draws it on the pitch beside what he did and the best-valued
@@ -301,23 +364,34 @@ export function renderOptions(c) {
   if (!entry) return;
   const observed = lib.observedOption(entry);
   const best = lib.bestOption(entry);
+  const role = c.solverRoleOfStory();
+  const played = c.figureLib()?.ROLE_COLOR?.[role] || c.ROLE_COLOUR.runner;
   for (const option of entry.options) {
     const row = document.createElement("button");
     row.type = "button";
     const chosen = c.state.option === option.command;
     // the row and the line on the pitch are the same colour, so a click needs
-    // no legend: sky for the best-valued option, pink for the one picked
-    const accent = chosen && option !== best ? " is-picked"
-      : (option === best ? " is-bestrow" : "");
+    // no legend: the role's blue or red for what he played, sky for the
+    // best-valued option, pink for the one the reader picked
+    // what he played wins the colour when it is also the best-valued option:
+    // blue is the colour that option is drawn in on the pitch, and a reader
+    // reads the two together. The tags still say "Best" and "Played".
+    const accent = chosen && option !== best && option !== observed ? " is-picked"
+      : (option === observed ? " is-playedrow"
+         : (option === best ? " is-bestrow" : ""));
     row.className = `optrow${chosen ? " is-on" : ""}${accent}`;
+    row.style.setProperty("--pick-played", played);
     const rank = document.createElement("span");
     rank.className = "optrank";
     // several options can be genuinely tied -- the bundle's own rule gives
     // them all the best position -- so a tie says so instead of printing
     // "1st" three times with no explanation
     const tied = entry.options.filter((o) => o.rank === option.rank).length > 1;
-    rank.textContent = entry.rank_partial ? "\u2014"
-      : `${lib.ordinal(option.rank)}${tied ? "=" : ""}`;
+    // every option is ranked, including a ball carrier's. His set has a sixth
+    // member -- the pass -- whose value the bundle does not publish, so his
+    // ordinals are among his five moves and the note under the list says so.
+    // A dash said nothing and looked like missing data.
+    rank.textContent = `${lib.ordinal(option.rank)}${tied ? "=" : ""}`;
     const name = document.createElement("span");
     name.className = "optname";
     name.textContent = c.publicActionName(c.solverRoleOfStory(), option.label)
@@ -408,25 +482,10 @@ export function renderSweep(c) {
   const node = c.el("sweep-pick");
   if (!node) return;
   if (renderEvalRoles(c)) return;      // the same strip serves evaluation
-  const on = c.isPublic() && c.state.mode === "counterfactual";
-  node.hidden = !on;
+  // Dilemma's cast table has a Selected cell per role, and that cell arms the
+  // role: a chip strip beside it would be a second control for one thing.
+  node.hidden = true;
   node.replaceChildren();
-  if (!on) return;
-  for (const [role, label] of [["runner", "Runner"], ["teammate", "Teammate"],
-                               ["defender", "Defender"]]) {
-    const button = document.createElement("button");
-    button.className = `seg${c.state.sweep === role ? " is-on" : ""}`;
-    button.type = "button";
-    button.dataset.sweep = role;
-    button.textContent = label;
-    button.addEventListener("click", () => {
-      if (c.state.sweep === role) return;
-      // which role the next click fills; what is already chosen stays
-      c.state.sweep = role;
-      c.render();
-    });
-    node.appendChild(button);
-  }
 }
 
 /**
@@ -455,7 +514,9 @@ export function renderDecisionPaths(c, index) {
     // every feasible option, so the three that are named have a fan to be
     // named out of rather than standing alone
     all: (entry.options || []).map((option) => toView(option.path)),
-    best: best ? toView(best.path) : null,
+    // an option that is both is drawn once, in the role's colour: two lines on
+    // one path would read as two options
+    best: best && best !== observed ? toView(best.path) : null,
     observed: observed ? toView(observed.path) : null,
     selected: selected ? toView(selected.path) : null,
     colour, solverRole: role,

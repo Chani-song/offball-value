@@ -1507,6 +1507,43 @@ class PublicShellTests(unittest.TestCase):
         self.assertIn("var(--t-name)", rule)
 
 
+class SceneListTests(unittest.TestCase):
+    """Seven scenes have a solved equilibrium; the list leads with them."""
+
+    def test_the_build_counts_each_scenes_solved_moments(self):
+        build = (REPO_ROOT / "demo_viz" / "web" / "build.py").read_text()
+        self.assertIn('keep["solved_moments"]', build)
+        # read from the exported panels, never declared by hand
+        self.assertIn('payload.get("kind") != "bundle_panels"', build)
+
+    def test_the_list_leads_with_the_scenes_that_have_one(self):
+        showcase = (SITE / "js" / "showcase.js").read_text()
+        block = showcase[showcase.index("export function filtered"):]
+        block = block[:block.index("\n}")]
+        self.assertIn("solved_moments", block)
+        self.assertIn("return bs - as", block)
+
+    def test_every_solver_file_is_a_scene_in_the_list(self):
+        """A solved scene the list does not carry is a scene nobody can open."""
+
+        import json
+        from demo_viz.web.export_data import slug
+        rows = json.loads((REPO_ROOT / "demo_viz" / "data"
+                           / "submission_showcase.json").read_text())["scenes"]
+        listed = {r.get("scene_id") for r in rows}
+        solver = REPO_ROOT / "demo_viz" / "web_data" / "solver"
+        missing = []
+        for path in sorted(solver.glob("*.json")):
+            payload = json.loads(path.read_text())
+            if payload.get("kind") != "bundle_panels":
+                continue
+            if payload.get("scene_id") not in listed:
+                missing.append(path.name)
+            else:
+                self.assertEqual(slug(payload["scene_id"]), path.stem)
+        self.assertEqual([], missing, missing)
+
+
 class EvaluationReadingTests(unittest.TestCase):
     """The public Player evaluation tab: what is drawn, and what is not."""
 
@@ -1525,6 +1562,44 @@ class EvaluationReadingTests(unittest.TestCase):
         block = self.panel[self.panel.index("export function renderDecisionPaths"):]
         block = block[:block.index("\n}")]
         self.assertIn("all: (entry.options || []).map", block)
+
+    def test_the_label_halo_is_the_figures_own_ratio(self):
+        """`figure_style.halo()` is 2.2pt against FS_LABEL 9.0 -- 0.24 em.
+
+        It must be written in `em`: a `px` on an SVG geometry property is a
+        user unit, and this pitch's user unit is a metre.
+        """
+
+        for rule in re.findall(r"[^}]*\{[^}]*paint-order: stroke[^}]*\}", self.css):
+            width = re.search(r"stroke-width:\s*([\d.]+)(em|px)", rule)
+            self.assertIsNotNone(width, rule)
+            self.assertEqual("em", width.group(2), rule)
+            self.assertLessEqual(float(width.group(1)), 0.3, rule)
+
+    def test_the_ball_carrier_is_ranked_like_everyone_else(self):
+        """A dash read as missing data; the note says what is missing."""
+
+        self.assertNotIn('entry.rank_partial ? "\\u2014"', self.panel)
+        block = self.panel[self.panel.index("export function renderOptions"):]
+        self.assertIn("lib.ordinal(option.rank)", block)
+
+    def test_both_solved_moment_tabs_hold_at_a_solved_moment(self):
+        block = self.app[self.app.index("function holdOnSolvedMoment"):]
+        block = block[:block.index("\n}")]
+        self.assertIn('state.mode === "game_solution"', block)
+        self.assertIn('state.mode === "evaluation"', block)
+        self.assertIn("2000", block)
+
+    def test_the_options_say_they_are_clickable(self):
+        markup = (SITE / "index.html").read_text()
+        block = markup[markup.index('id="options-card"'):]
+        self.assertIn("click to compare", block[:block.index("</div>")])
+
+    def test_the_played_option_is_the_role_colour_in_the_list_too(self):
+        block = self.panel[self.panel.index("export function renderOptions"):]
+        self.assertIn("is-playedrow", block)
+        self.assertIn('row.style.setProperty("--pick-played", played)', block)
+        self.assertIn("--pick-played", self.css)
 
     def test_the_two_accents_are_the_same_in_the_list_and_on_the_pitch(self):
         for colour in ("#00A8D8", "#FF2D8E"):
@@ -1568,6 +1643,20 @@ class DilemmaInteractionTests(unittest.TestCase):
         self.assertIn("const already = next[role] === playerId", block)
         self.assertIn("if (curated || already) delete next[role]", block)
 
+    def test_the_cast_has_a_cell_per_role(self):
+        """Default beside Selected, and all three roles live at once."""
+
+        panel = (SITE / "js" / "panel.js").read_text()
+        block = panel[panel.index("function renderCast"):]
+        block = block[:block.index("\n/**")]
+        self.assertIn('"Default"', block)
+        self.assertIn('"Selected"', block)
+        for role in ('"runner"', '"teammate"', '"defender"'):
+            self.assertIn(role, block, role)
+        # the cell arms its own role and empties only itself
+        self.assertIn("c.state.sweep = role", block)
+        self.assertIn("c.compareWith(chosenId)", block)
+
     def test_the_three_compared_roles_are_independent(self):
         """A teammate and a defender can be swapped at the same time."""
 
@@ -1606,14 +1695,14 @@ class DilemmaInteractionTests(unittest.TestCase):
         self.assertIn("pitch.drawField(cache.grid", block)
 
     def test_each_tab_has_its_own_view_default(self):
-        """Nash opens in Focus; the rest open on the full pitch."""
+        """The two solved-moment tabs open cropped; the other two do not."""
 
         block = self.app[self.app.index("const PUBLIC_VIEW = {"):]
         block = block[:block.index("};")]
         self.assertIn('observed: "full"', block)
         self.assertIn('counterfactual: "full"', block)
         self.assertIn('game_solution: "focus"', block)
-        self.assertIn('evaluation: "full"', block)
+        self.assertIn('evaluation: "focus"', block)
 
     def test_a_chosen_view_does_not_leak_between_tabs(self):
         block = self.app[self.app.index("function setMode"):]

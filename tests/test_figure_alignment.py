@@ -717,19 +717,40 @@ class LabelPlacementTests(unittest.TestCase):
         for banned in ("Math.random", "Date.now", "shuffle"):
             self.assertNotIn(banned, self.arrows, banned)
 
-    def test_candidate_offsets_are_a_fixed_ordered_list(self):
-        """The engine's rings and turns, not offsets tuned for one panel."""
+    def test_the_candidates_are_the_figures_own_lattice(self):
+        """`Placer.STEP / REACH / ORDERS`, not offsets tuned for one panel."""
 
         labels = (SITE / "js" / "labels.js").read_text()
-        self.assertIn("const RINGS = [", labels)
-        self.assertIn("const TURNS = [0, -28, 28", labels)
+        self.assertIn("const STEP = 0.15;", labels)
+        self.assertIn("const REACH = 5.0;", labels)
+        self.assertIn("const LEADER = 0.6;", labels)
+        # `cost = gap + 0.5 * (1 - cos)`: nearest free spot, the path's side first
+        self.assertIn("gap + 0.5 * (1 - cos)", labels)
+        # the order is searched, as upstream searches it, and seeded
+        self.assertIn("rng(0)", labels)
         for banned in ("Math.random", "Date.now"):
             self.assertNotIn(banned, labels, banned)
+
+    def test_a_label_clears_the_arrows_as_well_as_the_players(self):
+        """`Placer.line` and `Placer.head`: the drawing is ground too."""
+
+        labels = (SITE / "js" / "labels.js").read_text()
+        self.assertIn("blockLine(pts, halfWidth)", labels)
+        self.assertIn("blockHead(tip, radius)", labels)
+        self.assertIn("layout.blockLine(shaft", self.arrows)
+        self.assertIn("layout.blockHead(", self.arrows)
+
+    def test_a_leader_never_crosses_another_label_or_leader(self):
+        labels = (SITE / "js" / "labels.js").read_text()
+        block = labels[labels.index("  search(item, walls, labelBoxes)"):]
+        block = block[:block.index("\n  /**")]
+        self.assertIn("if (!free(dot, labelBoxes)) { blocked = true", block)
+        self.assertIn("0.4 * over", block)
 
     def test_a_label_keeps_clear_of_the_ones_already_placed(self):
         labels = (SITE / "js" / "labels.js").read_text()
         self.assertIn("get obstacles()", labels)
-        self.assertIn("this.blocked.concat(this.placed)", labels)
+        self.assertIn("this.solid.concat(this.placed)", labels)
         self.assertIn("labelGap", self.block)
 
     def test_the_box_is_measured_not_estimated(self):
@@ -740,7 +761,7 @@ class LabelPlacementTests(unittest.TestCase):
 
     def test_a_label_is_never_shrunk_to_fit(self):
         labels = (SITE / "js" / "labels.js").read_text()
-        place = labels[labels.index("  place(text, {"):]
+        place = labels[labels.index("  add(text, {"):]
         # the size that arrives is the size that is drawn
         self.assertIn('"font-size": size', place)
         self.assertNotIn("size *", place.split('"font-size": size')[0])
@@ -845,7 +866,7 @@ class PaperColourScopeTests(unittest.TestCase):
         css = (SITE / "style.css").read_text()
         block = css[css.index("body[data-paper] .pitch-label"):]
         block = block[:block.index("}")]
-        self.assertIn("rgba(255, 255, 255", block)
+        self.assertIn("#F7F7F7", block)
 
     def test_the_pitch_values_are_figure_styles_own(self):
         source = _show("scripts/figure_style.py")

@@ -113,6 +113,13 @@ export function filtered(scenes, filter) {
   const kept = scenes.filter((s) => matches(s, filter));
   return kept.sort((a, b) => {
     if (a.featured !== b.featured) return a.featured ? -1 : 1;
+    // the scenes with a solved equilibrium lead the list. Both of the demo's
+    // claims are read at a solved moment, and three of the four tabs have
+    // nothing to show without one, so a reader opening the list should meet
+    // those scenes first rather than find them scattered through it.
+    const as = a.solved_moments || 0;
+    const bs = b.solved_moments || 0;
+    if (as !== bs) return bs - as;
     const ao = a.order ?? Infinity;
     const bo = b.order ?? Infinity;
     if (ao !== bo) return ao - bo;
@@ -130,6 +137,11 @@ export function selectorLabel(scene) {
   const fixture = (scene.match || "").split("·")[0].trim();
   const head = scene.story_title || fixture;
   const parts = [head ? `${scene.showcase_id} · ${head}` : scene.showcase_id];
+  // a reader picking from the list can see which scenes have an equilibrium
+  // before opening one, and how many moments it was solved at
+  if (scene.solved_moments) {
+    parts.push(`${scene.solved_moments} solved moments`);
+  }
   const rating = topRating(scene);
   if (rating) parts.push(rating);
   parts.push(PROVENANCE_LABEL[scene.provenance] || scene.provenance);
