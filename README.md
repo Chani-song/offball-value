@@ -3,25 +3,26 @@
 **Kyuhyeok Seo**, **Chan-Eui Song**, **Andrew Kang**, **Priya Narasimhan**, **James Z. Wang**
 
 An off-ball run can force a defender to choose between following the runner and covering another
-attacker. We extract such situations from Bundesliga tracking data, model each as a small game between
-two attackers and one defender, and solve it for its Nash equilibrium every 0.6 s of the play. The
-equilibrium shows how both sides should move when each can respond to the other.
+attacker. We identify such situations in the IDSSE tracking dataset, model each as a small game
+between two attackers and one defender, and solve the game at 0.6 s intervals for its Nash
+equilibrium. The equilibrium describes how both sides should move when each can respond
+strategically to the other.
 
-## Demo
+## Interactive demo
 
-**[Open the interactive demo](https://chani-song.github.io/offball-value/)**
+**[OPEN INTERACTIVE DEMO](https://chani-song.github.io/offball-value/)**
 
-![Nash equilibrium view of the interactive demo](docs/assets/demo_screenshot.png)
+[![Interactive demo](docs/assets/demo_screenshot.png)](https://chani-song.github.io/offball-value/)
+
+### Demo tour
+
+[![Demo tour](docs/assets/demo_tour.png)](docs/assets/demo_tour.mp4)
 
 ## Key figures
 
 ![Figure 1](docs/assets/figure1_ssac.png)
 
-[PDF](docs/assets/figure1_ssac.pdf)
-
 ![Figure 2](docs/assets/figure2_ssac.png)
-
-[PDF](docs/assets/figure2_ssac.pdf)
 
 ## Overview
 
@@ -32,8 +33,7 @@ is the ball carrier, the game is a 2v1 between the ball carrier, the runner and 
 and only passes, and the runner and the beneficiary play against the defender (`andrew-fixedpasser/`,
 called 3v1 in the code).
 
-Both game packages build on a finite-game solver by Andrew Kang (`defensive_positioning`). It is not
-part of this repository ([docs/reproduction.md](docs/reproduction.md#solver-base)).
+Both game packages build on a finite-game solver by Andrew Kang (`defensive_positioning`).
 
 ## Method
 
@@ -119,20 +119,23 @@ scripts and from modules left over from earlier formulations, which are kept for
 | Figure 2 | needs the S05 panels, defender grids and tracking excerpt, which are not in the repository; rendered from the team's copies on 2026-10-01 |
 | Evaluation numbers | need the evaluation run's solver output and the IDSSE files |
 
-Commands, inputs and what was checked are in [docs/reproduction.md](docs/reproduction.md).
+Full solver reproduction requires the `defensive_positioning` solver base; see
+[docs/reproduction.md](docs/reproduction.md#solver-base). Commands, inputs and what was checked are in
+the same document.
 
 `docs/assets/figure1_ssac.pdf` and `figure2_ssac.pdf` are the submitted figures; the PNGs are full-page
 renders of them. Figure 1 is drawn from the tracking; only its Future 2 panel uses the solver (the
-through ball's target and the defender's motion). Figure 2 is solver output. The demo screenshot is
-the Nash equilibrium view of the showcase built from branch `chani-ssac-demo-latest-paper` at commit
-`ae3f38b`.
+through ball's target and the defender's motion). Figure 2 is solver output. The demo screenshot and
+the demo tour are recorded from the deployed demo at
+[chani-song.github.io/offball-value](https://chani-song.github.io/offball-value/).
 
 ## Data
 
-The tracking and event data are IDSSE (Bassek et al., 2025; CC BY 4.0; data owner DFL). Download them
-separately into `data/raw/bundesliga-integrated/`. The repository includes only fitted coefficients
-and measured limits derived from them, plus the README images. [docs/data.md](docs/data.md) lists what
-is included, what is not and why, and which steps need which inputs.
+The tracking and event data are IDSSE (Bassek et al., 2025; CC BY 4.0; data owner DFL), which covers
+seven Bundesliga matches. Download them separately into `data/raw/bundesliga-integrated/`. The
+repository includes only fitted coefficients and measured limits derived from them, plus the README
+images. [docs/data.md](docs/data.md) lists what is included, what is not and why, and which steps need
+which inputs.
 
 ## Installation
 
