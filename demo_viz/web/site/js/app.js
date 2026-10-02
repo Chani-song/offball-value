@@ -1312,8 +1312,11 @@ function renderMoments() {
   node.replaceChildren();
   if (!on) return;
   // which one is on follows the playhead, so the picker and the arrows can
-  // never disagree about which moment is being shown
-  const current = panelAt(data, state.frame)?.panel;
+  // never disagree about which moment is being shown. Only an exact match
+  // counts: the tab opens at the start of the clip, where no game is solved
+  // and no arrows are drawn, and a lit chip there would say otherwise.
+  const found = panelAt(data, state.frame);
+  const current = found?.exact ? found.panel : null;
   for (const panel of panels) {
     const button = document.createElement("button");
     button.className = `seg${panel === current ? " is-on" : ""}`;
