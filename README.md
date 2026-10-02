@@ -1,196 +1,175 @@
-# Local Off-Ball Game in Soccer
+# The Defender’s Dilemma: Game-Theoretic Evaluation of Off-Ball Movement in Soccer
 
-[![Interactive demo](https://img.shields.io/badge/interactive%20demo-open-5CE8F5?style=for-the-badge)](https://chani-song.github.io/offball-value/)
+**Kyuhyeok Seo**, **Chan-Eui Song**, **Andrew Kang**, **Priya Narasimhan**, **James Z. Wang**
 
-[<img src="demo_viz/exports/web_annotation.png" alt="Off-the-ball value explorer: click a runner, a defender and a beneficiary in human-annotated Bundesliga scenes" width="100%">](https://chani-song.github.io/offball-value/)
+An off-ball run can force a defender to choose between following the runner and covering another
+attacker. We identify such situations in the IDSSE tracking dataset, model each as a small game
+between two attackers and one defender, and solve the game at 0.6 s intervals for its Nash
+equilibrium. The equilibrium describes how both sides should move when each can respond
+strategically to the other.
 
-**▶ [Off-the-ball value explorer](https://chani-song.github.io/offball-value/)** —
-opens on the **Submission showcase**: 21 curated dilemma scenes, each with its
-reviewers' own runner, defender and beneficiary. Click a player to inspect it,
-reassign roles, and explore how the space and threat change. **Full explorer**
-keeps all 45 annotated Bundesliga scenes, recomputed in the browser as you
-click.
+## Demo tour
 
-The same explorer runs locally with a Dash back end
-(`python -m demo_viz.app.interactive_app`). Off-the-ball investigation examples
-render as videos (`python -m demo_viz.export_strong`). See
-[`demo_viz/`](demo_viz/README.md).
+https://github.com/user-attachments/assets/7606d839-5d92-4e17-a011-cc6d21da98ac
 
----
+## Interactive demo
 
-Research prototype for studying how an off-ball run reallocates a defender
-between the runner's direct threat and the attacking opportunities left to
-teammates.
+[![Interactive demo](https://img.shields.io/badge/INTERACTIVE_DEMO-OPEN-0000FF?style=for-the-badge)](https://chani-song.github.io/offball-value/)
 
-## Research question
+[![The interactive demo, Nash equilibrium view](docs/assets/demo_screenshot.png)](https://chani-song.github.io/offball-value/)
 
-> Can we identify off-ball movements that retain attacking threat even after a
-> physically feasible defensive response?
+**▶ [Open the interactive demo](https://chani-song.github.io/offball-value/)**
 
-The focal intervention is the **off-ball runner**. The full 11-v-11 state is
-kept as context, but counterfactual control is restricted to a small local
-game: one runner action, one candidate defender response at a time, and the
-attacking options whose control changes with that defender's allocation. A
-fixed geometric 2-v-1 is neither required nor assumed.
+## Key figures
 
-## Current workflow
+![Figure 1](docs/assets/figure1_ssac.png)
+
+![Figure 2](docs/assets/figure2_ssac.png)
+
+## Method
+
+**Players.** Each scene has three roles: the runner, the defender responsible for the runner, and the
+beneficiary, the teammate who gains if the defender follows the runner. There are two kinds of game:
+
+- **2v1** (`andrew-passer2on1/`): the beneficiary is the ball carrier. The ball carrier and the
+  runner play against the defender.
+- **3v1** (`andrew-fixedpasser/`): the beneficiary is another teammate. The ball carrier follows
+  their real path and can only pass; the runner and the beneficiary play against the defender.
+
+**Scenes.** Run onsets are detected inside settled attacking possessions in the seven IDSSE matches:
+a change of direction of at least 25 degrees with a speed gain of at least 1.5 m/s. In pipeline scenes
+a rule assigns the three roles; in annotated scenes they come from the annotator's labels.
+
+**Game.** Each game has three simultaneous decisions of 0.6 s (a 1.8 s horizon). The defender chooses
+one of five movement commands: stop, or move in one of four directions relative to the attack. The
+attack chooses a joint command for its two players, or a pass. Pass candidates are aimed along the
+receiver's run. All movement respects speed-up, braking and turning limits measured from the same
+tracking data (99.9th percentile). All other players follow their real tracked paths. In 2v1 games
+the other defenders can still tackle the ball carrier. A pass is worth its completion probability
+times a hand-designed positional threat at its target. Completion probabilities come from a pass
+model fitted on passes from these matches; each scene uses a fit that leaves out its own match.
+
+**Solution.** The game is zero-sum and finite, and is solved backwards with a linear program at every
+decision state. Each solution is checked against unrestricted best responses for both sides: the
+certificate gap must be within the solver's tolerance. The result is a behaviour strategy, a mixed
+choice at every decision state. Each real moment (0.0, 0.6 and 1.2 s after the start) is solved as a
+separate game.
+
+The probabilities in the code output and the figures are the probabilities the equilibrium strategy
+puts on each action. They are not pass-completion probabilities, and they do not say how likely an
+action is to be correct.
+
+Both games build on a finite-game solver by Andrew Kang (`defensive_positioning`). Design notes for
+each game are in `andrew-passer2on1/DESIGN.md` and `andrew-fixedpasser/DESIGN.md`.
+
+## Results
+
+The evaluation set has 26 scenes from the rated pool: 7 from a team member's annotated shot clips and
+19 from the pipeline. Together they give 69 real moments and 207 player decisions.
+
+| Result in the abstract | How it is computed |
+| --- | --- |
+| The equilibrium mixes in 48% of moments | the defender mixes at 33 of 69 moments (`scripts/analyze_eval.py`) |
+| Optimal attack against the fixed, observed defense exceeds the equilibrium value by 6% on average and up to 21% | `(S - V) / V` from `scripts/static_counterfactual.py` and `scripts/summarize_static.py` |
+
+The output files of both analyses are not in the repository. The first number was recomputed from the
+2026-09-30 evaluation output; the second could not be re-run outside the cluster
+([docs/reproduction.md](docs/reproduction.md)).
+
+`scripts/analyze_eval.py` also ranks each player's observed option among their five or six options,
+by its value against the opponent's equilibrium strategy. These numbers are not in the abstract.
+
+| | Observed | Uniform choice |
+| --- | --- | --- |
+| Median rank of the observed option (ties share places) | 2.0 | 3.0 |
+| Mean equilibrium probability of the observed option | 0.31 | 0.19 |
+
+Caveats:
+
+- The observed option is the command whose 0.6 s end point is nearest the player's real position
+  (median distance 0.78 m), so it is an approximation.
+- Ties are common: 42.5% of observed options tie with another option.
+- The evaluation set is small, includes the figure scene, and was drawn from scenes selected for a
+  dilemma rating.
+
+## Code
+
+| Step | Where |
+| --- | --- |
+| Run onsets and scenes | `scripts/extract_settled_possession_run_onsets.py`, `apply_pair_gate.py`, `build_stage3_states.py` |
+| Pass model and movement limits | `scripts/fit_pass_sym.py`, `scripts/measure_accelerations.py` |
+| Game states | `scripts/build_showcase_states.py`, `scripts/build_eval_states.py` |
+| Games and solver runs | `andrew-passer2on1/`, `andrew-fixedpasser/` (each run by its own `scripts/run.py`); SLURM jobs in `jobs/` |
+| Evaluation | `scripts/analyze_eval.py`, `scripts/static_counterfactual.py`, `scripts/summarize_static.py` |
+| Figures | `scripts/render_figure1_dilemma.py`, `scripts/render_figure2_abstract.py`, `scripts/add_caption.py` |
+| Demo | `demo_viz/` ([demo_viz/README.md](demo_viz/README.md)) |
 
 ```text
-Bundesliga tracking + events
-  -> shot-context sampling
-  -> controlled-possession gate
-  -> retrospective run-onset detection
-  -> human-confirmed development scenes
-  -> bounded movement and dynamic goal-side response
-  -> defender-by-attacking-option structural audit
-  -> future: calibrated threat, defender best response, attacker max-min
+andrew-passer2on1/    2v1 game: package, solver run script, design notes, check scripts
+andrew-fixedpasser/   3v1 game (scripted passer), same layout
+src/offball_value/    tracking loaders, run-onset detection, scene construction
+scripts/              pipeline steps, evaluation, figures
+jobs/                 SLURM scripts for the solver runs
+demo_viz/             interactive demo
+data/processed/       fitted pass-model coefficients and measured movement limits
+data/static/          static EPV grid (from PAUSA, Apache-2.0)
+tests/                unit tests
+docs/                 reproduction, data and code status; docs/assets/ holds the README images
 ```
 
-Shots are used only to retrieve attack-like match windows. The project does
-not assume that an earlier run caused the later shot, and shot outcomes are not
-optimizer inputs.
+`src/offball_value/` also contains modules from earlier versions of the method that are no longer on
+the paper's path. [docs/code_status.md](docs/code_status.md) lists which code is on the paper's path,
+which supports it, and which is left over.
 
-## What is implemented
+## Reproducing
 
-| Component | Status |
+| What | Needs |
 | --- | --- |
-| IDSSE Bundesliga loader for seven full matches | Implemented |
-| Open-play shot contexts and controlled-possession filtering | Implemented |
-| Acceleration, direction-change, and check-run onset detector | Implemented and human-audited |
-| Eight human-confirmed local-game development scenes | Available |
-| Bounded steering and plant-and-cut action-space prototypes | Implemented and human-audited |
-| Dynamic goal-side defender response | Implemented as a geometry prototype |
-| Three candidate defenders by five local attacking options | Implemented as a structural audit |
-| Delivery x goal danger x goal-side accessibility | Provisional components only |
-| Validated defender best response and attacker max-min value | Not yet implemented |
-| Seven-match statistical evaluation | Not yet run |
+| Unit tests | this repository only (run in CI) |
+| Pass model and movement limits | the IDSSE files, to refit them (the fitted outputs are committed) |
+| Scenes, game states, solver runs | the IDSSE files, the private solver base and a SLURM cluster; the showcase scenes also need the team's annotation sheets |
+| Figure 1 | the solver output for S05 and a start sheet, neither in the repository |
+| Figure 2 | the S05 panels, defender grids and tracking excerpt, none in the repository |
+| Evaluation numbers | the evaluation run's solver output and the IDSSE files |
 
-The current structural matrix uses **observed attacker futures** for
-retrospective development-set auditing. Its cells are goal-side marking
-allocation effects, not a calibrated threat value and not an online trajectory
-prediction result.
+Full solver reproduction requires the `defensive_positioning` solver base; see
+[docs/reproduction.md](docs/reproduction.md#solver-base). Commands, inputs and what was checked are in
+the same document.
 
-## Review artifacts
+`docs/assets/figure1_ssac.pdf` and `figure2_ssac.pdf` are the submitted figures; the PNGs are full-page
+renders of them. Figure 1 is drawn from the tracking; only its Future 2 panel uses the solver (the
+through ball's target and the defender's motion). Figure 2 is solver output. The demo screenshot is
+taken from the deployed demo at
+[chani-song.github.io/offball-value](https://chani-song.github.io/offball-value/); the demo tour is a
+recording of the same interface, kept in `docs/assets/demo_tour.mp4` and played in this page from its
+GitHub attachment.
 
-The curated audit package is in
-[`examples/research_audit/`](examples/research_audit/README.md). It contains
-non-regenerable human reviews, the confirmed scene manifest, and three
-self-contained demos:
+## Data
 
-- [`clear_core_scene_audit.html`](examples/research_audit/current_demos/clear_core_scene_audit.html): eight human-confirmed development scenes shown with observed motion only; the two held scenes are not displayed.
-- [`meeting_scene_gallery.html`](examples/research_audit/current_demos/meeting_scene_gallery.html): eight unique confirmed scenes; the Klaus scene also retains one clearly labeled legacy dynamic view.
-- [`structural_local_game_audit.html`](examples/research_audit/current_demos/structural_local_game_audit.html): defender-by-option geometry screen over the eight confirmed scenes.
+The tracking and event data are IDSSE (Bassek et al., 2025; CC BY 4.0; data owner DFL), which covers
+seven Bundesliga matches. Download them separately into `data/raw/bundesliga-integrated/`. The
+repository includes only fitted coefficients and measured limits derived from them, plus the README
+images. [docs/data.md](docs/data.md) lists what is included, what is not and why, and which steps need
+which inputs.
 
-GitHub displays HTML source rather than executing these pages. Clone or
-download the repository and open the files in a local web browser.
+## Installation
 
-## demo_viz
-
-[`demo_viz/`](demo_viz/README.md) turns one annotated sequence into something a
-first-time viewer understands:
-
-```text
-off-ball runner moves -> defender is pulled -> space opens -> beneficiary gains
-```
-
-| | |
-| --- | --- |
-| **Interactive explorer** (browser) | [live demo](https://chani-song.github.io/offball-value/) · static, no server · [`demo_viz/web/`](demo_viz/web/) |
-| **Interactive explorer** (local) | `python -m demo_viz.app.interactive_app` · Dash · [`demo_viz/app/`](demo_viz/app/) |
-| **Narrated videos** | `python -m demo_viz.export_preview --all-strong` · MP4 / GIF / PNG / HTML |
-
-Every layer is tagged on screen as measured, human-supplied, or explanatory.
-The shaded space comes from `offball_value.goal_weighted_influence` and
-`offball_value.fernandez_influence`; no calibrated threat, pass probability or
-learned defensive response is drawn, because this repository does not produce
-one.
-
-Reports: [`demo_viz/INTERACTIVE_REPORT.md`](demo_viz/INTERACTIVE_REPORT.md) (explorer),
-[`demo_viz/OVERNIGHT_REPORT.md`](demo_viz/OVERNIGHT_REPORT.md) (renderer, and what
-the counterfactual difference actually measures).
-
-## Manual annotation tool
-
-[`annotations/shot_annotations.xlsx`](annotations/shot_annotations.xlsx) contains
-the canonical manual labels. The original labeling UI is in
-[`tools/shot_annotation_app`](tools/shot_annotation_app/README.md); see its README
-for local startup and media configuration. Raw video clips are not stored in GitHub.
-
-## Quick start
-
-Python 3.11 is required.
+Python 3.11.
 
 ```bash
 ./bootstrap.sh
+PYTHONPATH=src .venv/bin/python -m unittest discover -s tests
 ```
 
-Download the IDSSE data separately and place it at:
+`requirements.txt` pins the versions the tests were run with. The solver packages also need the solver
+base cloned into `andrew/` ([docs/reproduction.md](docs/reproduction.md#solver-base)).
 
-```text
-data/raw/bundesliga-integrated/
-```
+## Citation
 
-The curated structural audit can be regenerated without loading raw match
-files:
+See [CITATION.cff](CITATION.cff). Please also cite the IDSSE dataset ([docs/data.md](docs/data.md)).
 
-```bash
-.venv/bin/python scripts/render_structural_local_game_v0_1.py \
-  --scenes-json examples/research_audit/manifests/confirmed_core_scenes.json
-```
+## License
 
-The confirmed observed-motion audit can be regenerated from the same payload:
-
-```bash
-.venv/bin/python scripts/render_clear_core_scene_audit_v0_1.py \
-  --confirmed-scenes-json examples/research_audit/manifests/confirmed_core_scenes.json
-```
-
-The preserved meeting gallery can also be rendered directly from its curated
-payload:
-
-```bash
-.venv/bin/python scripts/render_meeting_scene_gallery_v0_1.py
-```
-
-Run the test suite with:
-
-```bash
-.venv/bin/python -m unittest discover -s tests -p 'test_*.py' -v
-```
-
-See [`docs/data_and_reproduction.md`](docs/data_and_reproduction.md) for the
-full extraction and review pipeline.
-
-## Documentation
-
-- [`docs/current_research_overview.md`](docs/current_research_overview.md): current research question, game formulation, contributions, and open decisions.
-- [`docs/methodology_v0_1.md`](docs/methodology_v0_1.md): frozen definitions for the current scene and structural audits.
-- [`docs/data_and_reproduction.md`](docs/data_and_reproduction.md): data setup, commands, outputs, and citation.
-- [`docs/review_guide.md`](docs/review_guide.md): how to inspect the three HTML demos.
-- [`docs/research_history.md`](docs/research_history.md): why the project moved away from the early OBSO-style proxy.
-- [`docs/literature_review.md`](docs/literature_review.md): related-work map.
-- [`docs/background_rollout_benchmark_v0_1.md`](docs/background_rollout_benchmark_v0_1.md): held-out comparison of simple causal background rollouts.
-
-## Repository map
-
-```text
-src/offball_value/    reusable loaders, detection, motion, and local-game code
-scripts/              extraction, calibration, evaluation, and rendering CLIs
-tests/                unit tests
-examples/             curated human reviews, manifests, and self-contained demos
-docs/                 current research and reproduction documentation
-data/static/          small static model inputs tracked by Git
-data/raw/             local datasets; ignored by Git
-data/processed/       regenerated outputs; ignored by Git
-```
-
-## Data and claim boundary
-
-The primary dataset is IDSSE: seven synchronized Bundesliga and 2. Bundesliga
-matches sampled at 25 Hz. IDSSE is distributed under CC BY 4.0; attribution
-details are in [`docs/data_and_reproduction.md`](docs/data_and_reproduction.md).
-Raw data are never committed to this repository.
-
-This repository is a research prototype. It must not yet be interpreted as a
-validated off-ball value metric, player ranking, causal estimate, or coaching
-recommendation system.
+No license has been chosen for this code yet, so it is not licensed for reuse. The solver base it
+imports is in a private repository without a license. `data/static/EPV_grid.csv` is Apache-2.0
+(PAUSA).

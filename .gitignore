@@ -5,35 +5,33 @@ __pycache__/
 *.egg-info/
 .ipynb_checkpoints/
 data/raw/
-data/processed/
+data/processed/*
+!data/processed/pass_models/
+data/processed/pass_models/*
+!data/processed/pass_models/A_*.json
+# the abstract's pass model (A-sym, fitted coefficients) and player limits (measured percentiles): numbers only
+!data/processed/pass_models_sym/
+data/processed/pass_models_sym/*
+!data/processed/pass_models_sym/Asym_*.json
+!data/processed/physics_limits/
+data/processed/physics_limits/*
+!data/processed/physics_limits/agile_p999_nodelay.json
 relatedworks/
 .DS_Store
-demo_viz/cache/
-demo_viz/exports/*_nohold.mp4
-demo_viz.zip
-demo_viz/web_build/
-demo_viz*.zip
 
-# Local annotation media and generated files (the canonical XLSX is tracked).
-*.mp4
-*.mov
-*.mkv
-*.avi
-*.webm
-ALL_SHOT_CLIPS/
-ALL_SHOT_CLIPS.zip
-tracking_overlay_cache/
-tools/shot_annotation_app/output/
-tools/shot_annotation_app/media/
-tools/shot_annotation_app/*.log
-annotations/*.csv
-~$*.xlsx
-*.tmp
-.pytest_cache/
-!annotations/shot_annotations.xlsx
+# other local environments
+.venv-*/
+logs/
+out/
+# Andrew's solver lives in a separate repository (andrewkang12345/mit_ssac2027): clone it into ./andrew
+andrew/
 
-# Curated showcase source: local only, carries embedded raw tracking
+# annotation sheets are data, not code
+chani/
+
+# shared data bundles and local copies of them (tracking-derived; not for Git)
 local_inputs/
-# Licensed data bundles and the tracking they carry, wherever they land
 *.tar.gz
-tracking/
+*.zip
+build/
+demo_viz/cache/

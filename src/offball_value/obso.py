@@ -286,6 +286,472 @@ def score_at_points(
     return _geometric_score_at_points(pts, attacking_direction)
 
 
+def _unit_vector_or_none(vector: np.ndarray) -> np.ndarray | None:
+    norm = float(np.linalg.norm(vector))
+    if norm <= 1e-9:
+        return None
+    return vector / norm
+
+
+def runner_intent_prior_at_points(
+    runner_start: BundesligaObjectState,
+    runner_end: BundesligaObjectState,
+    points: np.ndarray,
+    attacking_direction: int,
+    max_ahead: float = 18.0,
+    lateral_sigma: float = 3.2,
+    goal_mix: float = 0.25,
+    runner_threat_point: tuple[float, float] | None = None,
+) -> np.ndarray:
+    """Future receiving prior from the pass frame and observed run direction."""
+    runner_end_xy = np.asarray([runner_end.x, runner_end.y], dtype=float)
+    runner_vec = np.asarray(
+        [runner_end.x - runner_start.x, runner_end.y - runner_start.y],
+        dtype=float,
+    )
+    inertia_unit = _unit_vector_or_none(runner_vec)
+    if inertia_unit is None:
+        inertia_unit = np.asarray([float(attacking_direction), 0.0], dtype=float)
+
+    goal_xy = np.asarray([attacking_direction * FIELD_LENGTH / 2.0, 0.0], dtype=float)
+    goal_unit = _unit_vector_or_none(goal_xy - runner_end_xy)
+    if goal_unit is None:
+        goal_unit = inertia_unit
+
+    if runner_threat_point is not None:
+        threat_xy = np.asarray(runner_threat_point, dtype=float)
+        threat_unit = _unit_vector_or_none(threat_xy - runner_end_xy)
+        if threat_unit is None:
+            threat_unit = inertia_unit
+    else:
+        projection = min(6.0, max(0.0, max_ahead))
+        threat_xy = runner_end_xy + projection * inertia_unit
+        threat_xy[0] = float(np.clip(threat_xy[0], -FIELD_LENGTH / 2.0, FIELD_LENGTH / 2.0))
+        threat_xy[1] = float(np.clip(threat_xy[1], -FIELD_WIDTH / 2.0, FIELD_WIDTH / 2.0))
+        threat_unit = inertia_unit
+
+    rel = points - runner_end_xy
+
+    def future_lane_prior(unit: np.ndarray) -> np.ndarray:
+        ahead = rel @ unit
+        lateral_vec = rel - ahead[:, None] * unit
+        lateral = np.linalg.norm(lateral_vec, axis=1)
+        lateral_width = lateral_sigma + 0.18 * np.maximum(ahead, 0.0)
+        lateral_score = np.exp(-0.5 * (lateral / np.maximum(lateral_width, 1e-6)) ** 2)
+        ahead_score = (
+            (1.0 - np.exp(-np.maximum(ahead, 0.0) / 2.0))
+            * np.exp(-np.maximum(ahead, 0.0) / max(max_ahead, 1e-6))
+        )
+        gate = (ahead > 0.0) & (ahead <= max_ahead)
+        return lateral_score * ahead_score * gate
+
+    movement_lane = future_lane_prior(threat_unit)
+    goal_lane = future_lane_prior(goal_unit)
+
+    threat_distance = np.linalg.norm(points - threat_xy, axis=1)
+    threat_ahead = rel @ threat_unit
+    threat_projection = max(
+        1.0,
+        min(max_ahead, float(np.linalg.norm(threat_xy - runner_end_xy))),
+    )
+    threat_anchor = (
+        np.exp(-0.5 * (threat_distance / max(lateral_sigma * 1.25, 1e-6)) ** 2)
+        * np.exp(-0.5 * ((threat_ahead - threat_projection) / 4.5) ** 2)
+        * (threat_ahead > 0.0)
+        * (threat_ahead <= max_ahead)
+    )
+
+    goal_mix = max(0.0, min(1.0, goal_mix))
+    future_prior = np.maximum(movement_lane, 0.65 * threat_anchor)
+    prior = (1.0 - goal_mix) * future_prior + goal_mix * goal_lane
+    max_prior = float(np.nanmax(prior)) if len(prior) else 0.0
+    if max_prior > 1e-12:
+        prior = prior / max_prior
+    return prior
+
+
+def runner_receiving_threat_map(
+    start_frame: BundesligaFrame,
+    end_frame: BundesligaFrame,
+    runner_id: str,
+    attacking_team_id: str,
+    attacking_direction: int,
+    ball_xy: tuple[float, float],
+    runner_threat_point: tuple[float, float] | None = None,
+    resolution: float = 1.0,
+    max_ahead: float = 18.0,
+    lateral_sigma: float = 3.2,
+    goal_mix: float = 0.25,
+    excluded_defender_ids: set[str] | None = None,
+    filter_offside: bool = True,
+    runner_speed: float = 5.8,
+    defender_speed: float = 5.5,
+    time_sigma: float = 0.45,
+) -> dict[str, object] | None:
+    """Map future runner receiving threat from the pass-event frame."""
+    runner_start = start_frame.players.get(runner_id)
+    runner_end = end_frame.players.get(runner_id)
+    if runner_start is None or runner_end is None:
+        return None
+
+    xs = np.arange(-FIELD_LENGTH / 2.0, FIELD_LENGTH / 2.0 + resolution, resolution)
+    ys = np.arange(-FIELD_WIDTH / 2.0, FIELD_WIDTH / 2.0 + resolution, resolution)
+    xx, yy = np.meshgrid(xs, ys)
+    points = np.column_stack([xx.ravel(), yy.ravel()])
+    zeros = np.zeros(len(points), dtype=float)
+
+    legal = not (
+        filter_offside
+        and is_offside_position(
+            end_frame,
+            runner_id,
+            attacking_team_id,
+            ball_xy,
+            attacking_direction,
+        )
+    )
+    if not legal:
+        return {
+            "xs": xs,
+            "ys": ys,
+            "receive_probability": zeros.reshape(xx.shape),
+            "threat": zeros.reshape(xx.shape),
+            "intent_prior": zeros.reshape(xx.shape),
+            "pass_access": zeros.reshape(xx.shape),
+            "runner_control": zeros.reshape(xx.shape),
+            "receive_value": zeros.reshape(xx.shape),
+            "peak_x": None,
+            "peak_y": None,
+            "peak_value": 0.0,
+            "peak_receive_probability": 0.0,
+            "integrated_threat": 0.0,
+        }
+
+    intent_prior = runner_intent_prior_at_points(
+        runner_start,
+        runner_end,
+        points,
+        attacking_direction,
+        max_ahead=max_ahead,
+        lateral_sigma=lateral_sigma,
+        goal_mix=goal_mix,
+        runner_threat_point=runner_threat_point,
+    )
+    active = intent_prior > 1e-8
+    pass_access = zeros.copy()
+    runner_control = zeros.copy()
+    receive_value = zeros.copy()
+
+    excluded = excluded_defender_ids or set()
+    defenders = np.asarray(
+        [
+            (player.x, player.y)
+            for player in end_frame.players.values()
+            if player.team_id != attacking_team_id and player.object_id not in excluded
+        ],
+        dtype=float,
+    )
+    if defenders.size == 0:
+        defenders = np.empty((0, 2), dtype=float)
+    else:
+        defenders = defenders.reshape(-1, 2)
+
+    active_points = points[active]
+    if len(active_points):
+        pass_access[active] = transition_at_points(ball_xy, defenders, active_points)
+        runner_xy = np.asarray([runner_end.x, runner_end.y], dtype=float)
+        runner_time = np.linalg.norm(active_points - runner_xy, axis=1) / runner_speed
+        if len(defenders):
+            defender_time = (
+                np.linalg.norm(active_points[:, None, :] - defenders[None, :, :], axis=2).min(axis=1)
+                / defender_speed
+            )
+            runner_control[active] = 1.0 / (
+                1.0 + np.exp(-(defender_time - runner_time) / time_sigma)
+            )
+        else:
+            runner_control[active] = 1.0
+        receive_value[active] = score_at_points(active_points, attacking_direction)
+
+    receive_probability = intent_prior * pass_access * runner_control
+    threat = receive_probability * receive_value
+    peak_idx = int(np.nanargmax(threat)) if len(threat) else 0
+    cell_area = resolution * resolution
+    return {
+        "xs": xs,
+        "ys": ys,
+        "receive_probability": receive_probability.reshape(xx.shape),
+        "threat": threat.reshape(xx.shape),
+        "intent_prior": intent_prior.reshape(xx.shape),
+        "pass_access": pass_access.reshape(xx.shape),
+        "runner_control": runner_control.reshape(xx.shape),
+        "receive_value": receive_value.reshape(xx.shape),
+        "peak_x": float(points[peak_idx, 0]) if len(points) else None,
+        "peak_y": float(points[peak_idx, 1]) if len(points) else None,
+        "peak_value": float(threat[peak_idx]) if len(threat) else 0.0,
+        "peak_receive_probability": (
+            float(receive_probability[peak_idx]) if len(points) else 0.0
+        ),
+        "integrated_threat": float(np.nansum(threat) * cell_area),
+    }
+
+
+def runner_static_threat_blocker_attributions(
+    start_frame: BundesligaFrame,
+    end_frame: BundesligaFrame,
+    runner_id: str,
+    attacking_team_id: str,
+    attacking_direction: int,
+    ball_xy: tuple[float, float],
+    runner_threat_point: tuple[float, float] | None = None,
+    resolution: float = 2.0,
+    max_ahead: float = 18.0,
+    lateral_sigma: float = 3.2,
+    goal_mix: float = 0.25,
+    filter_offside: bool = True,
+) -> list[dict[str, float | str]]:
+    """Attribute t2 future-threat suppression by removing each defender."""
+    runner_start = start_frame.players.get(runner_id)
+    runner_end = end_frame.players.get(runner_id)
+    if runner_start is None or runner_end is None:
+        return []
+    if filter_offside and is_offside_position(
+        end_frame,
+        runner_id,
+        attacking_team_id,
+        ball_xy,
+        attacking_direction,
+    ):
+        return []
+
+    defenders = [
+        player
+        for player in end_frame.players.values()
+        if player.team_id != attacking_team_id
+    ]
+    if not defenders:
+        return []
+
+    xs = np.arange(-FIELD_LENGTH / 2.0, FIELD_LENGTH / 2.0 + resolution, resolution)
+    ys = np.arange(-FIELD_WIDTH / 2.0, FIELD_WIDTH / 2.0 + resolution, resolution)
+    xx, yy = np.meshgrid(xs, ys)
+    all_points = np.column_stack([xx.ravel(), yy.ravel()])
+    all_prior = runner_intent_prior_at_points(
+        runner_start,
+        runner_end,
+        all_points,
+        attacking_direction,
+        max_ahead=max_ahead,
+        lateral_sigma=lateral_sigma,
+        goal_mix=goal_mix,
+        runner_threat_point=runner_threat_point,
+    )
+    active = all_prior > 1e-8
+    points = all_points[active]
+    intent_prior = all_prior[active]
+    if not len(points):
+        return []
+
+    defender_xy = np.asarray([(player.x, player.y) for player in defenders], dtype=float)
+    runner_xy = np.asarray([runner_end.x, runner_end.y], dtype=float)
+    runner_time = np.linalg.norm(points - runner_xy, axis=1) / 5.8
+    defender_time_matrix = (
+        np.linalg.norm(points[:, None, :] - defender_xy[None, :, :], axis=2) / 5.5
+    )
+
+    ball = np.asarray(ball_xy, dtype=float)
+    segments = points - ball
+    segment_denominator = np.sum(segments * segments, axis=1)
+    defender_from_ball = defender_xy - ball
+    projections = (
+        np.einsum("nd,kd->nk", segments, defender_from_ball)
+        / np.maximum(segment_denominator[:, None], 1e-9)
+    )
+    projections = np.clip(projections, 0.0, 1.0)
+    closest = ball + projections[:, :, None] * segments[:, None, :]
+    lane_distance_matrix = np.linalg.norm(
+        defender_xy[None, :, :] - closest,
+        axis=2,
+    )
+
+    def first_second(matrix: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        first_index = np.argmin(matrix, axis=1)
+        first = matrix[np.arange(len(matrix)), first_index]
+        if matrix.shape[1] == 1:
+            second = np.full(len(matrix), np.inf, dtype=float)
+        else:
+            second = np.partition(matrix, 1, axis=1)[:, 1]
+        return first, second, first_index
+
+    min_defender_time, second_defender_time, min_defender_index = first_second(
+        defender_time_matrix
+    )
+    min_lane_distance, second_lane_distance, min_lane_index = first_second(
+        lane_distance_matrix
+    )
+
+    pass_distance_score = np.exp(-np.linalg.norm(points - ball, axis=1) / 38.0)
+    receive_value = score_at_points(points, attacking_direction)
+
+    def control_from_time(defender_time: np.ndarray) -> np.ndarray:
+        return 1.0 / (1.0 + np.exp(-(defender_time - runner_time) / 0.45))
+
+    def pass_access_from_lane(lane_distance: np.ndarray) -> np.ndarray:
+        lane_access = 1.0 / (
+            1.0 + np.exp(-(lane_distance - 2.0) / 1.2)
+        )
+        return pass_distance_score * lane_access
+
+    def integrated_components(
+        control: np.ndarray,
+        pass_access: np.ndarray,
+    ) -> float:
+        threat = intent_prior * pass_access * control * receive_value
+        return float(np.nansum(threat) * resolution * resolution)
+
+    def lane_distance_for_position(position: np.ndarray) -> np.ndarray:
+        from_ball = position - ball
+        projection = (
+            np.einsum("nd,d->n", segments, from_ball)
+            / np.maximum(segment_denominator, 1e-9)
+        )
+        projection = np.clip(projection, 0.0, 1.0)
+        closest_point = ball + projection[:, None] * segments
+        return np.linalg.norm(position - closest_point, axis=1)
+
+    actual_control = control_from_time(min_defender_time)
+    actual_pass_access = pass_access_from_lane(min_lane_distance)
+    actual_threat = integrated_components(actual_control, actual_pass_access)
+    out = []
+    for defender_index, defender in enumerate(defenders):
+        without_defender_time = np.where(
+            min_defender_index == defender_index,
+            second_defender_time,
+            min_defender_time,
+        )
+        without_lane_distance = np.where(
+            min_lane_index == defender_index,
+            second_lane_distance,
+            min_lane_distance,
+        )
+        without_control = control_from_time(without_defender_time)
+        without_pass_access = pass_access_from_lane(without_lane_distance)
+        without_threat = integrated_components(
+            without_control,
+            without_pass_access,
+        )
+        static_control_contribution = max(
+            0.0,
+            integrated_components(without_control, actual_pass_access) - actual_threat,
+        )
+        static_pass_lane_contribution = max(
+            0.0,
+            integrated_components(actual_control, without_pass_access) - actual_threat,
+        )
+        static_interaction_contribution = (
+            without_threat
+            - actual_threat
+            - static_control_contribution
+            - static_pass_lane_contribution
+        )
+
+        response_total_contribution = 0.0
+        response_control_contribution = 0.0
+        response_pass_lane_contribution = 0.0
+        response_interaction_contribution = 0.0
+        defender_start = start_frame.players.get(defender.object_id)
+        if defender_start is not None:
+            start_xy = np.asarray([defender_start.x, defender_start.y], dtype=float)
+            start_time = np.linalg.norm(points - start_xy, axis=1) / 5.5
+            start_lane_distance = lane_distance_for_position(start_xy)
+            frozen_defender_time = np.minimum(without_defender_time, start_time)
+            frozen_lane_distance = np.minimum(without_lane_distance, start_lane_distance)
+            frozen_control = control_from_time(frozen_defender_time)
+            frozen_pass_access = pass_access_from_lane(frozen_lane_distance)
+            frozen_threat = integrated_components(frozen_control, frozen_pass_access)
+            response_total_contribution = max(0.0, frozen_threat - actual_threat)
+            response_control_contribution = max(
+                0.0,
+                integrated_components(frozen_control, actual_pass_access) - actual_threat,
+            )
+            response_pass_lane_contribution = max(
+                0.0,
+                integrated_components(actual_control, frozen_pass_access) - actual_threat,
+            )
+            response_interaction_contribution = (
+                frozen_threat
+                - actual_threat
+                - response_control_contribution
+                - response_pass_lane_contribution
+            )
+
+        out.append(
+            {
+                "defender_id": defender.object_id,
+                "static_blocker_contribution": max(0.0, without_threat - actual_threat),
+                "static_control_blocker_contribution": static_control_contribution,
+                "static_pass_lane_contribution": static_pass_lane_contribution,
+                "static_interaction_contribution": static_interaction_contribution,
+                "response_total_contribution": response_total_contribution,
+                "response_control_contribution": response_control_contribution,
+                "response_pass_lane_contribution": response_pass_lane_contribution,
+                "response_interaction_contribution": response_interaction_contribution,
+                "actual_integrated_threat": actual_threat,
+                "without_defender_integrated_threat": without_threat,
+            }
+        )
+
+    def add_normalized_fields(
+        contribution_key: str,
+        score_key: str,
+        share_key: str,
+    ) -> None:
+        max_contribution = max(
+            (float(item[contribution_key]) for item in out),
+            default=0.0,
+        )
+        total_contribution = sum(float(item[contribution_key]) for item in out)
+        for item in out:
+            contribution = float(item[contribution_key])
+            item[score_key] = (
+                contribution / max_contribution if max_contribution > 1e-12 else 0.0
+            )
+            item[share_key] = (
+                contribution / total_contribution if total_contribution > 1e-12 else 0.0
+            )
+
+    add_normalized_fields(
+        "static_blocker_contribution",
+        "static_blocker_score",
+        "static_blocker_share",
+    )
+    add_normalized_fields(
+        "static_control_blocker_contribution",
+        "static_control_blocker_score",
+        "static_control_blocker_share",
+    )
+    add_normalized_fields(
+        "static_pass_lane_contribution",
+        "static_pass_lane_score",
+        "static_pass_lane_share",
+    )
+    add_normalized_fields(
+        "response_control_contribution",
+        "response_control_score",
+        "response_control_share",
+    )
+    add_normalized_fields(
+        "response_pass_lane_contribution",
+        "response_pass_lane_score",
+        "response_pass_lane_share",
+    )
+    return sorted(
+        out,
+        key=lambda item: float(item["static_blocker_contribution"]),
+        reverse=True,
+    )
+
+
 def obso_at_points(
     frame: BundesligaFrame,
     attacking_team_id: str,

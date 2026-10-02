@@ -50,6 +50,9 @@ HERE = REPO_ROOT / "demo_viz" / "web"
 SOLVER_RUN = (Path.home() / "Research" / "offball_demo" / "mit_ssac2027_ref"
               / "results" / "exact_100")
 EXAMPLE_MANIFEST = REPO_ROOT / "demo_viz" / "data" / "submission_scenes.example.json"
+# the solver base's own study, local-only: the tests that read it skip without it
+NEEDS_SOLVER_RUN = unittest.skipUnless((SOLVER_RUN / "manifest.json").exists(),
+                                       f"no solver study at {SOLVER_RUN}")
 
 
 # ---------------------------------------------------------------------------
@@ -97,6 +100,7 @@ class SolverUnavailableTests(unittest.TestCase):
             for panel in payload["panels"]:
                 self.assertTrue(panel["bodies"], "a moment with no bodies")
 
+    @NEEDS_SOLVER_RUN
     def test_reads_a_solved_state(self):
         state = load_state(SOLVER_RUN, 0, commit="e8b0a95")
         self.assertTrue(state.available)
@@ -107,6 +111,7 @@ class SolverUnavailableTests(unittest.TestCase):
         self.assertEqual(5, len(state.root_defender))
         self.assertEqual(len(state.directions) ** 2 + 1, len(state.root_attack))
 
+    @NEEDS_SOLVER_RUN
     def test_coordinates_are_centred_on_the_pitch(self):
         """The artifact is corner-origin; the demo is centre-origin."""
 
@@ -116,6 +121,7 @@ class SolverUnavailableTests(unittest.TestCase):
             self.assertLessEqual(abs(x), length / 2 + 1e-6, body)
             self.assertLessEqual(abs(y), width / 2 + 1e-6, body)
 
+    @NEEDS_SOLVER_RUN
     def test_root_policy_decodes_to_the_solver_own_action_encoding(self):
         state = load_state(SOLVER_RUN, 0)
         actions = len(state.directions)
@@ -126,6 +132,7 @@ class SolverUnavailableTests(unittest.TestCase):
             self.assertEqual(max(range(len(state.root_attack)),
                                  key=lambda i: state.root_attack[i]), index)
 
+    @NEEDS_SOLVER_RUN
     def test_probabilities_are_probabilities(self):
         for index in (0, 3, 6):
             state = load_state(SOLVER_RUN, index)
@@ -133,10 +140,12 @@ class SolverUnavailableTests(unittest.TestCase):
                 self.assertAlmostEqual(1.0, sum(policy), places=6)
                 self.assertTrue(all(p >= -1e-12 for p in policy))
 
+    @NEEDS_SOLVER_RUN
     def test_mixed_and_pure_states_are_distinguished(self):
         self.assertFalse(load_state(SOLVER_RUN, 0).is_mixed)
         self.assertTrue(load_state(SOLVER_RUN, 6).is_mixed)
 
+    @NEEDS_SOLVER_RUN
     def test_trajectories_carry_events_the_solver_defines(self):
         allowed = {"move", "release", "retain", "tackled_during_previous_interval"}
         state = load_state(SOLVER_RUN, 3)
@@ -146,6 +155,7 @@ class SolverUnavailableTests(unittest.TestCase):
             for body, path in trajectory.paths.items():
                 self.assertEqual(len(trajectory.times), len(path), body)
 
+    @NEEDS_SOLVER_RUN
     def test_provenance_points_back_at_the_run(self):
         state = load_state(SOLVER_RUN, 0, commit="e8b0a95")
         provenance = state.provenance
@@ -154,6 +164,7 @@ class SolverUnavailableTests(unittest.TestCase):
         self.assertTrue(provenance.fingerprint, "policy fingerprint missing")
         self.assertTrue(provenance.created_utc)
 
+    @NEEDS_SOLVER_RUN
     def test_a_pass_rollout_keeps_its_target(self):
         state = load_state(SOLVER_RUN, 3)
         releases = [t for t in state.trajectories if t.terminal_event == "release"]

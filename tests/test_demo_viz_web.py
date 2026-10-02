@@ -494,11 +494,14 @@ class HouseStyleTests(unittest.TestCase):
         import matplotlib
 
         matplotlib.use("Agg")
-        from demo_viz.render.figure import FigureConfig, SceneFigure, sans_stack
+        from demo_viz.render.figure import SANS_STACK, FigureConfig, SceneFigure, sans_stack
         from demo_viz.story import build_storyboard
 
-        # macOS Helvetica cannot load glyphs this small; the fallback must hold
-        self.assertNotEqual("Helvetica", sans_stack(40)[0])
+        # a font that cannot measure glyphs this small (macOS Helvetica) is dropped from the front; a usable
+        # stack in the house order remains, whether or not Helvetica is installed
+        stack = sans_stack(40)
+        self.assertTrue(stack)
+        self.assertEqual(tuple(SANS_STACK[-len(stack):]), stack)
         scene = synthetic_scene()
         figure = SceneFigure(scene, build_storyboard(scene),
                              FigureConfig(width_px=640, height_px=360, dpi=40))

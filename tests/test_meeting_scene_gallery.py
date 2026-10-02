@@ -48,7 +48,7 @@ class MeetingSceneGalleryTests(unittest.TestCase):
         self.assertIn("COUNTERFACTUAL PROTOTYPE", html)
         self.assertIn("HUMAN-CONFIRMED OBSERVED", html)
         self.assertIn('"scene_count":8', html)
-        self.assertIn("실제 움직임 ↔ 기존 dynamic prototype", html)
+        self.assertIn("actual motion ↔ old dynamic prototype", html)
 
 
 if __name__ == "__main__":

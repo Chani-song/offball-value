@@ -1610,10 +1610,25 @@ function blockPlayers(layout, index) {
     const position = playerAt(scene, player, index);
     if (!position) continue;
     const role = selection.roleOf(player.id);
-    layout.blockDisc(position[0], position[1], (role ? 1.55 : 1.2) * k * 1.1);
+    layout.blockDisc(position[0], position[1], (role ? 1.55 : 1.2) * k * 1.1, true);
   }
   const ball = ballAt(scene, index);
-  if (ball) layout.blockDisc(ball[0], ball[1], 0.8 * k);
+  if (ball) layout.blockDisc(ball[0], ball[1], 0.8 * k, true);
+  // and every shirt number, background players included, by its measured
+  // box: the players are drawn after the labels, so each number is set once
+  // here with drawPlayers' own attributes, measured, and taken away again
+  if (!state.layers.has("labels")) return;
+  for (const player of scene.players) {
+    const position = playerAt(scene, player, index);
+    if (!position) continue;
+    const role = selection.roleOf(player.id);
+    const probe = pitch.add("players", "text", {
+      x: position[0], y: position[1] + 0.45 * pitch.k, "text-anchor": "middle",
+      class: "shirt", "font-size": (role ? 1.6 : 1.35) * k,
+    }, player.shirt);
+    layout.blockText(probe, 0.1 * k);
+    probe.remove();
+  }
 }
 
 /**

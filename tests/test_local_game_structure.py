@@ -76,6 +76,10 @@ class LocalGameStructureTests(unittest.TestCase):
             LocalGameStructureConfig(
                 maximum_horizon_seconds=1.6,
                 minimum_horizon_seconds=1.0,
+                # the (runner, defender) plausibility gate, added 2026-09-22, drops
+                # the synthetic far defenders here; this test checks the row
+                # structure before gating, so it switches the gate off
+                pair_gate=False,
             ),
         )
 
@@ -90,7 +94,7 @@ class LocalGameStructureTests(unittest.TestCase):
     def test_audit_html_identifies_structural_not_final_value(self) -> None:
         html = render_structural_local_game_audit([])
         self.assertIn("Defender × affected-option structure", html)
-        self.assertIn("아직 <span class=\"formula\">P × G × A</span>", html)
+        self.assertIn("not yet a <span class=\"formula\">P × G × A</span>", html)
         self.assertIn("response-controls", html)
 
 

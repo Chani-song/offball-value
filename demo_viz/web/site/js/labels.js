@@ -40,6 +40,13 @@ const REACH = 5.0;
 const LEADER = 0.6;
 const ORDERS = 8;
 
+/** Rings beyond `REACH`, tried only when the lattice has no free spot. */
+const RINGS_REACH = 3;          // out to three times `REACH`
+const RING_STEP = 4;            // at four lattice steps
+
+/** Two labels with the same text keep this many label heights between centres. */
+const TWIN_SPACING = 1.5;
+
 /** The zoom the figure's own panels are drawn at, which sets the lattice. */
 const FIGURE_K = 0.62;
 
@@ -66,6 +73,19 @@ function free(box, walls) {
     if (box[0] < w[2] && w[0] < box[2] && box[1] < w[3] && w[1] < box[3]) return false;
   }
   return true;
+}
+
+/** The area two boxes share. */
+function overlapArea(a, b) {
+  const w = Math.min(a[2], b[2]) - Math.max(a[0], b[0]);
+  const h = Math.min(a[3], b[3]) - Math.max(a[1], b[1]);
+  return w > 0 && h > 0 ? w * h : 0;
+}
+
+function overlapWith(box, walls) {
+  let total = 0;
+  for (let i = 0; i < walls.length; i += 1) total += overlapArea(box, walls[i]);
+  return total;
 }
 
 /** `Placer._end`: the point of `box` nearest `anchor`. */
@@ -106,8 +126,11 @@ export class LabelLayout {
     this.pitch = pitch;
     this.k = Math.max(pitch.k, 0.62);
     this.solid = [];          // `Placer.solid`: players, lines, heads, pins
+    this.hard = [];           // the part of `solid` no label may cover even as
+                              // a last resort: player markers, shirt numbers, the ball
     this.todo = [];           // labels measured but not yet placed
     this.placed = [];         // boxes of labels already given a home
+    this.placedTexts = [];    // their text and centre, for the twin spacing
     this.gap = 0;             // `Placer.GAP`
     // the lattice, in the figure's steps scaled to this zoom
     const scale = this.k / FIGURE_K;
@@ -141,8 +164,24 @@ export class LabelLayout {
   }
 
   /** `Placer.disc`: a player marker and the shirt number inside it. */
-  blockDisc(cx, cy, radius) {
-    this.solid.push([cx - radius, cy - radius, cx + radius, cy + radius]);
+  blockDisc(cx, cy, radius, hard = false) {
+    const box = [cx - radius, cy - radius, cx + radius, cy + radius];
+    this.solid.push(box);
+    if (hard) this.hard.push(box);
+  }
+
+  /** A drawn text's own box (a shirt number), never to be written over. */
+  blockText(node, pad = 0) {
+    let b;
+    try {
+      b = node.getBBox();
+    } catch {
+      return;
+    }
+    if (!b || (!b.width && !b.height)) return;
+    const box = [b.x - pad, b.y - pad, b.x + b.width + pad, b.y + b.height + pad];
+    this.solid.push(box);
+    this.hard.push(box);
   }
 
   /** `Placer.line`: an arrow's shaft, as the ground it covers. */
@@ -189,7 +228,7 @@ export class LabelLayout {
     this.gap = Math.max(this.gap, gap);
     const n = Math.hypot(dir[0], dir[1]) || 1;
     this.todo.push({
-      node, measured, size, anchor, w, h, rank,
+      node, measured, size, anchor, w, h, rank, text,
       leader: leader === null ? null : (leader || colour),
       dir: [dir[0] / n, dir[1] / n],
     });
@@ -208,16 +247,28 @@ export class LabelLayout {
    *
    * A leader may cross a line (at a cost) but never another label or leader.
    */
-  search(item, walls, labelBoxes) {
+  search(item, walls, labelBoxes, twins = []) {
+    // the lattice and its costs depend only on the label, so they are built
+    // once and reused across the orders: only the walls change between them
+    if (!item.cands) item.cands = this.candidates(item, this.offsets);
+    const found = this.pick(item, item.cands, walls, labelBoxes, twins);
+    if (found && !found.fallback) return found;
+    // nothing free within REACH: the same rules on rings further out, where a
+    // leader carries the label back to its action, before any overlap
+    if (!item.ring) item.ring = this.candidates(item, this.ringOffsets());
+    const far = this.pick(item, item.ring, walls, labelBoxes, twins);
+    if (far && !far.fallback) return far;
+    return this.leastOverlap(item, walls, twins) || found || far;
+  }
+
+  /** The candidate boxes for one label at `offsets`, cheapest first. */
+  candidates(item, offsets) {
     const [ax, ay] = item.anchor;
     const { w, h } = item;
     const [bx0, by0, bx1, by1] = this.bounds;
-    // the lattice and its costs depend only on the label, so they are built
-    // once and reused across the orders: only the walls change between them
-    if (item.cands) return this.pick(item, item.cands, walls, labelBoxes);
     const cands = [];
-    for (let i = 0; i < this.offsets.length; i += 1) {
-      const [di, dj] = this.offsets[i];
+    for (let i = 0; i < offsets.length; i += 1) {
+      const [di, dj] = offsets[i];
       const cx = ax + di;
       const cy = ay + dj;
       const x0 = cx - w / 2;
@@ -236,18 +287,70 @@ export class LabelLayout {
                    cost: gap + 0.5 * (1 - cos) * (this.k / FIGURE_K) });
     }
     cands.sort((a, b) => a.cost - b.cost);
-    item.cands = cands;
-    return this.pick(item, cands, walls, labelBoxes);
+    return cands;
+  }
+
+  /** Square rings beyond the lattice, out to `RINGS_REACH` times `REACH`. */
+  ringOffsets() {
+    if (this.rings) return this.rings;
+    const step = RING_STEP * this.step;
+    const inner = Math.round(this.reach / step);
+    const outer = Math.round((RINGS_REACH * this.reach) / step);
+    this.rings = [];
+    for (let i = -outer; i <= outer; i += 1) {
+      for (let j = -outer; j <= outer; j += 1) {
+        if (Math.max(Math.abs(i), Math.abs(j)) <= inner) continue;
+        this.rings.push([i * step, j * step]);
+      }
+    }
+    return this.rings;
+  }
+
+  /**
+   * The last resort when no spot anywhere is free: the one covering the least
+   * of a player marker, shirt number or the ball, then the least of anything
+   * else, then the cheapest. Never simply the cheapest blocked spot.
+   */
+  leastOverlap(item, walls, twins) {
+    let best = null;
+    for (const cand of (item.cands || []).concat(item.ring || [])) {
+      if (this.twinClash(item, cand, twins)) continue;
+      const hard = overlapWith(cand.box, this.hard);
+      const soft = overlapWith(cand.box, walls);
+      if (!best || hard < best.hard - 1e-9
+          || (Math.abs(hard - best.hard) <= 1e-9
+              && (soft < best.soft - 1e-9
+                  || (Math.abs(soft - best.soft) <= 1e-9 && cand.cost < best.cost)))) {
+        best = { ...cand, hard, soft };
+      }
+    }
+    if (!best) return null;
+    const { hard, soft, ...spot } = best;
+    return { ...spot, fallback: true };
+  }
+
+  /**
+   * Two labels with the same text (two players at the same percentage) must
+   * read as two: centres at least `TWIN_SPACING` label heights apart.
+   */
+  twinClash(item, cand, twins) {
+    for (let i = 0; i < twins.length; i += 1) {
+      const t = twins[i];
+      if (t.text !== item.text) continue;
+      const need = TWIN_SPACING * Math.max(item.h, t.h);
+      if (Math.hypot(cand.cx - t.cx, cand.cy - t.cy) < need) return true;
+    }
+    return false;
   }
 
   /** The cheapest free candidate, with the leader's own cost. */
-  pick(item, cands, walls, labelBoxes) {
+  pick(item, cands, walls, labelBoxes, twins = []) {
     const [ax, ay] = item.anchor;
     let best = null;
-    let nearest = null;                  // the least-overlapping spot, if none is free
+    let nearest = null;                  // the cheapest blocked spot, if none is free
     for (const cand of cands) {
       if (best && cand.cost >= best.cost) break;
-      if (!free(cand.box, walls)) {
+      if (!free(cand.box, walls) || this.twinClash(item, cand, twins)) {
         if (!nearest) nearest = { ...cand, fallback: true };
         continue;
       }
@@ -279,13 +382,15 @@ export class LabelLayout {
   runOrder(order) {
     const walls = this.solid.concat(this.placed);
     const labelBoxes = this.placed.slice();
+    const twins = this.placedTexts.slice();
     let total = 0;
     const out = [];
     for (const item of order) {
-      const found = this.search(item, walls, labelBoxes);
+      const found = this.search(item, walls, labelBoxes, twins);
       if (!found) return null;
       total += found.fallback ? found.cost + 1e3 : found.cost;
       out.push([item, found]);
+      twins.push({ text: item.text, cx: found.cx, cy: found.cy, h: item.h });
       const g = this.gap;
       walls.push([found.box[0] - g, found.box[1] - g,
                   found.box[2] + g, found.box[3] + g]);
@@ -345,6 +450,7 @@ export class LabelLayout {
     node.setAttribute("y", measured ? Number(node.getAttribute("y")) + shift
                                     : found.cy + item.size * 0.36);
     this.placed.push(found.box);
+    this.placedTexts.push({ text: item.text, cx: found.cx, cy: found.cy, h: item.h });
     if (found.gap > this.leader && item.leader) {
       const [ex, ey] = endOf(item.anchor, found.box);
       const line = document.createElementNS(SVG_NS, "line");

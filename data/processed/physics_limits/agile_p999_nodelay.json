@@ -1,0 +1,12 @@
+{
+ "name": "agile",
+ "speed_up": 6.28,
+ "braking": 7.39,
+ "turning": 7.2,
+ "plant_cut": true,
+ "plant_min_speed": 2.0,
+ "plant_min_angle_deg": 45.0,
+ "plant_braking": 9.0,
+ "plant_seconds": 0.1,
+ "defender_delay_s": 0.0
+}

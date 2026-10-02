@@ -48,7 +48,12 @@ def normalized_option_regret(cost_matrix: np.ndarray) -> np.ndarray:
         raise ValueError("cost_matrix must be finite")
     minimum = np.min(costs, axis=1, keepdims=True)
     spread = np.ptp(costs, axis=1, keepdims=True)
-    return np.where(spread > 1e-12, (costs - minimum) / spread, 0.0)
+    return np.divide(
+        costs - minimum,
+        spread,
+        out=np.zeros_like(costs),
+        where=spread > 1e-12,
+    )
 
 
 def pareto_response_indices(cost_matrix: np.ndarray) -> tuple[int, ...]:

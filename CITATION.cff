@@ -1,0 +1,24 @@
+cff-version: 1.2.0
+message: >-
+  Code for a submission to the MIT Sloan Sports Analytics Conference. If you use it,
+  please cite the paper as below and the IDSSE dataset (docs/data.md).
+title: "The Defender's Dilemma: Game-Theoretic Evaluation of Off-Ball Movement in Soccer"
+type: software
+authors:
+  - given-names: Kyuhyeok
+    family-names: Seo
+  - given-names: Chan-Eui
+    family-names: Song
+  - given-names: Andrew
+    family-names: Kang
+  - given-names: Priya
+    family-names: Narasimhan
+  - given-names: James Z.
+    family-names: Wang
+repository-code: "https://github.com/Chani-song/offball-value"
+keywords:
+  - soccer
+  - tracking data
+  - off-ball movement
+  - game theory
+  - Nash equilibrium
