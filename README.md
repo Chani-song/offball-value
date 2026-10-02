@@ -16,7 +16,11 @@ strategically to the other.
 
 ### Demo tour
 
-[![Demo tour](docs/assets/demo_tour.png)](docs/assets/demo_tour.mp4)
+
+
+https://github.com/user-attachments/assets/7606d839-5d92-4e17-a011-cc6d21da98ac
+
+
 
 ## Key figures
 
