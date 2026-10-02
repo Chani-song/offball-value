@@ -116,7 +116,9 @@ main {
 .shirt { pointer-events: none; font-weight: 700; user-select: none; }
 .pitch-label {
   pointer-events: none; font-weight: 700; paint-order: stroke;
-  stroke: rgba(5, 9, 10, 0.72); stroke-width: 0.5px;
+  /* in `em`, never `px`: a px here is a user unit, which on this pitch is a
+     metre, and a half-metre stroke swallows the glyph it is meant to edge */
+  stroke: rgba(5, 9, 10, 0.72); stroke-width: 0.24em;
 }
 
 .timeline { display: flex; align-items: center; gap: 9px; }
@@ -619,7 +621,9 @@ body[data-paper] .sheet-card dd { color: #444444; }
    the paper, or every label wears a black chip. */
 body[data-paper] .pitch-label,
 body[data-paper] .pass-label {
-  paint-order: stroke; stroke: rgba(255, 255, 255, 0.9); stroke-width: 0.6px;
+  /* the same `figure_style.halo()` ratio, and `em` for the same reason: a
+     `px` here would be two thirds of a metre on the pitch */
+  paint-order: stroke; stroke: #F7F7F7; stroke-width: 0.24em;
 }
 
 /* --- the showcase sidebar reads, it does not announce ------------------- */
@@ -846,16 +850,54 @@ body.is-public .readout { color: var(--ink-1); }
    behind a line. A halo does it without a box to position. */
 body.is-public .action-label,
 body.is-public .pass-label {
-  /* Figure 2 sets its labels straight on the shading. A hairline of page
-     colour is enough to keep a glyph off a line it crosses; anything wider
-     reads as a box around the words. */
+  /* `figure_style.halo()`: `pe.withStroke(linewidth=2.2, foreground=PITCH)`
+     against `FS_LABEL = 9.0`pt -- a stroke 0.24 of the type size, in the
+     pitch's own colour, not white.
+
+     It has to be written in `em`. A length in `px` on an SVG geometry
+     property is USER UNITS, and the pitch's user unit is a metre: 1.1px was a
+     1.1 m stroke on a 1.45 m glyph, three times the figure's, which is why it
+     read as a block behind the words rather than an outline round them.
+     `paint-order: stroke` then paints the glyph back over its own stroke, so
+     the stroke survives only as a thread tracing each contour -- including
+     the inner contour of an "o", whose counter stays open. */
   paint-order: stroke;
-  stroke: #FFFFFF; stroke-width: 1.1px; stroke-linejoin: round;
+  stroke: #F7F7F7; stroke-width: 0.24em; stroke-linejoin: round;
   font-weight: 600;
 }
 /* the attack direction: a mark, not a whisper */
 body.is-public .attack-dir { opacity: 1; }
 body.is-public .attack-dir-label { font-weight: 600; }
+
+/* --- Dilemma's cast: the play as it happened, and the one being built ---- */
+#legend-list.is-cast { display: flex; flex-direction: column; gap: 2px; }
+#legend-list.is-cast .cast-head,
+#legend-list.is-cast .cast-row {
+  display: grid; grid-template-columns: 86px 1fr 1fr; gap: 10px;
+  align-items: center; padding: 7px 0;
+}
+#legend-list.is-cast .cast-row + .cast-row,
+#legend-list.is-cast .cast-row { border-top: 1px solid var(--grid); }
+.cast-head { padding-bottom: 4px; }
+body.is-public .cast-col { font-size: var(--t-body); color: #555555; font-weight: 600; }
+body.is-public .cast-role { font-size: var(--t-name); font-weight: 700; }
+body.is-public .cast-def { font-size: var(--t-name); color: var(--ink-1); }
+body.is-public .cast-pick {
+  font: inherit; font-size: var(--t-name); text-align: left; cursor: pointer;
+  background: none; color: #555555; border: 1px dashed var(--grid);
+  border-radius: 8px; padding: 6px 8px;
+}
+body.is-public .cast-pick.is-set {
+  color: var(--ink-1); font-weight: 600; border-style: solid;
+  border-color: var(--pick-sel); background: #FFF2F8;
+}
+body.is-public .cast-pick.is-armed { border-color: var(--ink-1); color: var(--ink-1); }
+body.is-public .cast-pick:hover { background: #F4F4F4; }
+
+/* a heading may say what the card does, at the card's own type size */
+body.is-public .panel-hint {
+  font-size: var(--t-body); font-weight: 400; color: #555555;
+}
 
 /* --- the ranked actions ------------------------------------------------ */
 .options #options-list { display: flex; flex-direction: column; gap: 2px; }
@@ -882,11 +924,16 @@ body.is-public .optprob {
   border-radius: 999px; border: 1px solid var(--grid); color: var(--ink-1);
 }
 .opttag.is-best { border-color: var(--pick-best, #0000FF); color: var(--pick-best, #0000FF); }
-.opttag.is-played { border-color: #555555; }
 /* the two accents Player evaluation draws with: sky for the best-valued
    option, pink for the one the reader picked. The row wears the colour its
    line on the pitch is drawn in, so the pair needs no legend. */
 body.is-public { --pick-best: #00A8D8; --pick-sel: #FF2D8E; }
+/* the played option wears the role's own colour, the one its line on the
+   pitch is drawn in: blue for an attacker, red for a defender */
+.optrow.is-playedrow { box-shadow: inset 3px 0 0 var(--pick-played, #0000FF); }
+.opttag.is-played {
+  border-color: var(--pick-played, #555555); color: var(--pick-played, #222222);
+}
 .optrow.is-bestrow { box-shadow: inset 3px 0 0 var(--pick-best); }
 .optrow.is-picked { box-shadow: inset 3px 0 0 var(--pick-sel); }
 .optrow.is-on.is-picked { border-color: var(--pick-sel); background: #FFF2F8; }

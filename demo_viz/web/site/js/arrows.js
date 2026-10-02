@@ -69,6 +69,9 @@ export function drawActionArrows(pitch, origin, options, {
   minArrowM = 0,
 } = {}) {
   const k = Math.max(pitch.k, 0.62);
+  // a layout of this call's own is placed when the call ends; a shared one is
+  // placed by whoever owns it, once every body's labels are in it
+  const own = !layout;
   layout = layout || new LabelLayout(pitch);
   const group = pitch.add("passes", "g", { class: "action-arrows" });
   // labels are placed heaviest first, so the probability that matters most
@@ -170,6 +173,13 @@ export function drawActionArrows(pitch, origin, options, {
       group.appendChild(arrowhead);
     }
 
+    // the arrow is ground too: `Placer.line` and `Placer.head` keep a label
+    // off a shaft and off the wider chevron at its end
+    if (shaft.length > 1) {
+      layout.blockLine(shaft, width / 2);
+      if (!option.stop) layout.blockHead([x1, y1], head * 0.6);
+    }
+
     if (!labels || !option.label) continue;
     if (p != null && p < labelFloor) continue;
 
@@ -179,16 +189,20 @@ export function drawActionArrows(pitch, origin, options, {
     const ux = dx / n;
     const uy = dy / n;
     const anchorAt = option.stop && option.rests ? pts[0] : [x1, y1];
-    const text = layout.place(option.label, {
+    layout.add(option.label, {
       anchor: anchorAt,
       // a resting command has no direction of its own, so its label is free to
       // go wherever the moves leave room, starting away from the pitch centre
       dir: option.stop && option.rests ? [ux || 1, uy] : [ux, uy],
       size: 1.45 * k, colour, gap: Math.max(labelGap, 0.22 * k),
+      // the figure's own order: heaviest probability first, a command that has
+      // come to rest last (`o["prob"] - 1.0` there)
+      rank: priority(option), leader: colour,
     });
-    // `place` already put it in the labels layer, above every mark: moving it
+    // `add` already put it in the labels layer, above every mark: moving it
     // into the arrow group would drop it under the players again
   }
+  if (own) layout.run();
   return group;
 }
 
@@ -217,11 +231,16 @@ export function drawPassChoice(pitch, from, to, label, layout = null) {
                            { fill: "none", stroke: ink, "stroke-width": 0.22 * k }));
   if (label) {
     const engine = layout || new LabelLayout(pitch);
-    engine.place(label, {
+    engine.blockLine([from, to], 0.13 * k);
+    engine.add(label, {
       anchor: to,
       dir: [to[0] - from[0], to[1] - from[1]],
       size: 1.45 * k, colour: ink, className: "pass-label", gap: 0.3 * k,
+      // the pass is one of the policy's options, so its label competes with
+      // the moves rather than being placed before or after all of them
+      rank: 1, leader: ink,
     });
+    if (!layout) engine.run();
   }
   return group;
 }

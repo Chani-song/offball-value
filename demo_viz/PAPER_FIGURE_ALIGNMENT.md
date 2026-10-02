@@ -946,13 +946,29 @@ abstract.
 Four defects, all of the same kind: the demo had the right number but showed
 it in the wrong place, or showed one of a set and hid the rest.
 
-### 22.1 The label halo
+### 22.1 The label halo, and the unit that made it a block
 
-Figure 2 sets its labels straight on the shading. The public stylesheet was
-casing each glyph in a 2.6px white stroke, which at the figure's type size is
-wider than the gap between two lines of text and reads as a plate behind the
-words. It is now `paint-order: stroke` with **1.1px** -- a hairline, enough to
-keep a glyph off a line it crosses, not enough to be seen as a box.
+`scripts/figure_style.py:165` is the whole specification:
+
+```python
+def halo(lw=2.2, color=PITCH):
+    return [pe.withStroke(linewidth=lw, foreground=color)]
+```
+
+2.2 pt against `FS_LABEL = 9.0` pt -- a stroke **0.24 of the type size** -- in
+`PITCH` (`#F7F7F7`), not white.
+
+The demo had it as `stroke-width: 2.6px`, then `1.1px`, and both were blocks.
+**A length in `px` on an SVG geometry property is a user unit**, and this
+pitch's user unit is a metre: 1.1px was a 1.1 m stroke around a 1.45 m glyph,
+three times the figure's. Written as `0.24em` it is the figure's own ratio at
+any zoom, and `paint-order: stroke` paints the glyph back over its own stroke,
+so what survives is a thread along each contour -- including the inner contour
+of an "o", whose counter stays open.
+
+Two other rules carried the same mistake (the explorer's `.pitch-label` at
+0.5px -- half a metre). All three are `em` now, and a test rejects any
+`paint-order: stroke` rule whose width is not.
 
 ### 22.2 Every solved moment pauses, and every solved moment is in the table
 
@@ -986,6 +1002,14 @@ every frame. What it can do is say where the playhead stands relative to it:
 has happened. `reaction_index` is exported for exactly this and nothing is
 recomputed in the browser.
 
+**Dilemma's Players card is the cast.** Three rows -- Runner, Teammate,
+Defender -- each with a **Default** cell (the curated play) and a **Selected**
+cell. A Selected cell arms its role, the next click on the pitch fills it, and
+clicking a filled cell empties only that one, so a reader can ask "what if 7
+made that run, 34 were the one it opened space for, and 19 were marking?" and
+read all three answers together. The chip strip that used to arm a role is
+gone: it was a second control for one thing.
+
 **The three comparison roles are independent.** `compareWith` held
 `{ [role]: playerId }` and `renderSweep` cleared the comparison when the role
 chip changed, so picking a defender dropped the teammate you had just picked.
@@ -1016,3 +1040,17 @@ pitch is now **explorer-only**. The public tab reads one solved moment and says
 its three numbers in words; a plot of the same three across frames that are not
 solved answered a question the public reader was not asking. `renderEvalStrip`
 is unchanged otherwise, and the explorer keeps it.
+
+### 22.5 Player evaluation, after the second pass
+
+- The tab opens **cropped**, as Nash does. The options fan, its labels and the
+  marker being compared are a few metres apart on a 105 m pitch.
+- Playback **holds two seconds at 0.0, 0.6 and 1.2 s here too**: the ranks and
+  the option list are read at the same three solved moments the equilibrium is.
+- A ball carrier's options are **ranked like everyone else's**. The dash read
+  as missing data. His rank is among his five moves; the sixth option is the
+  pass, whose value the bundle does not publish, and `rank_partial` still
+  carries that fact in the data.
+- What he **played wins the colour when it is also the best-valued option** --
+  the role's blue or red, in the list and on the pitch, drawn once. Sky means
+  "the best was something else".

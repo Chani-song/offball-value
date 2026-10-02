@@ -34,3 +34,4 @@ local_inputs/
 *.tar.gz
 *.zip
 build/
+demo_viz/cache/

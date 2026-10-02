@@ -51,7 +51,7 @@ def build(out: Path, data_dir: Path = WEB_DATA, clean: bool = True,
         # curation metadata: small, loaded once with the scene index
         showcase = HERE.parent / "data" / "submission_showcase.json"
         if showcase.exists():
-            _split_showcase(showcase, target)
+            _split_showcase(showcase, target, data_dir / "solver")
         extras = ["solver", "release", "story", "compare", "grid", "options"]
         if include_legacy_obso:
             extras.append("obso")
@@ -69,15 +69,45 @@ def build(out: Path, data_dir: Path = WEB_DATA, clean: bool = True,
 DETAIL_FIELDS = ("review", "annotation")
 
 
-def _split_showcase(source: Path, target: Path) -> None:
+def _solved_moments(solver_dir: Path) -> dict[str, int]:
+    """Scene id -> how many moments the bundle solved a game at, from the files.
+
+    The scene list leads with the scenes that have an equilibrium, so it has to
+    know which those are before any of them is fetched. Read from the exported
+    panels themselves rather than declared anywhere: a scene has an equilibrium
+    exactly when its solver file holds solved panels.
+    """
+
+    out: dict[str, int] = {}
+    if not solver_dir.exists():
+        return out
+    for path in sorted(solver_dir.glob("*.json")):
+        try:
+            payload = json.loads(path.read_text())
+        except (OSError, ValueError):
+            continue
+        if payload.get("kind") != "bundle_panels" or not payload.get("available"):
+            continue
+        scene_id = payload.get("scene_id")
+        panels = payload.get("panels") or []
+        if scene_id and panels:
+            out[scene_id] = len(panels)
+    return out
+
+
+def _split_showcase(source: Path, target: Path, solver_dir: Path | None = None) -> None:
     """The curated list, lean for the page and whole for the explorer."""
 
     payload = json.loads(source.read_text())
     rows = payload["scenes"] if isinstance(payload, dict) else payload
+    solved = _solved_moments(solver_dir) if solver_dir else {}
     detail = {}
     lean = []
     for row in rows:
         keep = {k: v for k, v in row.items() if k not in DETAIL_FIELDS}
+        # how many solved moments this scene has, so the list can lead with
+        # the scenes the two claims can actually be read in
+        keep["solved_moments"] = solved.get(row.get("scene_id"), 0)
         mapping = row.get("mapping")
         if isinstance(mapping, dict):
             keep["mapping"] = {"status": mapping.get("status")}

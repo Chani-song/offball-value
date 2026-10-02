@@ -1586,6 +1586,10 @@ function renderBundlePolicy(index, data) {
                                                      { received: Boolean(pass.to) }),
                        layout);
   }
+  // every label in the panel is now measured and every mark is an obstacle,
+  // so the whole panel is laid out at once -- the figure places a panel, not
+  // a body, and a body at a time is what crowded the last label out
+  layout.run();
 }
 
 /**
@@ -2452,7 +2456,9 @@ const RESEARCH_SOLVER_VIEW = {
 /** Which view each public tab opens on. */
 const PUBLIC_VIEW = {
   observed: "full", counterfactual: "full",
-  game_solution: "focus", evaluation: "full",
+  // both solved-moment tabs open cropped: the options fan, its labels and the
+  // marker a reader is asked to compare are centimetres apart on a full pitch
+  game_solution: "focus", evaluation: "focus",
 };
 
 /** The research names for the four modes, which the explorer keeps. */
@@ -3236,7 +3242,11 @@ function openSheet(open) {
  * the pause never fights the reader.
  */
 function holdOnSolvedMoment() {
-  if (!state.playing || state.mode !== "game_solution" || !isPublic()) return;
+  // both solved-moment tabs hold: Player evaluation's options and ranks are
+  // read at the same three moments the equilibrium is, and they go past in
+  // two frames otherwise
+  const holds = state.mode === "game_solution" || state.mode === "evaluation";
+  if (!state.playing || !holds || !isPublic()) return;
   const data = solverFor();
   if (data?.kind !== "bundle_panels") return;
   const found = panelAt(data, state.frame);
