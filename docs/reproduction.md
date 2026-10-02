@@ -196,7 +196,7 @@ the bundle's panels were written before the solver's command names were translat
 `e89e78f`), so their defender command names were mapped back with that commit's own table; and the
 font check needed the `str()` fix in `figure_style.py`. Every probability label pinned in the command
 appears in the output at the same value, and the panels match the submitted figure PDF by eye
-(`docs/assets/figure2.png` is converted from it). It was not compared pixel by pixel.
+(`docs/assets/figure2_ssac.pdf`). It was not compared pixel by pixel.
 
 ## Evaluation
 

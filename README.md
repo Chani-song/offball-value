@@ -1,6 +1,6 @@
 # The Defender’s Dilemma: Game-Theoretic Evaluation of Off-Ball Movement in Soccer
 
-Kyuhyeok Seo, Chan-Eui Song, Andrew Kang, Priya Narasimhan, James Z. Wang
+**Kyuhyeok Seo**, **Chan-Eui Song**, **Andrew Kang**, **Priya Narasimhan**, **James Z. Wang**
 
 An off-ball run can force a defender to choose between following the runner and covering another
 attacker. We extract such situations from Bundesliga tracking data, model each as a small game between
@@ -9,19 +9,19 @@ equilibrium shows how both sides should move when each can respond to the other.
 
 ## Demo
 
-Demo URL: TBD
+**[Open the interactive demo](https://chani-song.github.io/offball-value/)**
 
 ![Nash equilibrium view of the interactive demo](docs/assets/demo_screenshot.png)
 
 ## Key figures
 
-![Figure 1](docs/assets/figure1.png)
+![Figure 1](docs/assets/figure1_ssac.png)
 
-**Figure 1.** The defender's choice: follow the runner or stay with the ball carrier.
+[PDF](docs/assets/figure1_ssac.pdf)
 
-![Figure 2](docs/assets/figure2.png)
+![Figure 2](docs/assets/figure2_ssac.png)
 
-**Figure 2.** Equilibrium choices at 0.0, 0.6 and 1.2 s of the same play.
+[PDF](docs/assets/figure2_ssac.pdf)
 
 ## Overview
 
@@ -121,12 +121,11 @@ scripts and from modules left over from earlier formulations, which are kept for
 
 Commands, inputs and what was checked are in [docs/reproduction.md](docs/reproduction.md).
 
-The figure images in `docs/assets/` are converted from the submitted PDFs. Figure 1 is drawn from the
-tracking; only its Future 2 panel uses the solver (the through ball's target and the defender's motion).
-Figure 2 is solver output. The demo screenshot is the
-Nash equilibrium view of the showcase built from branch `chani-ssac-demo-latest-paper` at commit
-`ae3f38b`, which is not deployed yet. The site at <https://chani-song.github.io/offball-value/> is an
-earlier explorer.
+`docs/assets/figure1_ssac.pdf` and `figure2_ssac.pdf` are the submitted figures; the PNGs are full-page
+renders of them. Figure 1 is drawn from the tracking; only its Future 2 panel uses the solver (the
+through ball's target and the defender's motion). Figure 2 is solver output. The demo screenshot is
+the Nash equilibrium view of the showcase built from branch `chani-ssac-demo-latest-paper` at commit
+`ae3f38b`.
 
 ## Data
 
