@@ -3,11 +3,12 @@
 
 Set 2026-09-30 from the team's feedback (a Helvetica face; restrained colours after recent SSAC papers --
 white ground, blue / red players, thin grey pitch lines; thin arrows with small heads; the match's date,
-teams and clock in a corner). The earlier dark style is kept in scripts/archive_v1_dark/.
+teams and clock in a corner). The earlier dark style was never committed to this repository.
 
 Font: Helvetica is not installed on the cluster these figures were made on (nor Arial or Liberation Sans). Nimbus Sans -- URW's
 metric-compatible Helvetica clone, the face Ghostscript uses for Helvetica -- is loaded from its files
-by path, Regular and Bold; `use_font` refuses to run if matplotlib would resolve either weight to another
+by path, Regular and Bold, from /usr/share/fonts/urw-base35 or the directory named by OFFBALL_FONT_DIR
+(the files are in https://github.com/ArtifexSoftware/urw-base35-fonts); `use_font` refuses to run if matplotlib would resolve either weight to another
 file, and `check_text` refuses a figure with a glyph the face lacks (no silent fallback).
 
 Colours: attack pure blue #0000FF = RGB (0, 0, 255), defence pure red #FF0000 = RGB (255, 0, 0) -- the
@@ -25,6 +26,7 @@ from __future__ import annotations
 
 import csv
 import math
+import os
 import xml.etree.ElementTree as ET
 from datetime import datetime
 from pathlib import Path
@@ -37,7 +39,7 @@ from matplotlib.patches import ArrowStyle, FancyArrowPatch, Rectangle, Circle, A
 import matplotlib.patheffects as pe
 
 # ------------------------------------------------------------------------------------------------ font
-FONT_DIR = Path("/usr/share/fonts/urw-base35")
+FONT_DIR = Path(os.environ.get("OFFBALL_FONT_DIR", "/usr/share/fonts/urw-base35"))
 FONT_FILES = {"normal": FONT_DIR / "NimbusSans-Regular.otf", "bold": FONT_DIR / "NimbusSans-Bold.otf"}
 FAMILY = "Nimbus Sans"
 
@@ -75,7 +77,8 @@ def check_text(fig) -> list[str]:
         s = t.get_text()
         if not s:
             continue
-        f = font_manager.findfont(t.get_fontproperties(), fallback_to_default=False)
+        # str(): matplotlib >= 3.10 returns a FontPath, which compares unequal to the plain path string
+        f = str(font_manager.findfont(t.get_fontproperties(), fallback_to_default=False))
         if f not in cmaps:
             raise SystemExit(f"text {s!r} set in {f}")
         missing = [c for c in s if not c.isspace() and ord(c) not in cmaps[f]]

@@ -4,7 +4,7 @@
 The same panels as `render_panel_figure.py --paths` (out/showcase_v1/figure_multi/S05_full_paths.png),
 redrawn for print at 180 mm, in the print style shared with Figure 1 (scripts/figure_style.py, 2026-09-30:
 Nimbus Sans, white ground, attack blue / defence vermillion, one marker per role, thin arrows with small
-heads, the match line under the figure; the earlier dark version is in scripts/archive_v1_dark/). Everything drawn is read the way that script reads it -- its own helpers
+heads, the match line under the figure). Everything drawn is read the way that script reads it -- its own helpers
 (who_is, real_path, played_passes, MIN_P) are imported -- so the data and the probability aggregation
 are unchanged; only the drawing is:
 
