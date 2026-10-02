@@ -97,7 +97,11 @@ export function publicSubtitle(scene) {
  */
 export function publicSelectorLabel(scene, clock) {
   const fixture = (scene.match || "").split("·")[0].trim();
-  const label = [scene.story_title || fixture, clock].filter(Boolean)
+  // the list leads with the scenes that have an equilibrium, and says so: a
+  // reader choosing one should know which three tabs it can answer
+  const solved = scene.solved_moments
+    ? `${scene.solved_moments} solved moments` : null;
+  const label = [scene.story_title || fixture, clock, solved].filter(Boolean)
     .join(" · ");
   return scene.playable ? label : `${label} — not available`;
 }

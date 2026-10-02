@@ -1238,6 +1238,9 @@ function decisionFrame(from) {
  * put the playhead back on the shot.
  */
 function ensureDecisionFrame() {
+  // the public equilibrium tab opens at the start of the clip and plays into
+  // its solved moments, so it is not moved to the first frame with a decision
+  if (isPublic() && state.mode === "game_solution") return;
   const asksADecision = state.mode === "counterfactual"
     || state.mode === "game_solution";
   if (!asksADecision) return;
@@ -1275,15 +1278,15 @@ function setMode(mode, quiet = false) {
   // lasts while they stay in that tab and is forgotten when they leave, so
   // coming back to Play always shows the play.
   if (isPublic()) setView(state.viewByMode[mode] || PUBLIC_VIEW[mode] || "full");
-  // Nash and Player evaluation both read a solved state, so entering either
-  // puts the playhead on one rather than on whatever frame Play left behind
+  // Nash and Player evaluation open at the start of the clip, not at the
+  // solved moment nearest wherever Play was left. Both tabs are read by
+  // playing the clip -- it holds two seconds at each solved moment -- and a
+  // tab that opens halfway through has already shown the reader the end of
+  // the run before they have seen the start of it.
   if (isPublic() && (mode === "game_solution" || mode === "evaluation")) {
-    const data = solverFor();
-    if (data?.kind === "bundle_panels") {
-      const found = panelAt(data, state.frame);
-      const frame = found ? frameOfPanel(found.panel) : null;
-      if (frame != null) state.frame = frame;
-    }
+    state.frame = 0;
+    const slider = $("time");
+    if (slider) slider.value = "0";
   }
   const space = $("space-control");
   if (space) space.hidden = !(isPublic() && mode === "counterfactual");

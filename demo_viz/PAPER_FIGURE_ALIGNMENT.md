@@ -1054,3 +1054,53 @@ is unchanged otherwise, and the explorer keeps it.
 - What he **played wins the colour when it is also the best-valued option** --
   the role's blue or red, in the list and on the pitch, drawn once. Sky means
   "the best was something else".
+
+## 23. Figure 2's own `Placer`, ported (2026-10-02)
+
+The Nash panel's labels were placed by a different algorithm from the figure's,
+and it showed. `scripts/render_figure2_abstract.py` holds the one that works,
+and `js/labels.js` is now a port of it rather than a second design aimed at the
+same thing.
+
+| | before | now (`Placer`) |
+|---|---|---|
+| candidates | 6 rings x 12 turns = 72 spokes | a lattice, `STEP 0.15 m` out to `REACH 5.0 m` |
+| chosen | the **first** that fits | the **cheapest**: `gap + 0.5 (1 - cos)` |
+| obstacles | players, shirt numbers, placed labels | + every **arrow shaft**, every **arrowhead**, the pass line, and placed **leaders** |
+| leader | past a fixed ring | past `LEADER = 0.6 m`; may cross a line at **0.4 m per 0.15 m**, may never cross a label or another leader |
+| order | one, assumed | `ORDERS` searched, cheapest total drawn |
+| unit of placement | one body at a time | the **whole panel** at once |
+
+The last two are what fixed the crowding. Greedy placement in a single assumed
+order is exactly how the last label ends up with nowhere to go, and a body at a
+time cannot see the labels another body has already placed.
+
+Two deviations, both forced by the browser and both marked in the file:
+
+* the lattice scales with the pitch's zoom. The figure's panels are one fixed
+  crop at `FS_LABEL = 9.0` pt; the demo is the same panel at a settable zoom,
+  so `STEP`, `REACH` and `LEADER` are scaled by `k / 0.62` to keep their size
+  in type rather than in metres.
+* `ORDERS` is **8**, not 60. The layout runs in a render loop. It is only ever
+  reached at a solved moment -- the public Nash panel draws nothing between
+  them -- so eight orders over about a dozen labels costs well under a tenth of
+  a second, measured live.
+
+Live at S05's 0.0 s panel: seven labels, **zero overlapping area**, one leader.
+
+## 24. Which scenes have an equilibrium (2026-10-02)
+
+Seven, each solved at three moments: **S05, S13, S15, S20, S34, S36, S44**.
+The other fourteen showcase entries have no solved game, and five of them have
+no published trajectory either.
+
+Only S05 was pinned to the top of the list (`order: 1`), so the other six sat
+scattered among scenes where three of the four tabs have nothing to show. The
+scene list now **leads with every scene that has an equilibrium** and says so
+in the entry (`3 solved moments`), in the public selector and the explorer's
+alike. `build.py` counts them by reading the exported panels themselves: a
+scene has an equilibrium exactly when its solver file holds solved panels.
+
+The **vector field is S05's alone**. `vector_field/` in the 2026-10-01 bundle
+holds `S05`, `S05@0.6` and `S05@1.2` and nothing else, so Nash's shading and
+flow are drawn for S05 and are absent -- not approximated -- everywhere else.
