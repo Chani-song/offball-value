@@ -15,7 +15,7 @@ redistribution terms are in [data.md](data.md).
 | Game states | `scripts/build_showcase_states.py`, `scripts/build_eval_states.py` | IDSSE tracking, the hand-picked start sheet (showcase only) | not re-run |
 | Solve | `jobs/*.sbatch` | solver base, game states, a SLURM cluster | not re-run (about 30 CPU-minutes per game) |
 | Figure 1 | `scripts/render_figure1_dilemma.py` | panel, states file, start sheet, scene tracking | not re-run: the states file and start sheet are not available locally |
-| Figure 2 | `scripts/render_figure2_abstract.py` | three panels, scene tracking, three defender grids, `scenes.csv`, IDSSE match information | rendered from the team's data bundles (see below); not compared pixel by pixel with the submitted PNG |
+| Figure 2 | `scripts/render_figure2_abstract.py` | three panels, scene tracking, three defender grids, `scenes.csv`, IDSSE match information | rendered from the team's data bundles (see below); matches the submitted PDF by eye, not pixel by pixel |
 | Evaluation numbers | `scripts/analyze_eval.py` | solver output, panels, IDSSE tracking | not re-run; its 2026-09-30 output was read and the numbers in the README recomputed from it |
 | Static comparison | `scripts/static_counterfactual.py`, `scripts/summarize_static.py` | solver base, evaluation run, IDSSE tracking | not re-run; no output available locally |
 
@@ -195,7 +195,8 @@ python scripts/add_caption.py --size 11.5 --input out/showcase_v1/figure_multi/S
 the bundle's panels were written before the solver's command names were translated (commit
 `e89e78f`), so their defender command names were mapped back with that commit's own table; and the
 font check needed the `str()` fix in `figure_style.py`. Every probability label pinned in the command
-appears in the output at the same value. We had no copy of the submitted PNG to compare with.
+appears in the output at the same value, and the panels match the submitted figure PDF by eye
+(`docs/assets/figure2.png` is converted from it). It was not compared pixel by pixel.
 
 ## Evaluation
 

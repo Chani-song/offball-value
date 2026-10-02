@@ -25,6 +25,8 @@ marked not for Git. The public demo is a separate case (below).
 | `data/processed/pass_models/A_*.json` | pass model A (the candidate A-sym replaced), same layout | `scripts/fit_pass_candidates.py` | as above |
 | `data/processed/physics_limits/agile_p999_nodelay.json` | 99.9th-percentile speed-up, braking and turning limits | `scripts/measure_accelerations.py` on IDSSE | numbers only |
 | `data/static/EPV_grid.csv` | 32 x 50 static EPV grid | copied from [PAUSA](https://github.com/leemingo/mitssac-pausa) | Apache-2.0 ([data/static/README.md](../data/static/README.md)) |
+| `docs/assets/figure1.png`, `figure2.png` | the paper's Figures 1 and 2 without their caption strips | converted from the submitted figure PDFs | images of scene S05; no coordinates |
+| `docs/assets/demo_screenshot.png` | screenshot of the deployed explorer (2026-10-01) | <https://chani-song.github.io/offball-value/> | image only |
 
 `tests/test_public_data.py` checks these files, including that every held-out model was fitted
 without its match.
