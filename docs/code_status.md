@@ -5,9 +5,9 @@ the project. Compiled on 2026-10-01 from the import graph and the jobs' commands
 this audit is commit `33378ac`; the tree before the first cleanup (199 scripts, docs, examples, deploy
 files) is tagged `pre-cleanup-2026-09-30`.
 
-Nothing listed here was moved or deleted. The demo (`demo_viz/`) imports some of the legacy modules
-and refers to the `andrew-*` folders by path, so renaming or removing them would break it. That
-decision is left for after the submission.
+On 2026-10-02 the 26 legacy modules that nothing imported were removed (the tree before is tagged
+`pre-legacy-removal-2026-10-02`). Nothing else was moved or deleted: the demo (`demo_viz/`) imports
+some of the remaining modules and refers to the `andrew-*` folders by path.
 
 ## Paper path
 
@@ -54,16 +54,8 @@ cited by `local_game_payoff`).
 ## Legacy modules
 
 Not imported by any pipeline script, job or paper-path module. They come from earlier formulations
-(the OBSO-style proxy, the pass-window value, the defender best-response and attacker max-min
-prototypes, the structural audits). Kept because the demo uses some of them (`reference_obso`,
-`action_space`).
-
-`action_space`, `action_value`, `adapters`, `animated_audit`, `attacker_maximin`,
-`attacker_trajectory`, `beneficiary_selection`, `blind_derived_review`, `causal_attribution`,
-`counterfactual_state`, `defender_best_response`, `defender_response`, `direct_derived_response`,
-`dynamic_reachable`, `endpoint_audit`, `geometric_dilemma`, `influence_dilemma`, `lane_kinematics`,
-`loaders`, `marginal_assignment`, `pass_window_search`, `pass_window_value`, `point_value`,
-`reference_obso`, `scene_audit`, `scene_extractor`, `shot_context_audit`, `vacated_space_rule`.
+(the OBSO-style proxy and the structural audits) and are kept because the demo or its tests use them:
+`reference_obso`, `action_space`.
 
 Used only by their unit tests: `background_rollout`,
 `clear_core_scene_audit`, `dynamic_response_game`, `local_game_structure_audit`,
@@ -71,8 +63,6 @@ Used only by their unit tests: `background_rollout`,
 
 ## Known loose ends
 
-- `andrew-*/scripts/run.py` docstrings mention `scripts/run_stage3.py` and `scripts/summarise_stage3.py`,
-  which were removed in the first cleanup. The solver code was left unchanged.
 - Panel files written before commit `e89e78f` carry the solver's Korean command names; the renderers
   accept only the English names. The mapping is `NAMES` in `scripts/render_panel_figure.py` at tag
   `pre-cleanup-2026-09-30`.
