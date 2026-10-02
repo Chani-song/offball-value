@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Solve the 3v1 fixed-passer game over a states file.
 
-Writes the same study layout as `defensive_positioning.exact_study` and our
-`scripts/run_stage3.py` -- manifest.json, starting_states.json, rows.jsonl,
-summary.json, states/, policies/ -- so `scripts/summarise_stage3.py` and the
-review pages read it unchanged. The imported code is not modified.
+Writes the same study layout as `defensive_positioning.exact_study` --
+manifest.json, starting_states.json, rows.jsonl, summary.json, states/,
+policies/ -- which `scripts/extract_panel_policy.py` and `scripts/analyze_eval.py`
+read. The imported code is not modified.
 """
 
 from __future__ import annotations
