@@ -90,7 +90,14 @@ def defender_rows(scene: Scene, runner_id: str) -> list[dict]:
             "mean_distance_m": round(mean_distance, 2),
             "reaction_s": (None if index is None
                            else round(float(scene.times[index] - scene.times[onset_index]), 2)),
+            "reaction_index": None if index is None else int(index),
             "reaction_rule": rule or "",
+            # the same cost, frame by frame, so the panel can read the marking
+            # where the playhead stands instead of only the window's mean.
+            # Decimetres as whole numbers: the panel shows one decimal place,
+            # and this is 100 rows x n_frames in a file a reader waits for.
+            "marking_dm": [None if not np.isfinite(v) else int(round(v * 10))
+                           for v in series["weighted_error_m"]],
         })
     rows.sort(key=lambda row: row["marking_distance_m"])
     return rows
@@ -101,6 +108,16 @@ def scene_payload(scene: Scene) -> dict | None:
     if runner_id is None:
         return None
     onset_index, onset_method = runner_onset_index(scene, runner_id)
+    # every outfield attacker, not only the curated runner: Dilemma lets a
+    # reader ask the same question about someone else's run, and the answer
+    # has to be measured for that pairing rather than borrowed from this one
+    by_runner = {}
+    for player in scene.players_on("attack"):
+        if player.is_goalkeeper:
+            continue
+        rows = defender_rows(scene, player.player_id)
+        if rows:
+            by_runner[player.player_id] = rows
     return {
         "schema": "compare/1",
         "scene_id": scene.scene_id,
@@ -111,7 +128,8 @@ def scene_payload(scene: Scene) -> dict | None:
             "marking_distance_m": {
                 "source": "offball_value.dynamic_marking.marking_sample",
                 "formula": "|defender - goal-side target| + 2.0 x wrong-side displacement",
-                "window": "mean over the frames from the run's onset",
+                "window": "mean over the frames from the run's onset; "
+                          "`marking_dm` is the same cost per frame, in decimetres",
                 "unit": "m", "better": "lower",
             },
             "reaction_s": {
@@ -121,7 +139,11 @@ def scene_payload(scene: Scene) -> dict | None:
                 "unit": "s after the run starts", "better": "lower",
             },
         },
-        "defenders": defender_rows(scene, runner_id),
+        # the curated runner's rows without their series, which `by_runner`
+        # already carries: a duplicate would double the file for nothing
+        "defenders": [{k: v for k, v in row.items() if k != "marking_dm"}
+                      for row in by_runner.get(runner_id, [])],
+        "by_runner": by_runner,
     }
 
 

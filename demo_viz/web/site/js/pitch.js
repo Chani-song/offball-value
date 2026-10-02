@@ -55,8 +55,11 @@ export class Pitch {
     // the paper's; the Full explorer keeps the dark research one.
     this.theme = P;
     this.layers = {};
+    // `decision` sits above the labels: Player evaluation's two highlighted
+    // options are the thing being read, so nothing is allowed to cover them.
     for (const name of ["markings", "field", "reach", "paths", "passes", "trail",
-                        "lane", "tether", "ghost", "players", "labels"]) {
+                        "lane", "tether", "ghost", "players", "labels",
+                        "decision"]) {
       const group = document.createElementNS(SVG_NS, "g");
       group.setAttribute("class", `layer-${name}`);
       this.svg.appendChild(group);
@@ -154,7 +157,7 @@ export class Pitch {
 
   clearDynamic() {
     for (const name of ["field", "reach", "paths", "passes", "trail", "lane",
-                        "tether", "ghost", "players", "labels"]) {
+                        "tether", "ghost", "players", "labels", "decision"]) {
       this.layers[name].replaceChildren();
     }
   }
@@ -302,8 +305,10 @@ export class Pitch {
       // in a paper-facing mode the three take figure_style's colours and lose
       // their outline, as the figure does since 2026-10-01
       const paper = paperColours && solverRole ? paperColours[solverRole] : null;
-      let opacity = role ? 1 : 0.55;
-      if (muted && !role && !solverRole) opacity = 0.22;
+      // figure_style.OTHER_ALPHA at kyuhyeok-dev@33378ac: a player outside the
+      // game is his team's colour at 50%, which the abstract's figures use
+      let opacity = role ? 1 : 0.5;
+      if (muted && !role && !solverRole) opacity = 0.5;
       if (activeSide && !role) opacity = player.side === activeSide ? 0.95 : 0.2;
       const radius = (role ? 1.55 : 1.2) * Math.max(this.k, 0.62);
 
@@ -582,7 +587,7 @@ export class Pitch {
  * `solverRole` is the paper's role (ball carrier / runner / beneficiary /
  * defender); anyone without one keeps the circle everybody started with.
  */
-function roleMarker(cx, cy, r, solverRole, attrs) {
+export function roleMarker(cx, cy, r, solverRole, attrs) {
   const shape = ROLE_SHAPE[solverRole] || "circle";
   if (shape === "circle") return circle(cx, cy, r, attrs);
   const node = document.createElementNS(SVG_NS, "polygon");
@@ -618,10 +623,13 @@ Pitch.prototype.drawAttackDirection = function drawAttackDirection() {
   const direction = 1;
   const box = this.view || { x0: -PITCH_L / 2 - MARGIN, y0: -PITCH_W / 2 - MARGIN,
                              x1: PITCH_L / 2 + MARGIN, y1: PITCH_W / 2 + MARGIN };
-  const y = box.y0 + 1.9 * Math.max(this.k, 0.62);
-  const x = box.x0 + 3.2 * Math.max(this.k, 0.62);
-  const len = 5.0 * Math.max(this.k, 0.62);
-  const group = this.add("labels", "g", { class: "attack-dir", opacity: 0.72 });
+  // clear of the touchline: the mark used to sit on the line it was drawn
+  // over, which is where it was hardest to read
+  const k = Math.max(this.k, 0.62);
+  const y = Math.max(box.y0 + 3.4 * k, -PITCH_W / 2 - 3.0);
+  const x = box.x0 + 4.2 * k;
+  const len = 7.0 * k;
+  const group = this.add("labels", "g", { class: "attack-dir", opacity: 1 });
   const line = document.createElementNS(SVG_NS, "path");
   const x0 = direction > 0 ? x : x + len;
   const x1 = direction > 0 ? x + len : x;
@@ -631,8 +639,8 @@ Pitch.prototype.drawAttackDirection = function drawAttackDirection() {
     + `l ${-direction * head} ${-head * 0.62} M ${x1} ${y} `
     + `l ${-direction * head} ${head * 0.62}`);
   line.setAttribute("fill", "none");
-  line.setAttribute("stroke", this.theme.text2);
-  line.setAttribute("stroke-width", 0.22 * Math.max(this.k, 0.62));
+  line.setAttribute("stroke", this.theme.text);
+  line.setAttribute("stroke-width", 0.3 * Math.max(this.k, 0.62));
   line.setAttribute("stroke-linecap", "round");
   group.appendChild(line);
   // the label follows the arrow rather than preceding it: at the left margin
@@ -640,7 +648,7 @@ Pitch.prototype.drawAttackDirection = function drawAttackDirection() {
   const text = this.add("labels", "text", {
     x: x + len + 0.8, y: y + 0.42 * Math.max(this.k, 0.62),
     "text-anchor": "start",
-    "font-size": 1.5 * Math.max(this.k, 0.62), fill: this.theme.text2, class: "attack-dir-label",
+    "font-size": 1.9 * Math.max(this.k, 0.62), fill: this.theme.text, class: "attack-dir-label",
   }, "attack");
   group.appendChild(text);
   return group;

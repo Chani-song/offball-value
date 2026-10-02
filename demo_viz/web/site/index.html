@@ -3,8 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Off-the-ball value explorer</title>
-<meta name="description" content="Off-the-ball value explorer: click a runner, a defender and a beneficiary in human-annotated Bundesliga scenes, and explore how the space changes.">
+<title>The Defender's Dilemma | SSAC 2027</title>
+<meta name="description" content="The Defender's Dilemma: Game-Theoretic Evaluation of Off-Ball Movement in Soccer. An interactive figure over real Bundesliga tracking and solved 2v1 and 3v1 games.">
+<meta property="og:title" content="The Defender's Dilemma | SSAC 2027">
+<meta property="og:description" content="Game-Theoretic Evaluation of Off-Ball Movement in Soccer.">
+<meta property="og:type" content="website">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='13' fill='%23132019'/><circle cx='16' cy='16' r='5' fill='%23FF2D87'/></svg>">
 <link rel="stylesheet" href="style.css">
 </head>
@@ -55,21 +58,21 @@
 <main>
   <section class="pitch-card">
     <nav class="modes" id="story-modes" role="tablist" aria-label="Story mode">
-      <button class="mode is-on" data-mode="observed" role="tab" data-public="Play" aria-selected="true">
+      <button class="mode is-on" data-mode="observed" role="tab" data-public="1. Play" aria-selected="true">
         <span class="mode-t">Observed</span>
         <span class="mode-q">What happened?</span>
       </button>
-      <button class="mode" data-mode="counterfactual" role="tab" data-public="Dilemma" aria-selected="false">
+      <button class="mode" data-mode="counterfactual" role="tab" data-public="2. Dilemma" aria-selected="false">
         <span class="mode-t">Counterfactual</span>
         <span class="mode-q">What else could the player have done?</span>
       </button>
-      <button class="mode" data-mode="evaluation" role="tab" data-public="Player evaluation" aria-selected="false">
-        <span class="mode-t">Evaluation</span>
-        <span class="mode-q">How good was the observed decision?</span>
-      </button>
-      <button class="mode" data-mode="game_solution" role="tab" data-public="Nash equilibrium" aria-selected="false">
+      <button class="mode" data-mode="game_solution" role="tab" data-public="3. Nash equilibrium" aria-selected="false">
         <span class="mode-t">Game solution</span>
         <span class="mode-q">What does the strategic equilibrium recommend?</span>
+      </button>
+      <button class="mode" data-mode="evaluation" role="tab" data-public="4. Player evaluation" aria-selected="false">
+        <span class="mode-t">Evaluation</span>
+        <span class="mode-q">How good was the observed decision?</span>
       </button>
     </nav>
     <div class="scene-head">
@@ -81,6 +84,7 @@
         <button class="seg" data-view="focus">Focus</button>
       </div>
       <div class="segmented" id="moment-pick" role="group" aria-label="Solved moment" hidden></div>
+      <div class="segmented" id="sweep-pick" role="group" aria-label="Compare as" hidden></div>
       <label class="check" id="space-control" hidden>
         <input type="checkbox" id="space-on" checked> Space
       </label>
@@ -161,6 +165,11 @@
       <div class="panel-foot" id="legend-foot" hidden>
         <button class="btn" id="compare-reset">Reset</button>
       </div>
+    </div>
+
+    <div class="card options" id="options-card" hidden>
+      <h2 class="panel-h">Options</h2>
+      <div id="options-list"></div>
     </div>
 
     <div class="card metrics" id="metrics-card" hidden>

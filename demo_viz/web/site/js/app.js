@@ -17,7 +17,7 @@ import { REACH, reachableMask } from "./reach.js";
 import { loadSolver, primaryTrajectory, summary as solverSummary } from "./solver.js";
 import {
   PROVENANCE_LABEL, availableFilters, defaultFilter, filtered, loadShowcase,
-  matchLabel, resolveRoles, selectorLabel,
+  loadShowcaseDetail, matchLabel, resolveRoles, selectorLabel,
 } from "./showcase.js";
 import {
   actionText, loadContract, loadStory, metricText, presentSeries, reservedSeries,
@@ -121,8 +121,59 @@ function panelContext() {
     state, el: $, NUMBER, surnameOf, SHAPE_CLASS, PUBLIC_ROLE, ROLE_COLOUR,
     compareLib, compareFor, swapSpec, solverFor, panelAt, storyFor,
     metricsAtFrame, presentSeries, publicObservedRow, ordinal, percent,
-    compareWith, isPublic, solverRolesAt, freezeIndex,
+    compareWith, isPublic, solverRolesAt, freezeIndex, comparedPlayer,
+    optionsLib, optionsFor, momentSeconds, solverRoleOfStory,
+    publicActionName, gridLib, figureLib, viewVector0,
+    setStoryRole, STORY_ROLE_LABEL, PUBLIC_STORY_ROLE, render,
   };
+}
+
+let optionsModule = null;
+let optionsLoading = false;
+
+/** The ranked-actions reader, fetched when Player evaluation opens. */
+function optionsLib() {
+  if (optionsModule) return optionsModule;
+  if (!optionsLoading) {
+    optionsLoading = true;
+    import("./options.js").then((module) => { optionsModule = module; render(); });
+  }
+  return null;
+}
+
+/** This scene's ranked actions, fetched once. */
+function optionsFor() {
+  const { scene } = state;
+  if (!scene) return null;
+  if (state.optionData?.sceneId === scene.scene_id) return state.optionData.payload;
+  const lib = optionsLib();
+  if (!lib) return null;
+  if (state.optionData?.pending === scene.scene_id) return null;
+  state.optionData = { pending: scene.scene_id };
+  lib.loadOptions(scene.scene_id).then((payload) => {
+    if (state.scene?.scene_id !== scene.scene_id) return;
+    state.optionData = { sceneId: scene.scene_id, payload };
+    render();
+  });
+  return null;
+}
+
+/** The solved moment the playhead is on, in seconds. */
+function momentSeconds() {
+  const data = solverFor();
+  if (data?.kind !== "bundle_panels") return 0;
+  return panelAt(data, state.frame)?.panel?.dt ?? 0;
+}
+
+/** The story role, named as the solved panel names it. */
+function solverRoleOfStory() {
+  const data = solverFor();
+  const kind = data?.kind === "bundle_panels" ? data.panels?.[0]?.kind : null;
+  if (state.storyRole === "defender") return "defender";
+  if (state.storyRole === "runner") return "runner";
+  // `passer` is the 2v1's ball carrier; a 3v1's passer is scripted and has no
+  // decision to evaluate, so there is nothing to show for him there
+  return kind === "3v1" ? "beneficiary" : "ball carrier";
 }
 
 let compareModule = null;
@@ -240,10 +291,13 @@ const state = {
   // Dilemma's "Compare players": a temporary overlay on the curated cast.
   // It never writes to state.selection, so the curated triplet -- and every
   // solver and evaluation number keyed to it -- cannot move.
-  compare: null,             // { defender } | { teammate } | null
+  compare: null,             // { runner } | { teammate } | { defender } | null
+  sweep: "defender",         // which role a click in Dilemma assigns
   compareData: null,         // { sceneId, payload } from data/compare
   space: true,               // Dilemma draws the space the run opened
-  viewChosen: false,         // true once the reader picks Full pitch or Focus
+  viewByMode: {},            // a view the reader picked, while they stay there
+  pausedAt: null,            // the solved frame playback already paused on
+  option: null,              // a ranked action the reader picked to compare
   field: false,              // Figure 2's defender-start shading and move field
   grids: null,               // { code, moments: Map<dt, grid|null> } once asked
   solver: null,              // { sceneId, state } once the solver layer is used
@@ -344,10 +398,14 @@ function applyUrlState(wanted) {
     if (Number.isFinite(frame)) {
       state.frame = Math.min(Math.max(Math.round(frame), 0), scene.n_frames - 1);
     }
-  } else {
+  } else if (!isPublic()) {
     const frame = peakGainFrame();
     if (frame != null) state.frame = frame;
     // an explicit ?t= is the visitor's; anything else defers to the mode
+    ensureDecisionFrame();
+  } else {
+    // the public clip keeps the first frame `openScene` put it on; only the
+    // mode may move it from there, and Play never does
     ensureDecisionFrame();
   }
 }
@@ -428,12 +486,22 @@ async function openScene(file, wanted = null) {
   state.selection = Selection.fromRoles(scene.roles, "annotation");
   state.showcaseRolesApplied = state.collection === "showcase"
     ? applyShowcaseRoles(scene) : null;
-  const onset = onsetFor(scene, state.selection.runner);
-  state.frame = peakGainFrame() ?? Math.min(onset.index + Math.round(1.5 * scene.fps),
-                                            scene.n_frames - 1);
+  if (isPublic()) {
+    // the clip's first provided frame. Not a run onset, not the shot's zero,
+    // not the solver's, not release - 1.8 s, and not a peak the influence
+    // model picked: a public clip plays from its own beginning, and a scene
+    // with no shot opens exactly like one with a shot.
+    state.frame = 0;
+  } else {
+    const onset = onsetFor(scene, state.selection.runner);
+    state.frame = peakGainFrame() ?? Math.min(onset.index + Math.round(1.5 * scene.fps),
+                                              scene.n_frames - 1);
+  }
   // a new scene invalidates everything keyed to the old one; clear before the
   // URL state is applied, or it would wipe what the URL just asked for
   state.endpoint = null;
+  state.option = null;
+  state.optionData = null;
   state.reach = null;
   state.solver = null;
   state.release = null;
@@ -447,7 +515,7 @@ async function openScene(file, wanted = null) {
   $("scene").value = file;
   $("title").textContent = scene.title;
   $("subtitle").textContent = isPublic()
-    ? publicSubtitle(scene, currentShowcase()) : scene.subtitle;
+    ? publicSubtitle(scene) : scene.subtitle;
   $("notes").textContent = scene.notes || "—";
   $("team-attack").textContent = scene.attacking_team;
   $("team-defend").textContent = scene.defending_team;
@@ -502,12 +570,18 @@ function render() {
   const activeSide = state.drag ? state.drag.side
     : (selection.armed ? ROLE_SIDE[selection.pick] : null);
 
-  pitch.setView(state.view === "focus" ? fitBox() : null);
+  // a solved moment carries arrowheads, labels and leader lines beyond the
+  // bodies, so Nash's crop asks for more clear ground than a plain focus
+  pitch.setView(state.view === "focus"
+    ? fitBox(isPublic() && state.mode === "game_solution" ? 9 : 12) : null);
   pitch.clearDynamic();
 
   let hints = [];
-  const compared = state.compare?.defender || state.compare?.teammate;
-  if (compared) hints = [compared];
+  // all three roles can be compared at once, and each one the reader picked
+  // keeps its ring: the alternative cast is the thing being looked at
+  const comparedAll = comparedPlayers();
+  const compared = comparedAll.length ? comparedAll[0] : null;
+  if (comparedAll.length) hints = comparedAll;
   const ranking = isPublic() ? null : rankingLib();
   if (compared) {
     // the comparison owns the hint ring while it is open
@@ -531,16 +605,13 @@ function render() {
   const mode = $("wake-mode").value;
   const threat = mode === "obso" ? obsoSurface(index) : null;
   if (dilemmaSpace && spaceFor.length) {
-    // "what would this defender's reaction have opened": the same held-defender
-    // device, pointed at whoever is being compared
-    const hold = state.compare?.defender
-      ? [{ playerId: state.compare.defender, freezeIndex: freeze, mode: "hold" }]
-      : swap;
-    const factual = cache.combined(spaceFor, slot);
-    const counter = cache.combined(spaceFor, slot, hold);
-    pitch.drawField(cache.grid,
-                    factual.field.map((v, i) => Math.max(v - counter.field[i], 0)),
-                    scene);
+    // THE OVERLAY IS TOTAL SPACE, not the delta: `residual_surface` from
+    // `goal_weighted_influence.target_residual_influence` -- where this
+    // teammate's useful space actually is. The panel's "Space created" stays
+    // the delta against the held defender, so the picture answers "where is
+    // the space" and the number answers "how much of it the run opened".
+    // Two quantities, two jobs; a test keeps them from collapsing into one.
+    pitch.drawField(cache.grid, cache.combined(spaceFor, slot).field, scene);
   } else if (state.layers.has("wake") && threat) {
     // frame-level threat: it does not move when the roles change, so it is
     // drawn in its own colour rather than the beneficiary's
@@ -560,7 +631,6 @@ function render() {
 
   // the defender field is Figure 2's background: under the players, over the
   // pitch lines, and only where the grids exist
-  renderDefenderField(index);
   const realMoves = state.mode === "game_solution" && state.solverView !== "policy";
   if (realMoves && isPublic()) {
     // the paper's convention: the three bodies' real next 0.6 s, grey dotted
@@ -573,15 +643,17 @@ function render() {
   const fan = renderPasses(index, threat);
   renderSolverLayer();
   if (state.layers.has("lane")) pitch.drawLane(scene, selection.beneficiaries, index);
-  if (state.layers.has("trail") && selection.runner) {
-    pitch.drawTrail(scene, selection.runner, index);
+  // comparing a runner moves the trail and the marking relation onto him
+  const runnerId = state.compare?.runner || selection.runner;
+  if (state.layers.has("trail") && runnerId) {
+    pitch.drawTrail(scene, runnerId, index);
   }
   // comparing a defender moves the marking line and the held-defender ghost
   // onto him, so the click changes the pitch and not only a number
   const markers = state.compare?.defender ? [state.compare.defender]
                                           : selection.defenders;
-  if (state.layers.has("tether") && selection.runner) {
-    pitch.drawTether(scene, selection.runner, markers, index,
+  if (state.layers.has("tether") && runnerId) {
+    pitch.drawTether(scene, runnerId, markers, index,
                      { labels: state.layers.has("labels") });
   }
   if (state.layers.has("ghost")) {
@@ -619,13 +691,26 @@ function render() {
   renderMoments();
   const panelUi = isPublic() ? panelLib() : null;
   if (panelUi) {
+    panelUi.renderDefenderField(panelContext(), index);
+    panelUi.renderDecisionPaths(panelContext(), index);
     const context = panelContext();
     panelUi.renderLegend(context);
     panelUi.renderMetrics(context, slot);
+    panelUi.renderSweep(context);
+    panelUi.renderOptions(context);
   }
   renderTicks();
   renderEvalStrip(index);
-  $("readout").textContent = `${scene.times[index] >= 0 ? "+" : ""}${scene.times[index].toFixed(2)} s`;
+  // Two clocks, and only one of them is public. `scene.times` is the solver's
+  // own coordinate (zero at the annotated shot), which every solved moment,
+  // every panel frame and every evaluation series is keyed to -- untouched.
+  // The public timeline is clip-local: zero at the clip's first frame,
+  // counting forward at the real frame rate.
+  const clipTimeSec = scene.times[index] - scene.times[0];
+  const solverTimeSec = scene.times[index];
+  $("readout").textContent = isPublic()
+    ? `${clipTimeSec.toFixed(2)} s`
+    : `${solverTimeSec >= 0 ? "+" : ""}${solverTimeSec.toFixed(2)} s`;
   $("time").value = String(index);
 }
 
@@ -634,24 +719,80 @@ function render() {
  * A ball cleared to the far corner would otherwise pull the box back out to a
  * full-pitch view for no gain.
  */
-function fitBox(margin = 12, minimumWidth = 46, ballAttach = 18) {
+/**
+ * Everything the Focus view may not crop.
+ *
+ * The ball and the man on it are in unconditionally -- a solved moment with
+ * the ball off-screen is not a picture of that moment -- and so is every
+ * point of every option path that will be drawn, the pass target, and the
+ * real next 0.6 s. The bounds are computed from the geometry that is about to
+ * be drawn, not from the players alone, which is why an arrow can no longer
+ * run off the edge.
+ */
+function focusPoints(index) {
   const { scene, selection } = state;
   const points = [];
+  const add = (xy) => { if (xy && Number.isFinite(xy[0])) points.push(xy); };
+  const addPlayer = (id) => {
+    const player = id && scene.byId.get(id);
+    if (player) add(playerAt(scene, player, index));
+  };
   for (const role of ["runner", "beneficiary", "defender"]) {
-    for (const id of selection.ids(role)) {
+    for (const id of selection.ids(role)) addPlayer(id);
+  }
+  addPlayer(state.compare?.runner || state.compare?.teammate || state.compare?.defender);
+  // the ball, always, and whoever is on it
+  add(ballAt(scene, index));
+  addPlayer(candidatePasses(scene, index)?.carrier?.id);
+
+  const data = solverFor();
+  const found = data?.kind === "bundle_panels" ? panelAt(data, index) : null;
+  if (found) {
+    for (const body of Object.values(found.panel.bodies || {})) {
+      addPlayer(null);
+      add(playerPoint(scene, body.pos));
+      for (const option of body.options || []) {
+        if ((option.prob ?? 1) < 0.02) continue;      // not drawn, so not framed
+        for (const point of option.path || []) add(viewVector0(scene, point[0], point[1]));
+      }
+    }
+    for (const pass of found.panel.passes || []) {
+      if (pass.target) add(playerPoint(scene, pass.target));
+    }
+    // the real next 0.6 s, which the Actual and Both views draw
+    const span = Math.round(0.6 * scene.fps);
+    for (const id of Object.keys(solverRolesAt(index) || {})) {
       const player = scene.byId.get(id);
-      if (!player) continue;
-      const position = playerAt(scene, player, state.frame);
-      if (position) points.push(position);
+      if (player) add(playerAt(scene, player, Math.min(index + span, scene.n_frames - 1)));
+    }
+  }
+  return points;
+}
+
+function fitBox(margin = 12, minimumWidth = 46, ballAttach = 18) {
+  const { scene, selection } = state;
+  let points = [];
+  if (isPublic()) {
+    points = focusPoints(state.frame);
+  } else {
+    for (const role of ["runner", "beneficiary", "defender"]) {
+      for (const id of selection.ids(role)) {
+        const player = scene.byId.get(id);
+        if (!player) continue;
+        const position = playerAt(scene, player, state.frame);
+        if (position) points.push(position);
+      }
+    }
+    if (points.length) {
+      const centreX = points.reduce((a, p) => a + p[0], 0) / points.length;
+      const centreY = points.reduce((a, p) => a + p[1], 0) / points.length;
+      const ball = ballAt(scene, state.frame);
+      if (ball && Math.hypot(ball[0] - centreX, ball[1] - centreY) <= ballAttach) {
+        points.push(ball);
+      }
     }
   }
   if (!points.length) return null;
-  const centreX = points.reduce((a, p) => a + p[0], 0) / points.length;
-  const centreY = points.reduce((a, p) => a + p[1], 0) / points.length;
-  const ball = ballAt(scene, state.frame);
-  if (ball && Math.hypot(ball[0] - centreX, ball[1] - centreY) <= ballAttach) {
-    points.push(ball);
-  }
 
   const xs = points.map((p) => p[0]);
   const ys = points.map((p) => p[1]);
@@ -663,9 +804,23 @@ function fitBox(margin = 12, minimumWidth = 46, ballAttach = 18) {
                                    minimumWidth / 1.7), fullH);
   const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
   const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
-  const x0 = Math.min(Math.max(cx - width / 2, -fullW / 2), fullW / 2 - width);
-  const y0 = Math.min(Math.max(cy - height / 2, -fullH / 2), fullH / 2 - height);
-  return [x0, y0, width, height];
+  let x0 = Math.min(Math.max(cx - width / 2, -fullW / 2), fullW / 2 - width);
+  let y0 = Math.min(Math.max(cy - height / 2, -fullH / 2), fullH / 2 - height);
+  let w = width;
+  let h = height;
+  // clamping the box to the pitch can push it off something it had to hold --
+  // a path that runs past the touchline, say -- so the box is grown back over
+  // every point it is responsible for, with the margin kept
+  const pad = Math.min(margin, 6);
+  const needX0 = Math.min(...xs) - pad;
+  const needX1 = Math.max(...xs) + pad;
+  const needY0 = Math.min(...ys) - pad;
+  const needY1 = Math.max(...ys) + pad;
+  if (needX0 < x0) { w += x0 - needX0; x0 = needX0; }
+  if (needX1 > x0 + w) w = needX1 - x0;
+  if (needY0 < y0) { h += y0 - needY0; y0 = needY0; }
+  if (needY1 > y0 + h) h = needY1 - y0;
+  return [x0, y0, w, h];
 }
 
 /**
@@ -1094,6 +1249,7 @@ function ensureDecisionFrame() {
 
 function setMode(mode, quiet = false) {
   if (!MODE_SECTIONS[mode]) return;
+  const leaving = state.mode;
   state.mode = mode;
   ensureDecisionFrame();
   for (const button of document.querySelectorAll("#story-modes .mode")) {
@@ -1112,9 +1268,23 @@ function setMode(mode, quiet = false) {
   // a comparison belongs to Dilemma: leaving it returns to the curated play,
   // because nothing outside Dilemma has numbers for anyone else
   if (mode !== "counterfactual") state.compare = null;
-  // Nash opens in Focus: the equilibrium options are too dense to read across
-  // a whole pitch. A view the reader chose themselves is kept.
-  if (mode === "game_solution" && isPublic() && !state.viewChosen) setView("focus");
+  if (isPublic() && leaving !== mode) delete state.viewByMode[leaving];
+  // Each tab has its own view, and its own memory of it. Nash opens in Focus
+  // because the equilibrium options are too dense to read across a whole
+  // pitch; everything else opens on the full pitch. A view the reader picks
+  // lasts while they stay in that tab and is forgotten when they leave, so
+  // coming back to Play always shows the play.
+  if (isPublic()) setView(state.viewByMode[mode] || PUBLIC_VIEW[mode] || "full");
+  // Nash and Player evaluation both read a solved state, so entering either
+  // puts the playhead on one rather than on whatever frame Play left behind
+  if (isPublic() && (mode === "game_solution" || mode === "evaluation")) {
+    const data = solverFor();
+    if (data?.kind === "bundle_panels") {
+      const found = panelAt(data, state.frame);
+      const frame = found ? frameOfPanel(found.panel) : null;
+      if (frame != null) state.frame = frame;
+    }
+  }
   const space = $("space-control");
   if (space) space.hidden = !(isPublic() && mode === "counterfactual");
   renderMoments();
@@ -1133,7 +1303,8 @@ function renderMoments() {
   if (!node) return;
   const data = solverFor();
   const panels = data?.kind === "bundle_panels" ? data.panels || [] : [];
-  const on = isPublic() && state.mode === "game_solution" && panels.length > 0;
+  const on = isPublic() && panels.length > 0
+    && (state.mode === "game_solution" || state.mode === "evaluation");
   node.hidden = !on;
   node.replaceChildren();
   if (!on) return;
@@ -1360,6 +1531,10 @@ function renderBundlePolicy(index, data) {
   if (!lib || !figure) return;
   const found = panelAt(data, index);
   if (!found) return;
+  // an equilibrium is a property of a solved state, so its arrows and its
+  // percentages only exist at the moments that were solved. Between them the
+  // pitch shows the play and nothing is drawn that would imply a solution.
+  if (isPublic() && !found.exact) return;
   const { scene } = state;
   // one layout for the whole panel, so a defender's label steps aside from an
   // attacker's and from every player marker, not only from its own body's
@@ -1395,6 +1570,8 @@ function renderBundlePolicy(index, data) {
         colour, labelFloor: figure.MIN_P, labelGap: gap, layout,
         // a move leaves the marker with clear ground, as the figure does
         clearM: markerClearance(figure, body.solver_role),
+        // and one that would show almost nothing is stretched until it reads
+        minArrowM: figure.MIN_ARROW_M,
       });
     }
   }
@@ -1835,7 +2012,10 @@ const PUBLIC_METRIC = {
 
 function renderEvalStrip(index) {
   const strip = $("eval-strip");
-  strip.hidden = state.mode !== "evaluation";
+  // the public tab reads one solved moment at a time and says its numbers in
+  // words; a frame-by-frame rank/regret plot under it answered a question the
+  // public reader was not asking. The explorer keeps it.
+  strip.hidden = state.mode !== "evaluation" || isPublic();
   if (strip.hidden) return;
   const block = storyFor()?.evaluation?.[state.storyRole];
   const series = presentSeries(block);
@@ -2193,6 +2373,15 @@ function applyCollection() {
     button.classList.toggle("is-on", button.dataset.collection === state.collection);
   }
   if (showcase) refreshShowcaseList();
+  // the explorer shows the reviewers' scores and notes, so it fetches them;
+  // the public list never does
+  if (!showcase && state.showcase && !state.showcaseDetail) {
+    state.showcaseDetail = true;
+    loadShowcaseDetail(state.showcase).then(() => {
+      refreshShowcaseList();
+      render();
+    });
+  }
   applyPublicChrome(showcase);
   applyTheme();
 }
@@ -2210,7 +2399,8 @@ function isPublic() {
 function applyPublicChrome(showcase) {
   document.body.classList.toggle("is-public", showcase);
 
-  $("brand-name").textContent = showcase ? "Off-ball Movement" : "Off-the-ball value";
+  $("brand-name").textContent = showcase ? "The Defender's Dilemma"
+                                       : "Off-the-ball value";
   $("brand-sub").hidden = showcase;
   $("btn-source").textContent = showcase ? "Details" : "Source";
   // the public header is the match and Details. The explorer is not a mode a
@@ -2223,7 +2413,7 @@ function applyPublicChrome(showcase) {
   $("roles-control").hidden = showcase;
   $("showcase-filters").hidden = showcase;
   $("jump-peak").hidden = showcase;
-  $("jump-run").textContent = showcase ? "Run starts" : "Run";
+  $("jump-run").hidden = showcase;
 
   // "Solver policy" is what the model recommends; in public it says so
   for (const button of document.querySelectorAll("#solver-view .seg")) {
@@ -2257,6 +2447,12 @@ function applyPublicChrome(showcase) {
 const PUBLIC_SOLVER_VIEW = { policy: "Equilibrium", actual: "Actual", overlay: "Both" };
 const RESEARCH_SOLVER_VIEW = {
   policy: "Solver policy", actual: "Actual movement", overlay: "Overlay",
+};
+
+/** Which view each public tab opens on. */
+const PUBLIC_VIEW = {
+  observed: "full", counterfactual: "full",
+  game_solution: "focus", evaluation: "full",
 };
 
 /** The research names for the four modes, which the explorer keeps. */
@@ -2339,6 +2535,11 @@ function renderTicks() {
   if (!scene) return;
   const last = Math.max(1, scene.n_frames - 1);
 
+  // The public scrubber carries no marks. A run onset is an inference the
+  // demo is not ready to publish, and a shot is metadata some scenes do not
+  // have -- a public story may not depend on either. Both stay in the
+  // explorer, and the detector itself is untouched.
+  if (isPublic()) return;
   const theme = state.pitch?.theme || P;
   const marks = [];
   for (const runnerId of selection.runners) {
@@ -2528,12 +2729,37 @@ function compareWith(playerId) {
   const { scene, selection } = state;
   const player = scene?.byId.get(playerId);
   if (!player || player.gk) return;
+  // a side cannot take the other side's role: only a defender may be the
+  // Defender, only an attacker the Runner or the Teammate
+  const role = state.sweep;
+  const wantsDefender = role === "defender";
+  if (wantsDefender !== (player.side === "defend")) return;
+  // clicking the curated player, or the one already being compared, clears it
   const curated = selection.runner === playerId
     || selection.defenders.includes(playerId)
     || selection.beneficiaries.includes(playerId);
-  state.compare = curated ? null
-    : (player.side === "defend" ? { defender: playerId } : { teammate: playerId });
+  // the three roles are independent: picking a teammate leaves a defender
+  // already in the comparison alone, so a reader can build a whole alternative
+  // cast rather than one substitution at a time
+  const next = { ...(state.compare || {}) };
+  const already = next[role] === playerId;
+  if (curated || already) delete next[role];
+  else next[role] = playerId;
+  state.compare = Object.keys(next).length ? next : null;
   render();
+}
+
+/** Whoever is being compared, in whichever role, or null. */
+function comparedPlayer() {
+  const c = state.compare;
+  return c ? (c.runner || c.teammate || c.defender || null) : null;
+}
+
+/** Every player the reader has put into the comparison, in role order. */
+function comparedPlayers() {
+  const c = state.compare;
+  if (!c) return [];
+  return [c.runner, c.teammate, c.defender].filter(Boolean);
 }
 
 /** Back to the curated play. */
@@ -2558,52 +2784,6 @@ function compareFor() {
     render();
   });
   return null;
-}
-
-/**
- * The three defender-start grids for this scene, or null.
- *
- * Null is the normal state: the files are not in this build, so the control
- * that would draw them stays hidden. Nothing is estimated in their place.
- */
-function gridsFor() {
-  const data = solverFor();
-  const code = data?.code;
-  if (!code || data.kind !== "bundle_panels") return null;
-  if (state.grids?.code === code) return state.grids.moments;
-  const lib = gridLib();
-  if (!lib) return null;
-  if (state.grids?.pending === code) return null;
-  state.grids = { pending: code };
-  const moments = (data.panels || []).map((panel) => panel.dt);
-  Promise.all(moments.map((dt) => lib.loadGrid(code, dt))).then((grids) => {
-    if (solverFor()?.code !== code) return;
-    const map = new Map();
-    moments.forEach((dt, index) => map.set(dt.toFixed(1), grids[index]));
-    // all or nothing: a partly-covered field would show one moment shaded and
-    // the next bare, which reads as a result rather than a missing file
-    const complete = grids.every(Boolean);
-    state.grids = { code, moments: complete ? map : null };
-    render();
-  });
-  return null;
-}
-
-/** Figure 2's background and move field, when the grids exist. */
-function renderDefenderField(index) {
-  const control = $("field-control");
-  const grids = state.mode === "game_solution" && isPublic() ? gridsFor() : null;
-  if (control) control.hidden = !grids;
-  if (!grids || !state.field) return;
-  const lib = gridLib();
-  const data = solverFor();
-  const panel = panelAt(data, index)?.panel;
-  const grid = panel ? grids.get(panel.dt.toFixed(1)) : null;
-  if (!lib || !grid) return;
-  lib.drawValueField(state.pitch, lib.valueRaster(grid), state.scene,
-                     { low: lib.SHADE.low, high: lib.SHADE.high });
-  lib.drawMoveField(state.pitch, lib.movePoints(grid), state.scene,
-                    { colour: lib.FLOW.colour, alpha: lib.FLOW.alpha });
 }
 
 /** The marker shape each solver role is drawn with, as a CSS class. */
@@ -2798,7 +2978,8 @@ function hintsExpanded() {
 function bindControls() {
   for (const button of document.querySelectorAll("#view-toggle .seg")) {
     button.addEventListener("click", () => {
-      state.viewChosen = true;        // their choice outlives a mode change
+      // remembered for this tab only: leaving it drops the choice
+      state.viewByMode[state.mode] = button.dataset.view;
       setView(button.dataset.view);
       render();
     });
@@ -3047,16 +3228,69 @@ function openSheet(open) {
     .catch(() => { sheetLoaded = false; });
 }
 
+/**
+ * Playback pauses on a solved moment so it can be read.
+ *
+ * Two seconds, once per visit to that frame: `pausedAt` remembers which one
+ * was already honoured, so scrubbing back and forth does not re-trigger it and
+ * the pause never fights the reader.
+ */
+function holdOnSolvedMoment() {
+  if (!state.playing || state.mode !== "game_solution" || !isPublic()) return;
+  const data = solverFor();
+  if (data?.kind !== "bundle_panels") return;
+  const found = panelAt(data, state.frame);
+  if (!found?.exact || state.pausedAt === state.frame) return;
+  state.pausedAt = state.frame;
+  if (state.timer) clearInterval(state.timer);
+  state.timer = null;
+  setTimeout(() => {
+    if (!state.playing) return;             // they pressed pause meanwhile
+    startPlayTimer();
+  }, 2000);
+}
+
+function startPlayTimer() {
+  if (state.timer) clearInterval(state.timer);
+  state.timer = setInterval(() => {
+    const from = state.frame;
+    let next = from + 2;
+    if (next > state.scene.n_frames - 1) {
+      next = 0;
+      state.pausedAt = null;                // a new pass may pause again
+    } else {
+      // Playback moves two frames at a time, so a solved frame with an odd
+      // index -- S05's 55 and 85 -- would be stepped straight over and only
+      // 70 would ever be landed on. Land on any solved frame the step would
+      // cross, so every moment is shown and every moment pauses.
+      const crossed = solvedFrameBetween(from, next);
+      if (crossed != null) next = crossed;
+    }
+    state.frame = next;
+    render();
+    holdOnSolvedMoment();
+  }, 80);
+}
+
+/** The first solved frame strictly after `from` and at or before `to`. */
+function solvedFrameBetween(from, to) {
+  const data = solverFor();
+  if (data?.kind !== "bundle_panels") return null;
+  const frames = (data.panels || [])
+    .map((panel) => frameOfPanel(panel))
+    .filter((frame) => frame != null && frame > from && frame <= to)
+    .sort((a, b) => a - b);
+  return frames.length ? frames[0] : null;
+}
+
 function togglePlay() {
   state.playing = !state.playing;
   $("play").textContent = state.playing ? "❚❚" : "▶";
   if (state.timer) clearInterval(state.timer);
+  state.timer = null;
   if (!state.playing) return;
-  state.timer = setInterval(() => {
-    state.frame += 2;
-    if (state.frame > state.scene.n_frames - 1) state.frame = 0;
-    render();
-  }, 80);
+  state.pausedAt = null;
+  startPlayTimer();
 }
 
 boot().catch((error) => {

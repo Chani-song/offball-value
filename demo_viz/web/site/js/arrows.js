@@ -66,6 +66,7 @@ function leaveMarker(pts, reachM) {
 export function drawActionArrows(pitch, origin, options, {
   colour = P.defender, length = 4.2, labelFloor = 0, labels = true,
   widthOf = null, scale = 1, labelGap = 0, clearM = 0, layout = null,
+  minArrowM = 0,
 } = {}) {
   const k = Math.max(pitch.k, 0.62);
   layout = layout || new LabelLayout(pitch);
@@ -96,6 +97,31 @@ export function drawActionArrows(pitch, origin, options, {
     // S05's 0.6 s "toward ball" is 0.57 m -- clips to nothing, so it has no
     // shaft to draw and lives entirely in its named label, which is why
     // upstream names these moves at all.
+    // upstream's --min-arrow: a move that would show almost nothing outside
+    // the marker is scaled about its start until it reads. Shape kept, length
+    // then not to scale; probability still never touches the geometry.
+    if (minArrowM > 0 && clearM > 0) {
+      const shown = (ps) => {
+        const kept = leaveMarker(ps, clearM);
+        let d = 0;
+        for (let i = 1; i < kept.length; i += 1) {
+          d += Math.hypot(kept[i][0] - kept[i - 1][0], kept[i][1] - kept[i - 1][1]);
+        }
+        return d;
+      };
+      if (shown(pts) < minArrowM) {
+        const [ox, oy] = pts[0];
+        const scaleBy = (f) => pts.map(([x, y]) => [ox + (x - ox) * f, oy + (y - oy) * f]);
+        let lo = 1;
+        let hi = 2;
+        for (let n = 0; n < 12 && shown(scaleBy(hi)) < minArrowM; n += 1) hi *= 2;
+        for (let n = 0; n < 32; n += 1) {
+          const mid = (lo + hi) / 2;
+          if (shown(scaleBy(mid)) < minArrowM) lo = mid; else hi = mid;
+        }
+        pts = scaleBy(hi);
+      }
+    }
     const shaft = clearM > 0 ? leaveMarker(pts, clearM) : pts;
     const [x0, y0] = pts[pts.length - 2];
     const [x1, y1] = pts[pts.length - 1];
@@ -136,7 +162,10 @@ export function drawActionArrows(pitch, origin, options, {
         + `M ${x1} ${y1} l ${-ax + ay * 0.55} ${-ay - ax * 0.55}`);
       arrowhead.setAttribute("fill", "none");
       arrowhead.setAttribute("stroke", colour);
-      arrowhead.setAttribute("stroke-width", width);
+      // upstream caps an open chevron's strokes (HEAD_LW_MAX): in the line's
+      // own width a heavy arrow's head reads as a blot, so the shaft runs on
+      // into it instead of the head thickening with it
+      arrowhead.setAttribute("stroke-width", Math.min(width, 0.22 * k * 1.0));
       arrowhead.setAttribute("stroke-linecap", "round");
       group.appendChild(arrowhead);
     }

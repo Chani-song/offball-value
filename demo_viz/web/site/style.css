@@ -789,3 +789,133 @@ body.is-public .card { padding: 14px 16px; }
 
 /* --- public tab strip ------------------------------------------------- */
 body.is-public .mode { padding: 14px 18px; }
+
+/* =======================================================================
+   The research demo, 2026-10-01
+   -----------------------------------------------------------------------
+   Hierarchy by weight and size, never by grey: every public string is ink.
+   The floor is 15px and nothing responsive may go under it.
+   ======================================================================= */
+body.is-public {
+  --t-body: 15px;
+  --t-name: 16px;
+  --t-head: 17px;
+  --t-num:  19px;
+  --t-title: 20px;      /* the match */
+  --t-site: 26px;       /* the project */
+  --ink-1: #111111;     /* everything a reader reads */
+  --ink-2: #222222;     /* the same, one step back */
+}
+body.is-public .brand-name {
+  font-size: var(--t-site); font-weight: 700; color: var(--ink-1);
+  letter-spacing: -0.015em;
+}
+body.is-public .scene-head h1 {
+  font-size: var(--t-title); font-weight: 700; color: var(--ink-1);
+}
+body.is-public #subtitle {
+  font-size: var(--t-title); font-weight: 400; color: var(--ink-1);
+}
+body.is-public .mode-t { font-size: var(--t-head); color: var(--ink-2); }
+body.is-public .mode.is-on .mode-t { color: var(--ink-1); font-weight: 600; }
+
+/* the panel: ink, with weight doing the work */
+body.is-public .panel-h { color: var(--ink-1); }
+body.is-public .players .lgname { color: var(--ink-1); font-weight: 600; }
+body.is-public .players .lgrole { color: var(--ink-1); font-weight: 400; }
+body.is-public .players .lgshirt {
+  color: var(--ink-1); font-weight: 400; font-variant-numeric: tabular-nums;
+}
+body.is-public .metrics .m-label { color: var(--ink-1); font-weight: 400; }
+body.is-public .metrics .m-value { color: var(--ink-1); font-weight: 700; }
+body.is-public .metrics .m-was { color: var(--ink-2); font-weight: 400; }
+body.is-public .an-section h4,
+body.is-public .analysis dt,
+body.is-public .analysis dd,
+body.is-public .check,
+body.is-public .readout { color: var(--ink-1); }
+
+/* a player row: #10  Ginczek ............ Runner */
+.players li {
+  grid-template-columns: 20px auto 1fr auto; gap: 10px;
+}
+.players .lgshirt { font-size: var(--t-body); }
+
+/* --- a label stays readable over an arrow -------------------------------- */
+/* The paper gives every action label a white backing so it is never lost
+   behind a line. A halo does it without a box to position. */
+body.is-public .action-label,
+body.is-public .pass-label {
+  /* Figure 2 sets its labels straight on the shading. A hairline of page
+     colour is enough to keep a glyph off a line it crosses; anything wider
+     reads as a box around the words. */
+  paint-order: stroke;
+  stroke: #FFFFFF; stroke-width: 1.1px; stroke-linejoin: round;
+  font-weight: 600;
+}
+/* the attack direction: a mark, not a whisper */
+body.is-public .attack-dir { opacity: 1; }
+body.is-public .attack-dir-label { font-weight: 600; }
+
+/* --- the ranked actions ------------------------------------------------ */
+.options #options-list { display: flex; flex-direction: column; gap: 2px; }
+.optrow {
+  display: grid; grid-template-columns: 44px 1fr auto auto; gap: 10px;
+  align-items: center; width: 100%; text-align: left; cursor: pointer;
+  background: none; border: 1px solid transparent; border-radius: 8px;
+  padding: 9px 8px; font: inherit; color: inherit;
+}
+.optrow:hover { background: #F4F4F4; }
+.optrow.is-on { border-color: var(--grid); background: #F7F7F7; }
+body.is-public .optrank {
+  font-size: var(--t-body); color: var(--ink-1); font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+body.is-public .optname { font-size: var(--t-name); color: var(--ink-1); }
+body.is-public .optprob {
+  font-size: var(--t-name); color: var(--ink-1); font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.opttags { display: flex; gap: 5px; }
+.opttag {
+  font-style: normal; font-size: 12.5px; font-weight: 600; padding: 2px 7px;
+  border-radius: 999px; border: 1px solid var(--grid); color: var(--ink-1);
+}
+.opttag.is-best { border-color: var(--pick-best, #0000FF); color: var(--pick-best, #0000FF); }
+.opttag.is-played { border-color: #555555; }
+/* the two accents Player evaluation draws with: sky for the best-valued
+   option, pink for the one the reader picked. The row wears the colour its
+   line on the pitch is drawn in, so the pair needs no legend. */
+body.is-public { --pick-best: #00A8D8; --pick-sel: #FF2D8E; }
+.optrow.is-bestrow { box-shadow: inset 3px 0 0 var(--pick-best); }
+.optrow.is-picked { box-shadow: inset 3px 0 0 var(--pick-sel); }
+.optrow.is-on.is-picked { border-color: var(--pick-sel); background: #FFF2F8; }
+.optrow.is-on.is-bestrow { border-color: var(--pick-best); background: #EFF9FD; }
+
+/* --- the panel's numbers, one column or two ----------------------------- */
+#metrics-list.is-two-up .m-row,
+#metrics-list.is-two-up .m-head {
+  display: grid; grid-template-columns: 1fr auto auto;
+  gap: 14px; align-items: baseline;
+}
+#metrics-list.is-two-up .m-value { min-width: 92px; text-align: right; }
+body.is-public .m-col {
+  font-size: var(--t-body); color: #555555; font-weight: 600; text-align: right;
+  min-width: 92px;
+}
+#metrics-list.is-moments .m-row,
+#metrics-list.is-moments .m-head {
+  display: grid; grid-template-columns: 1fr repeat(var(--moment-cols, 3), auto);
+  gap: 12px; align-items: baseline;
+}
+#metrics-list.is-moments .m-value,
+body.is-public #metrics-list.is-moments .m-col { min-width: 54px; text-align: right; }
+/* every solved moment is shown; the one the playhead stands on is the loud one */
+body.is-public .m-value.is-other { color: #555555; font-weight: 500; }
+body.is-public .m-col.is-now { color: var(--ink-1); }
+.m-head { padding-bottom: 4px; border-bottom: 1px solid var(--grid); }
+body.is-public .m-value.is-was { color: #555555; font-weight: 500; }
+/* a change in space is blue when it grows and red when it shrinks, which is
+   the same two colours the pitch already uses for attack and defence */
+body.is-public .m-value.is-up { color: #0000FF; }
+body.is-public .m-value.is-down { color: #FF0000; }

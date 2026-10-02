@@ -16,6 +16,34 @@ export const PROVENANCE_LABEL = {
 let loaded = null;
 
 /** The showcase, or null when the build does not carry one. */
+let detail = null;
+
+/**
+ * The reviewers' scores, their note, and the mapping evidence.
+ *
+ * Explorer-only, so it is fetched there and never by a public first paint:
+ * the curated list the page loads carries the mapping's verdict and nothing
+ * else of this. Merging is idempotent, so calling it twice is harmless.
+ */
+export async function loadShowcaseDetail(scenes) {
+  if (detail === null) {
+    try {
+      const response = await fetch("data/showcase_detail.json");
+      detail = response.ok ? await response.json() : {};
+    } catch {
+      detail = {};
+    }
+  }
+  for (const scene of scenes || []) {
+    const extra = detail[scene.showcase_id];
+    if (!extra || scene.review) continue;
+    Object.assign(scene, extra);
+    scene.ratings = (extra.review?.reviewers || [])
+      .map((r) => r.rating).filter((r) => typeof r === "number");
+  }
+  return scenes;
+}
+
 export async function loadShowcase() {
   if (loaded !== null) return loaded;
   try {

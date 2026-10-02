@@ -854,3 +854,45 @@ class PaperColourScopeTests(unittest.TestCase):
         self.assertIn('PITCH = "#F7F7F7"', source)
         self.assertIn('INK, MUTED, FAINT, LINE, PAGE = "#222222", "#666666", '
                       '"#B3B3B3", "#D0D0D0", "#FFFFFF"', source)
+
+
+class LatestFigureConventionTests(unittest.TestCase):
+    """What `33378ac` changed in the abstract's own rendering."""
+
+    def setUp(self):
+        self.figure = (SITE / "js" / "figure.js").read_text()
+        self.arrows = (SITE / "js" / "arrows.js").read_text()
+        self.pitch = (SITE / "js" / "pitch.js").read_text()
+
+    def test_the_values_match_figure_style(self):
+        source = _show("scripts/figure_style.py")
+        if source is None:
+            self.skipTest("origin/kyuhyeok-dev not available")
+        self.assertIn("OTHER_ALPHA = 0.5", source)
+        self.assertIn("HEAD_OPEN = True", source)
+        self.assertIn("HEAD_LW_MAX = 1.0", source)
+        self.assertIn("export const OTHER_ALPHA = 0.5;", self.figure)
+        self.assertIn("export const HEAD_OPEN = true;", self.figure)
+        self.assertIn("export const HEAD_LW_MAX = 1.0;", self.figure)
+
+    def test_a_player_outside_the_game_is_drawn_at_half(self):
+        block = self.pitch[self.pitch.index("let opacity = role ? 1"):]
+        self.assertIn("0.5", block[:200])
+
+    def test_an_arrowhead_is_an_open_chevron(self):
+        block = self.arrows[self.arrows.index("const arrowhead ="):]
+        block = block[:block.index("group.appendChild(arrowhead)")]
+        self.assertIn('"fill", "none"', block)
+        self.assertIn("Math.min(width,", block)
+
+    def test_a_move_too_short_to_read_is_stretched_not_dropped(self):
+        """`--min-arrow`: shape kept, length then not to scale."""
+
+        block = self.arrows[self.arrows.index("if (minArrowM > 0"):]
+        block = block[:block.index("const shaft =")]
+        self.assertIn("scaleBy", block)
+        # scaled about the path's own start, so the move still leaves the player
+        self.assertIn("const [ox, oy] = pts[0]", block)
+        # and probability never enters the geometry
+        for banned in ("prob", "probability", "widthOf"):
+            self.assertNotIn(banned, block, banned)

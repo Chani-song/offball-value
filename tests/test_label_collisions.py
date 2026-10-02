@@ -32,6 +32,43 @@ PROBE = """<!doctype html><meta charset=utf-8><div id=h></div>
 <script>
 const WIDTHS = __WIDTHS__, VIEWS = ["focus", "full"];
 const wait = (ms) => new Promise(r => setTimeout(r, ms));
+function geometry(d) {
+  // the viewBox the pitch is actually showing, and everything drawn in it
+  const svg = d.querySelector("#pitch svg");
+  const vb = (svg.getAttribute("viewBox") || "").split(/\s+/).map(Number);
+  const out = {viewBox: vb, outside: [], broken: []};
+  const inside = (x, y, slack) =>
+    x >= vb[0] - slack && x <= vb[0] + vb[2] + slack &&
+    y >= vb[1] - slack && y <= vb[1] + vb[3] + slack;
+  const ball = d.querySelector(".layer-players circle:last-of-type");
+  for (const sel of [".layer-players g.player.is-role", ".layer-passes polyline",
+                     ".layer-passes path", ".layer-passes line"]) {
+    for (const n of d.querySelectorAll(sel)) {
+      let b;
+      try { b = n.getBBox(); } catch { continue; }
+      if (!b.width && !b.height) continue;
+      // every drawn mark must sit inside the crop, with no slack allowed
+      if (!inside(b.x, b.y, 0) || !inside(b.x + b.width, b.y + b.height, 0)) {
+        out.outside.push({sel, x: b.x, y: b.y, w: b.width, h: b.height});
+      }
+    }
+  }
+  // the ball and the man on it, by their own marks
+  const marks = [...d.querySelectorAll(".layer-players g.player")].map((g) => {
+    const b = g.getBBox();
+    return {shirt: (g.querySelector("text.shirt")||{}).textContent,
+            x: b.x, y: b.y, w: b.width, h: b.height,
+            role: g.classList.contains("is-role")};
+  });
+  out.marks = marks;
+  const balls = [...d.querySelectorAll(".layer-players circle")];
+  if (balls.length) {
+    const b = balls[balls.length - 1].getBBox();
+    out.ball = {x: b.x, y: b.y, w: b.width, h: b.height};
+  }
+  return out;
+}
+
 function boxes(d) {
   const out = [];
   for (const node of d.querySelectorAll(".layer-labels text")) {
@@ -69,7 +106,7 @@ function boxes(d) {
           const got = boxes(d);
           report.push({width, code, view,
                        moment: segs[i] ? segs[i].textContent : "default",
-                       ...got});
+                       ...got, geom: geometry(d)});
         }
       }
     }
@@ -238,3 +275,47 @@ class LabelCollisionTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FocusBoundsTests(LabelCollisionTests):
+    """Sections 20, 22, 23, 34, 35: the crop holds everything it draws."""
+
+    def test_the_crop_holds_the_ball(self):
+        bad = []
+        for row in self.report:
+            geom = row.get("geom") or {}
+            vb, ball = geom.get("viewBox"), geom.get("ball")
+            if not vb or not ball:
+                continue
+            if not (vb[0] <= ball["x"] and ball["x"] + ball["w"] <= vb[0] + vb[2]
+                    and vb[1] <= ball["y"] and ball["y"] + ball["h"] <= vb[1] + vb[3]):
+                bad.append(f"{row['code']} {row['view']} {row['moment']} "
+                           f"{row['width']}px: ball outside the crop")
+        self.assertEqual([], bad, "\n".join(bad[:20]))
+
+    def test_the_crop_holds_every_player_the_game_is_about(self):
+        bad = []
+        for row in self.report:
+            geom = row.get("geom") or {}
+            vb = geom.get("viewBox")
+            if not vb:
+                continue
+            for mark in geom.get("marks", []):
+                if not mark["role"]:
+                    continue
+                if not (vb[0] <= mark["x"] and mark["x"] + mark["w"] <= vb[0] + vb[2]
+                        and vb[1] <= mark["y"]
+                        and mark["y"] + mark["h"] <= vb[1] + vb[3]):
+                    bad.append(f"{row['code']} {row['view']} {row['moment']} "
+                               f"{row['width']}px: #{mark['shirt']} cropped")
+        self.assertEqual([], bad, "\n".join(bad[:20]))
+
+    def test_no_drawn_geometry_runs_outside_the_crop(self):
+        """Arrow shafts, heads and the pass, which Focus used to cut."""
+
+        bad = []
+        for row in self.report:
+            for item in (row.get("geom") or {}).get("outside", []):
+                bad.append(f"{row['code']} {row['view']} {row['moment']} "
+                           f"{row['width']}px: {item['sel']} outside")
+        self.assertEqual([], bad, "\n".join(bad[:20]))

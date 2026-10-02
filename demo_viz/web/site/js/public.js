@@ -69,29 +69,24 @@ export function percent(p) {
   return `${Math.round(p * 100)}%`;
 }
 
-/** The curated row's own outcome word, as a match report would print it. */
-const OUTCOME = {
-  goal: "Goal",
-  saved: "Shot saved",
-  blocked: "Shot blocked",
-  "off target": "Shot off target",
-  woodwork: "Hit the woodwork",
-};
-
 /**
- * The scene's one-line caption.
+ * The scene's second header line: the date and the match clock.
  *
- * The exported subtitle is `clock · shot N · shooter · OUTCOME`, then `   ·   `
- * and a reviewer's sentence where one was written. That sentence is the only
- * part worth a public caption; the outcome stands in when there is none, and
- * the shot number and identifiers belong in Details.
+ * Nothing shot-dependent. The exported subtitle carries `shot N`, a shooter
+ * and an outcome, and some scenes have no shot at all, so a public story may
+ * not rest on any of it -- that stays in Details. The reviewer's sentence goes
+ * with it, for the same reason: it describes a shot's build-up.
+ *
+ * The date would come first and there is none to show. No reachable source
+ * carries a kickoff -- `BundesligaMatchMeta` has no date field and the window
+ * cache keeps only the match id, period and frame range -- so when one is
+ * exported it lands in `scene.match_date` and appears here. Nothing is
+ * guessed in the meantime.
  */
-export function publicSubtitle(scene, curated) {
+export function publicSubtitle(scene) {
   const clock = (scene.match_clock || "").trim();
-  const headline = (scene.subtitle || "").split("   ·   ")[1];
-  if (headline) return [clock, headline.trim()].filter(Boolean).join(" · ");
-  const event = ((curated && curated.event) || "").split("·")[0].trim();
-  return [clock, OUTCOME[event]].filter(Boolean).join(" · ");
+  const date = (scene.match_date || "").trim();
+  return [date, clock].filter(Boolean).join(" \u00b7 ");
 }
 
 /**

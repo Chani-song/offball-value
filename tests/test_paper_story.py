@@ -822,14 +822,17 @@ class LazyComponentTests(unittest.TestCase):
             index = (root / "data" / "index.json").stat().st_size
             contract = (root / "data" / "story" / "contract.json").stat().st_size
             extra = (root / "data" / "submission_showcase.json").stat().st_size
-        initial = shell + index + contract + extra
+            initial = shell + index + contract + extra
+            from demo_viz.web.build import ON_DEMAND as _DEFERRED
+
+            for path in _DEFERRED:
+                where = SITE / path
+                initial -= (where if where.exists()
+                            else root / path).stat().st_size
         # the lazy components are part of the shell on disk but are not fetched
         # until their mode is opened, so subtract what a visitor actually loads.
         # The list is the build's, so the two cannot drift apart.
-        from demo_viz.web.build import ON_DEMAND
 
-        for path in ON_DEMAND:
-            initial -= (SITE / path).stat().st_size
         # 2026-09-30, figure alignment: the role markers, the attack-direction
         # indicator and the annotation->solver role translation run on every
         # render and cannot be deferred (+7 KB); splitting the carrier rule out
@@ -1239,9 +1242,21 @@ class PublicCopyTests(unittest.TestCase):
         self.public = (SITE / "js" / "public.js").read_text()
         self.markup = (SITE / "index.html").read_text()
 
-    def test_the_four_tabs_are_named_for_a_public_audience(self):
-        for name in ("Play", "Dilemma", "Player evaluation", "Nash equilibrium"):
+    def test_the_four_tabs_are_named_and_numbered_for_a_public_audience(self):
+        """The numbers carry the paper's story order, in plain type."""
+
+        for name in ("1. Play", "2. Dilemma", "3. Nash equilibrium",
+                     "4. Player evaluation"):
             self.assertIn(f'data-public="{name}"', self.markup, name)
+
+    def test_the_tabs_are_in_that_order_in_the_dom(self):
+        order = re.findall(r'data-public="(\d)\.', self.markup)
+        self.assertEqual(["1", "2", "3", "4"], order)
+
+    def test_the_public_title_is_the_paper_s(self):
+        self.assertIn("<title>The Defender's Dilemma | SSAC 2027</title>", self.markup)
+        self.assertIn('content="The Defender\'s Dilemma | SSAC 2027"', self.markup)
+        self.assertIn('"The Defender\'s Dilemma"', self.app)
 
     def test_a_tab_carries_no_subtitle_in_the_showcase(self):
         block = self.app[self.app.index("function applyPublicChrome"):]
@@ -1370,26 +1385,32 @@ class ScientificModeTests(unittest.TestCase):
     def test_the_defender_field_control_is_hidden_without_data(self):
         """No dead public control: absent grids mean no checkbox at all."""
 
-        block = self.app[self.app.index("function renderDefenderField"):]
-        block = block[:block.index("\n/**")]
-        self.assertIn('control.hidden = !grids', block)
-        self.assertIn("if (!grids || !state.field) return;", block)
+        panel = (SITE / "js" / "panel.js").read_text()
+        block = panel[panel.index("function renderDefenderField"):]
+        self.assertIn("control.hidden = !grids", block)
+        self.assertIn("if (!grids || !c.state.field) return;", block)
 
     def test_a_partly_covered_field_is_not_drawn(self):
-        block = self.app[self.app.index("function gridsFor"):]
+        panel = (SITE / "js" / "panel.js").read_text()
+        block = panel[panel.index("function gridsFor"):]
         block = block[:block.index("\n/**")]
         self.assertIn("grids.every(Boolean)", block)
 
     def test_the_grid_reader_uses_the_upstream_definitions(self):
+        """The abstract's own flags, not the renderer's defaults."""
+
         grid = (SITE / "js" / "grid.js").read_text()
-        self.assertIn("better start for the defender", grid)
-        self.assertIn('"#B8AE9C"', grid)                  # BG_HIGH
-        self.assertIn('"#FF0000"', grid)                  # --flow-color
-        self.assertIn("alpha: 0.2", grid)                 # --flow-alpha
-        # the move field is the probability-weighted 0.6 s displacement
+        self.assertIn("preferred defender position", grid)   # --value-key
+        self.assertIn('"#B8AE9C"', grid)                     # BG_HIGH
+        self.assertIn('"#FF8000"', grid)                     # --flow-color
+        self.assertIn("alpha: 0.4", grid)                    # --flow-alpha
+        # the move field is the export's own probability-weighted 0.6 s
+        # displacement -- read, not recomputed from the per-command ends
         block = grid[grid.index("export function movePoints"):]
         block = block[:block.index("\n}")]
-        self.assertIn("command.prob * (command.end[0] - x)", block)
+        self.assertIn("[p.x, p.y, p.dx, p.dy]", block)
+        source = (REPO_ROOT / "demo_viz" / "web" / "export_grid.py").read_text()
+        self.assertIn('"dx": round(float(row["dx"]), 4)', source)
 
     def test_the_actual_move_follows_the_figures_convention(self):
         pitch = (SITE / "js" / "pitch.js").read_text()
@@ -1398,20 +1419,31 @@ class ScientificModeTests(unittest.TestCase):
         self.assertIn("stroke-dasharray", block)
         self.assertIn('fill: "none"', block)              # a hollow marker
 
+    def test_every_solved_moment_is_in_the_table(self):
+        """The equilibrium is three solves, so all three are side by side."""
+
+        panel = (SITE / "js" / "panel.js").read_text()
+        block = panel[panel.index("function renderMomentTable"):]
+        block = block[:block.index("\n/**")]
+        self.assertIn("data.panels", block)            # every solved moment
+        self.assertIn("panel.dt.toFixed(1)", block)    # named by its own time
+        self.assertIn("is-now", block)                 # the one on screen, marked
+
     def test_the_static_comparison_is_shown_whole(self):
         """Section 22: both values and the overestimate, not just the ratio."""
 
         panel = (SITE / "js" / "panel.js").read_text()
-        block = panel[panel.index("function nashMetrics"):]
+        block = panel[panel.index("function renderMomentTable"):]
         block = block[:block.index("\n/**")]
-        for label in ("Fixed defence", "Responding defence", "Overestimate"):
+        for label in ("Fixed defender", "Responding defender",
+                      "Fixed-defence overestimate"):
             self.assertIn(f'"{label}"', block, label)
 
     def test_the_nash_panel_reads_only_the_solved_panel(self):
         """Nothing here may recompute or interpolate a solver value."""
 
         panel = (SITE / "js" / "panel.js").read_text()
-        block = panel[panel.index("function nashMetrics"):]
+        block = panel[panel.index("function renderMomentTable"):]
         block = block[:block.index("\n/**")]
         self.assertIn("c.panelAt(data, c.state.frame)", block)
         for banned in ("Math.", "interpolat", "* 0.5", "+ 1"):
@@ -1475,6 +1507,43 @@ class PublicShellTests(unittest.TestCase):
         self.assertIn("var(--t-name)", rule)
 
 
+class EvaluationReadingTests(unittest.TestCase):
+    """The public Player evaluation tab: what is drawn, and what is not."""
+
+    def setUp(self):
+        self.app = (SITE / "js" / "app.js").read_text()
+        self.css = (SITE / "style.css").read_text()
+        self.options = (SITE / "js" / "options.js").read_text()
+        self.panel = (SITE / "js" / "panel.js").read_text()
+
+    def test_the_frame_by_frame_strip_is_explorer_only(self):
+        block = self.app[self.app.index("function renderEvalStrip"):]
+        block = block[:block.index("\n/**")]
+        self.assertIn('state.mode !== "evaluation" || isPublic()', block)
+
+    def test_every_option_is_drawn_not_only_the_named_ones(self):
+        block = self.panel[self.panel.index("export function renderDecisionPaths"):]
+        block = block[:block.index("\n}")]
+        self.assertIn("all: (entry.options || []).map", block)
+
+    def test_the_two_accents_are_the_same_in_the_list_and_on_the_pitch(self):
+        for colour in ("#00A8D8", "#FF2D8E"):
+            self.assertIn(colour, self.options, colour)
+            self.assertIn(colour, self.css, colour)
+
+    def test_the_played_option_keeps_the_role_colour(self):
+        block = self.options[self.options.index("export function drawDecision"):]
+        self.assertIn("accent(observed, colour)", block)
+
+    def test_the_decision_layer_is_the_topmost_one(self):
+        pitch = (SITE / "js" / "pitch.js").read_text()
+        block = pitch[pitch.index("this.layers = {}"):]
+        block = block[:block.index("]) {")]
+        order = re.findall(r'"([a-z]+)"', block)
+        self.assertEqual("decision", order[-1], order)
+        self.assertIn("decision", pitch[pitch.index("clearDynamic"):])
+
+
 class DilemmaInteractionTests(unittest.TestCase):
     """Sections 9-12, 32: a click changes the pitch, not only a number."""
 
@@ -1484,8 +1553,51 @@ class DilemmaInteractionTests(unittest.TestCase):
     def test_the_marking_line_follows_the_compared_defender(self):
         block = self.app[self.app.index("const markers = state.compare?.defender"):]
         block = block[:block.index("renderDilemma")]
-        self.assertIn("pitch.drawTether(scene, selection.runner, markers", block)
+        self.assertIn("pitch.drawTether(scene, runnerId, markers", block)
         self.assertIn("pitch.drawGhost(scene, cache, markers", block)
+
+    def test_the_role_sweep_restricts_each_role_to_its_own_side(self):
+        block = self.app[self.app.index("function compareWith"):]
+        block = block[:block.index("\n/**")]
+        self.assertIn('wantsDefender !== (player.side === "defend")', block)
+        self.assertIn("player.gk", block)
+
+    def test_clicking_the_compared_player_again_clears_it(self):
+        block = self.app[self.app.index("function compareWith"):]
+        block = block[:block.index("\n/**")]
+        self.assertIn("const already = next[role] === playerId", block)
+        self.assertIn("if (curated || already) delete next[role]", block)
+
+    def test_the_three_compared_roles_are_independent(self):
+        """A teammate and a defender can be swapped at the same time."""
+
+        block = self.app[self.app.index("function compareWith"):]
+        block = block[:block.index("\n/**")]
+        # the other roles' choices are carried forward, not discarded
+        self.assertIn("{ ...(state.compare || {}) }", block)
+        panel = (SITE / "js" / "panel.js").read_text()
+        sweep = panel[panel.index("export function renderSweep"):]
+        sweep = sweep[:sweep.index("\n/**")]
+        # and changing which role the next click fills clears nothing
+        self.assertNotIn("c.state.compare = null", sweep)
+
+    def test_the_marking_numbers_are_read_at_the_playhead(self):
+        """Section 3: a window mean does not move while the clip plays."""
+
+        panel = (SITE / "js" / "panel.js").read_text()
+        block = panel[panel.index("function dilemmaMetrics"):]
+        block = block[:block.index("\n/**")]
+        self.assertIn("lib.markingAt(row, frame)", block)
+        self.assertIn("lib.secondsToReaction(payload, row, frame, times)", block)
+        compare = (SITE / "js" / "compare.js").read_text()
+        # the per-frame series is read, never recomputed in the browser
+        self.assertIn("row.marking_dm", compare)
+        self.assertIn("row.reaction_index", compare)
+
+    def test_the_run_trail_follows_a_compared_runner(self):
+        block = self.app[self.app.index("const runnerId = state.compare?.runner"):]
+        block = block[:block.index("renderDilemma")]
+        self.assertIn("pitch.drawTrail(scene, runnerId", block)
 
     def test_the_space_field_is_drawn_for_the_teammate_in_question(self):
         block = self.app[self.app.index("const dilemmaSpace"):]
@@ -1493,8 +1605,268 @@ class DilemmaInteractionTests(unittest.TestCase):
         self.assertIn("state.compare?.teammate", block)
         self.assertIn("pitch.drawField(cache.grid", block)
 
-    def test_nash_opens_in_focus(self):
+    def test_each_tab_has_its_own_view_default(self):
+        """Nash opens in Focus; the rest open on the full pitch."""
+
+        block = self.app[self.app.index("const PUBLIC_VIEW = {"):]
+        block = block[:block.index("};")]
+        self.assertIn('observed: "full"', block)
+        self.assertIn('counterfactual: "full"', block)
+        self.assertIn('game_solution: "focus"', block)
+        self.assertIn('evaluation: "full"', block)
+
+    def test_a_chosen_view_does_not_leak_between_tabs(self):
         block = self.app[self.app.index("function setMode"):]
         block = block[:block.index("\n/**")]
-        self.assertIn('setView("focus")', block)
-        self.assertIn("state.viewChosen", block)
+        self.assertIn("delete state.viewByMode[leaving]", block)
+        self.assertIn("state.viewByMode[mode] || PUBLIC_VIEW[mode]", block)
+
+    def test_the_dilemma_overlay_is_total_space_and_the_metric_is_the_delta(self):
+        """Section 11: two quantities, two jobs, never the same one twice."""
+
+        block = self.app[self.app.index("if (dilemmaSpace && spaceFor.length)"):]
+        block = block[:block.index("} else if")]
+        # the overlay is the residual surface itself, with no subtraction
+        self.assertIn("cache.combined(spaceFor, slot).field", block)
+        self.assertNotIn("Math.max(", block)
+        panel = (SITE / "js" / "panel.js").read_text()
+        metric = panel[panel.index("function dilemmaMetrics"):]
+        metric = metric[:metric.index("\n/**")]
+        # the metric keeps the held-defender subtraction
+        self.assertIn('mode: "hold"', metric)
+        self.assertIn("- cache.combined(", metric.replace("\n", " "))
+
+
+class PublicTimelineTests(unittest.TestCase):
+    """The public clip plays from its own first frame.
+
+    `scene.times` stays the solver's coordinate -- zero at the annotated shot,
+    which every solved moment and evaluation series is keyed to. Only the
+    public readout is re-zeroed.
+    """
+
+    def setUp(self):
+        self.app = (SITE / "js" / "app.js").read_text()
+
+    def test_a_public_scene_opens_on_its_first_frame(self):
+        block = self.app[self.app.index("  if (isPublic()) {\n    // the clip's first"):]
+        block = block[:block.index("} else {")]
+        self.assertIn("state.frame = 0;", block)
+        for banned in ("onsetFor", "peakGainFrame", "decisionFrame"):
+            self.assertNotIn(banned, block, banned)
+
+    def test_nothing_annotation_derived_moves_the_public_playhead(self):
+        """The URL path used to jump to the influence peak on any ?param."""
+
+        block = self.app[self.app.index("if (wanted.time != null"):]
+        block = block[:block.index("\n}")]
+        self.assertIn("} else if (!isPublic()) {", block)
+        peak = block[block.index("peakGainFrame"):]
+        self.assertNotIn("isPublic", peak.split("} else {")[0])
+
+    def test_the_public_readout_is_clip_local(self):
+        block = self.app[self.app.index("const clipTimeSec"):]
+        block = block[:block.index("\n\n")]
+        self.assertIn("scene.times[index] - scene.times[0]", block)
+        self.assertIn("isPublic()", block)
+        # and the explorer keeps the solver's own clock
+        self.assertIn("const solverTimeSec = scene.times[index];", block)
+
+    def test_the_solver_clock_is_not_rewritten(self):
+        """A re-zeroed display may not become a re-zeroed coordinate."""
+
+        for banned in ("scene.times[i] -= ", "times = scene.times.map",
+                       "scene.times = "):
+            self.assertNotIn(banned, self.app, banned)
+
+    def test_the_solved_moments_still_come_from_the_panels(self):
+        block = self.app[self.app.index("function renderMoments"):]
+        block = block[:block.index("\n/**")]
+        self.assertIn("panel.dt.toFixed(1)", block)
+        self.assertIn("frameOfPanel(panel)", block)
+        frame_of = self.app[self.app.index("function frameOfPanel"):]
+        frame_of = frame_of[:frame_of.index("\n}")]
+        # the panel's own frame, clamped -- never shifted by the clip's start
+        self.assertIn("panel.frame", frame_of)
+        self.assertNotIn("times[0]", frame_of)
+
+
+class ModuleHealthTests(unittest.TestCase):
+    """A duplicate declaration is a SyntaxError that shows as a blank page.
+
+    `boot()` never runs, nothing logs where a probe would see it, and the
+    shell renders its static defaults -- which looks exactly like a stale
+    build. Source-level checks are cheap; the browser-level one is in
+    `tests/test_module_imports.py`.
+    """
+
+    def setUp(self):
+        self.root = SITE / "js"
+
+    def test_no_module_declares_the_same_top_level_name_twice(self):
+        bad = []
+        for path in sorted(self.root.glob("*.js")):
+            text = path.read_text()
+            names = (re.findall(r"^function (\w+)\(", text, re.M)
+                     + re.findall(r"^(?:const|let|class) (\w+)\b", text, re.M)
+                     + re.findall(r"^export (?:async )?function (\w+)\(", text, re.M)
+                     + re.findall(r"^export (?:const|let|class) (\w+)\b", text, re.M))
+            seen = set()
+            for name in names:
+                if name in seen:
+                    bad.append(f"{path.name}: {name}")
+                seen.add(name)
+        self.assertEqual([], bad, "\n".join(bad))
+
+    def test_every_static_import_resolves(self):
+        bad = []
+        for path in sorted(self.root.glob("*.js")):
+            text = path.read_text()
+            for spec in (re.findall(r'from\s+"(\./[^"]+)"', text)
+                         + re.findall(r'import\("(\./[^"]+)"\)', text)):
+                if not (self.root / spec[2:]).exists():
+                    bad.append(f"{path.name} -> {spec}")
+        self.assertEqual([], bad, "\n".join(bad))
+
+    def test_every_named_import_is_exported(self):
+        bad = []
+        for path in sorted(self.root.glob("*.js")):
+            text = path.read_text()
+            for block, module in re.findall(
+                    r'import\s+\{([^}]*)\}\s+from\s+"\./([\w.]+\.js)"', text):
+                source = (self.root / module).read_text()
+                for raw in block.split(","):
+                    name = raw.strip().split(" as ")[0].strip()
+                    if not name:
+                        continue
+                    exported = (
+                        re.search(rf"export\s+(?:async\s+)?"
+                                  rf"(?:function|const|let|class)\s+{re.escape(name)}\b",
+                                  source)
+                        or re.search(rf"export\s*\{{[^}}]*\b{re.escape(name)}\b",
+                                     source))
+                    if not exported:
+                        bad.append(f"{path.name} imports {name} from {module}")
+        self.assertEqual([], bad, "\n".join(bad))
+
+
+class PublicWordingTests(unittest.TestCase):
+    """Public names for quantities whose research names are opaque."""
+
+    def setUp(self):
+        self.panel = (SITE / "js" / "panel.js").read_text()
+
+    def test_the_evaluation_rows_are_named_in_words(self):
+        for label in ("Observed", "Rank", "Probability under equilibrium",
+                      "Expected loss vs best"):
+            self.assertIn(f'"{label}"', self.panel, label)
+
+    def test_the_opaque_names_are_gone_from_the_public_panel(self):
+        source = re.sub(r"//.*", "", re.sub(r"/\*.*?\*/", "", self.panel, flags=re.S))
+        for banned in ('"Regret"', '"Equilibrium probability"', '"Similarity"'):
+            self.assertNotIn(banned, source, banned)
+
+    def test_the_space_row_reads_before_to_after(self):
+        """Not a bare delta: the two numbers the delta is between."""
+
+        block = self.panel[self.panel.index("const spanOf = (id)"):]
+        block = block[:block.index("out.push([\"Space created\"")]
+        self.assertIn("cache.combined([id], slot).value", block)
+        self.assertIn("cache.combined([id], slot, swap).value", block)
+        self.assertIn("\\u2192", block)
+
+    def test_a_change_in_space_is_coloured_by_direction(self):
+        css = (SITE / "style.css").read_text()
+        self.assertIn(".m-value.is-up { color: #0000FF; }", css)
+        self.assertIn(".m-value.is-down { color: #FF0000; }", css)
+
+    def test_the_dilemma_panel_is_two_columns_while_comparing(self):
+        block = self.panel[self.panel.index("const comparing ="):]
+        block = block[:block.index("for (const [label")]
+        self.assertIn('"Default"', block)
+        self.assertIn('"Selected"', block)
+        self.assertIn("is-two-up", block)
+
+
+class BundleIntegrationTests(unittest.TestCase):
+    """The 2026-10-01 vector-field and ranking bundle, as exported."""
+
+    GRID = WEB_DATA / "grid"
+    OPTIONS = WEB_DATA / "options"
+
+    def test_the_defender_grids_are_exported_for_every_solved_moment(self):
+        if not self.GRID.exists():
+            self.skipTest("no grid export")
+        names = sorted(p.name for p in self.GRID.glob("*.json"))
+        self.assertEqual(["S05_0.0.json", "S05_0.6.json", "S05_1.2.json"], names)
+
+    def test_a_grid_carries_the_value_and_the_move(self):
+        if not self.GRID.exists():
+            self.skipTest("no grid export")
+        payload = json.loads((self.GRID / "S05_0.0.json").read_text())
+        self.assertEqual("grid/1", payload["schema"])
+        self.assertEqual(1.0, payload["spacing_m"])
+        self.assertGreater(len(payload["points"]), 200)
+        for point in payload["points"]:
+            for key in ("i", "j", "x", "y", "v", "dx", "dy"):
+                self.assertIn(key, point)
+        # exactly one start is where the defender really was
+        observed = [p for p in payload["points"] if p.get("observed")]
+        self.assertEqual(1, len(observed))
+
+    def test_every_exported_rank_matches_the_bundle(self):
+        """The one test that would catch a wrong slot mapping."""
+
+        import csv
+
+        from demo_viz.paper_story.bundle import DEFAULT_ROOT
+
+        players = DEFAULT_ROOT / "analysis" / "players.csv"
+        if not (self.OPTIONS.exists() and players.exists()):
+            self.skipTest("no options export or no bundle")
+        stored = {(r["code"], r["role"]): r
+                  for r in csv.DictReader(players.open())}
+        bad = []
+        checked = partial = 0
+        for path in sorted(self.OPTIONS.glob("*.json")):
+            payload = json.loads(path.read_text())
+            code = payload["code"]
+            for moment in payload["moments"]:
+                dt = moment["dt"]
+                suffix = "" if dt == 0.0 else f"@{dt:.1f}".rstrip("0").rstrip(".")
+                for role, entry in moment["roles"].items():
+                    row = stored.get((f"{code}{suffix}", role))
+                    if not row:
+                        continue
+                    if entry.get("rank_partial"):
+                        partial += 1
+                        continue
+                    try:
+                        index = int(row["observed"])
+                    except ValueError:
+                        continue
+                    mine = next((o for o in entry["options"]
+                                 if o["command"] == index), None)
+                    if mine is None:
+                        continue
+                    checked += 1
+                    if mine["rank"] != int(row["rank"]):
+                        bad.append(f"{code}{suffix} {role}: "
+                                   f"{mine['rank']} != {row['rank']}")
+        self.assertEqual([], bad, "\n".join(bad))
+        self.assertGreater(checked, 40, "too few ranks compared to mean anything")
+
+    def test_the_carrier_s_missing_pass_is_declared_not_guessed(self):
+        if not self.OPTIONS.exists():
+            self.skipTest("no options export")
+        flagged = []
+        for path in sorted(self.OPTIONS.glob("*.json")):
+            payload = json.loads(path.read_text())
+            for moment in payload["moments"]:
+                for role, entry in moment["roles"].items():
+                    if entry.get("rank_partial"):
+                        flagged.append((role, entry.get("missing_option")))
+        self.assertTrue(flagged, "no carrier moment was flagged")
+        for role, why in flagged:
+            self.assertEqual("ball carrier", role)
+            self.assertIn("pass", why)

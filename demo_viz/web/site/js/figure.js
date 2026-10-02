@@ -157,6 +157,25 @@ export const FIGURE2_TITLE = "Equilibrium choices during an off-ball play";
  * carries no numbers by design.
  */
 export const OPTION_M = 3.0;
+
+/**
+ * `figure_style` at kyuhyeok-dev@33378ac, the abstract's own rendering.
+ *
+ *   HEAD_OPEN     every arrowhead an open chevron in the line's own width,
+ *                 not a filled triangle; HEAD_LW_MAX caps that width, so a
+ *                 heavy line runs on into the chevron instead of thickening it
+ *   OTHER_ALPHA   a player outside the game at 50%: at full colour he drew
+ *                 the eye, and the 45% tint before that read as blurred
+ *   MIN_ARROW_M   a move showing less than this outside its player's marker is
+ *                 scaled about its start until it does. Its SHAPE is kept and
+ *                 its LENGTH is then not to scale -- upstream's `--min-arrow`,
+ *                 for moves like S05's 0.57 m "toward ball" that otherwise
+ *                 vanish under the marker. Probability still never touches it.
+ */
+export const HEAD_OPEN = true;
+export const HEAD_LW_MAX = 1.0;
+export const OTHER_ALPHA = 0.5;
+export const MIN_ARROW_M = 1.1;
 export const FIGURE1_OPTIONS = [
   { key: "follow", label: "Follow?", toward: "runner" },
   { key: "stay", label: "Stay?", toward: "carrier" },

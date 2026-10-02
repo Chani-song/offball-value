@@ -1,37 +1,26 @@
 // Figure 2's defender-start background and move field.
 //
-// Both come from ONE file per solved moment, produced upstream by
-// `scripts/extract_defender_grid.py` (jobs/solve_defender_grid.sbatch):
+// The data arrived in the 2026-10-01 vector-field bundle and is exported by
+// `demo_viz/web/export_grid.py` to `data/grid/<code>_<dt>.json`: one row per
+// solved 1 m lattice start, for S05 at 0.0, 0.6 and 1.2 s.
 //
-//     data/processed/showcase_v1/defender_grid_S05/grid_S05_1m_full.json
-//     data/processed/showcase_v1/defender_grid_S05/grid_S05@0.6_1m_full.json
-//     data/processed/showcase_v1/defender_grid_S05/grid_S05@1.2_1m_full.json
+// Two quantities, both the bundle's own:
 //
-// Those files are not in this build; `.gitignore` excludes `data/processed/*`
-// upstream and the 2026-09-30 bundle predates them. Everything here is
-// therefore dormant: `loadGrid` returns null, the control that would show it
-// stays hidden, and nothing is drawn. Drop the three files in at
-// `demo_viz/web_data/grid/<code>/<dt>.json` and the same build lights up.
+//   value   `v` -- the equilibrium value with the defender starting there.
+//           The background shade; LOWER is better for the defence, which is
+//           why the dark end marks the low values.
+//   move    `dx, dy` -- the sum over his five commands of p x (end - start),
+//           his probability-weighted displacement over the first 0.6 s. This
+//           is the vector the figure's streamlines follow.
 //
-// Neither field is ever reconstructed from the figure's PNG.
+// Coordinates are the demo's own already: centre-spot origin, metres, attack
+// to the right. Nothing here is reconstructed from the figure's PNG.
 //
-// The schema this reads, from `extract_defender_grid.py`:
-//
-//   { "points": [ { "status": "solved" | "unsolved" | "dropped",
-//                   "observed": bool,
-//                   "defender_start": [x, y],       // pitch metres, centre
-//                   "value": float,                 // the game's value there
-//                   "defender": [ { "prob": float, "end": [x, y] }, ... ] },
-//                 ... ] }
-//
-// and the two derived quantities, exactly as upstream derives them:
-//
-//   shading  `point.value` at `point.defender_start`
-//            (render_figure2_abstract.value_grid), darker = LOWER value =
-//            a better start for the defender
-//   field    sum over his commands of prob * (end - start)
-//            (render_defender_flow_moments.moves), his probability-weighted
-//            displacement over the first 0.6 s
+// Upstream renders the field by interpolating onto a 0.25 m mesh, smoothing
+// with a Gaussian of 0.6 m and calling `streamplot`. This draws the measured
+// vectors themselves, one per lattice point -- the same field without
+// reimplementing a streamline integrator, and without inventing values
+// between the points that were actually solved.
 
 import { hexToRgb } from "./pitch.js";
 import { view } from "./scene.js";
@@ -41,11 +30,12 @@ const SVG_NS = "http://www.w3.org/2000/svg";
 /** figure_style's two ends of the background shade (BG_LOW .. BG_HIGH). */
 export const SHADE = { low: "#F7F7F7", high: "#B8AE9C" };
 
-/** `--flow-color` / `--flow-alpha` at kyuhyeok-dev@b5f26cb: defence red, 20%. */
-export const FLOW = { colour: "#FF0000", alpha: 0.2 };
+/** The abstract renders with `--flow-color "#FF8000" --flow-alpha 0.4`
+ *  (README at kyuhyeok-dev@33378ac), not the renderer's red default. */
+export const FLOW = { colour: "#FF8000", alpha: 0.4 };
 
-/** The key the figure prints under the background, word for word. */
-export const SHADE_KEY = "darker: better start for the defender";
+/** The key the abstract prints: `--value-key "preferred defender position"`. */
+export const SHADE_KEY = "preferred defender position";
 
 const cache = new Map();
 
@@ -73,22 +63,16 @@ export async function loadGrid(code, dt) {
 /**
  * The solved starts as a regular raster, for the background shade.
  *
- * The lattice is already regular -- `extract_defender_grid` writes `i`/`j` per
- * point at 1 m spacing -- so the raster is built from those indices directly
- * and the browser does the smoothing when it scales the image up. Upstream
- * interpolates with `griddata` onto a 0.1 m mesh instead; the values are the
- * same values, laid out the same way, and nothing is invented between them.
- *
- * Returns { nx, ny, values, x0, x1, y0, y1, min, max }, with NaN where a point
- * was not solved, or null when the file carries no usable lattice.
+ * The lattice is regular -- the export carries `i`/`j` at 1 m spacing -- so
+ * the raster is built from those indices and the browser smooths it when it
+ * scales the image up. Unsolved starts are left transparent rather than
+ * filled in: seven points per moment sit inside the carrier's tackle radius
+ * and were never solved.
  */
 export function valueRaster(grid) {
   const points = (grid?.points || []).filter(
-    (point) => Number.isInteger(point.i) && Number.isInteger(point.j),
-  );
-  const solved = points.filter((point) => point.status === "solved"
-    && Array.isArray(point.defender_start));
-  if (!solved.length) return null;
+    (p) => Number.isInteger(p.i) && Number.isInteger(p.j));
+  if (!points.length) return null;
   const is = points.map((p) => p.i);
   const js = points.map((p) => p.j);
   const i0 = Math.min(...is);
@@ -97,41 +81,22 @@ export function valueRaster(grid) {
   const ny = Math.max(...js) - j0 + 1;
   const values = new Float64Array(nx * ny).fill(NaN);
   let x0 = Infinity; let x1 = -Infinity; let y0 = Infinity; let y1 = -Infinity;
-  let min = Infinity; let max = -Infinity;
-  for (const point of solved) {
-    values[(point.j - j0) * nx + (point.i - i0)] = point.value;
-    const [x, y] = point.defender_start;
-    x0 = Math.min(x0, x); x1 = Math.max(x1, x);
-    y0 = Math.min(y0, y); y1 = Math.max(y1, y);
-    min = Math.min(min, point.value); max = Math.max(max, point.value);
+  for (const p of points) {
+    values[(p.j - j0) * nx + (p.i - i0)] = p.v;
+    x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x);
+    y0 = Math.min(y0, p.y); y1 = Math.max(y1, p.y);
   }
+  const min = grid.value?.min ?? Math.min(...points.map((p) => p.v));
+  const max = grid.value?.max ?? Math.max(...points.map((p) => p.v));
   if (!(max > min)) return null;
   return { nx, ny, values, x0, x1, y0, y1, min, max };
 }
 
 /** The solved starts, as [x, y, dx, dy]: his probability-weighted 0.6 s move. */
 export function movePoints(grid) {
-  if (!grid?.points) return [];
-  const out = [];
-  for (const point of grid.points) {
-    if (point.status !== "solved" || !Array.isArray(point.defender_start)) continue;
-    const [x, y] = point.defender_start;
-    let dx = 0;
-    let dy = 0;
-    for (const command of point.defender || []) {
-      dx += command.prob * (command.end[0] - x);
-      dy += command.prob * (command.end[1] - y);
-    }
-    out.push([x, y, dx, dy]);
-  }
-  return out;
+  return (grid?.points || []).map((p) => [p.x, p.y, p.dx, p.dy]);
 }
 
-/**
- * Figure 2's background: the game's value with the defender starting at
- * each lattice point. Darker = lower value = a better start for him, which
- * is `render_figure2_abstract`'s own direction and key.
- */
 export function drawValueField(pitch, raster, scene, { low = "#F7F7F7", high = "#B8AE9C" } = {}) {
   if (!raster) return;
   const { nx, ny, values, min, max } = raster;

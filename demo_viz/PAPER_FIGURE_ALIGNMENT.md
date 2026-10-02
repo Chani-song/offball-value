@@ -735,3 +735,284 @@ equilibrium probability, regret.
 written to `state.selection`, so no solver probability, rank, regret or
 equilibrium value can move with it — those exist for the curated cast only.
 Entering Nash or Player evaluation clears it. Three tests hold that.
+
+## 18. Two audits, 2026-10-01 (upstream `33378ac`)
+
+### 18.1 The space overlay: "total" is "Available space"
+
+No mode named `total` has ever existed. Every build's field selector has
+offered `space`, `gain` and (in the explorer) `obso`. The two that matter:
+
+| mode | drawn | source | meaning |
+| --- | --- | --- | --- |
+| `space` "Available space" | `residual_surface` | `goal_weighted_influence.target_residual_influence` | the target's influence x a goal-side/goal-distance weight x `exp(-k·Σ defender influence)` — **the total space he has** |
+| `gain` "Space created" | `max(residual − residual_with_defender_held, 0)` | the same, twice | **the delta**: what the run opened |
+
+So the recollection is right and the two are different quantities. The pitch
+now draws **total space** by default in Dilemma, and **Space created** stays
+the panel's delta number. A test keeps them from collapsing into one.
+
+### 18.2 A per-option ranking is **not** in the exported data
+
+`options[]` carries `label`, `path` (25 points over 0.6 s), `prob`, `end`,
+`end_velocity`, `aim` and `rests`. `slot_values` carries one value per command
+**with the other bodies at equilibrium**. Nothing carries the 5x5 opening
+payoff table.
+
+That matters because `analyze_eval.py` does not rank by `slot_values`: it
+ranks the carrier by `nanmax(moves, axis=1)` and the receiver by
+`moves.max(axis=0)` — a best-response reading of the joint matrix. Ranking by
+`slot_values` instead, with competition ties, reproduces the published rank
+for:
+
+| role | agrees | disagrees |
+| --- | --- | --- |
+| defender | **69 / 69** | 0 |
+| beneficiary | **32 / 32** | 0 |
+| runner | 48 | **21** |
+| ball carrier | 28 | **5**, plus 4 whose observed action is the pass |
+
+**26 of 207 player-moments would be shown a rank that contradicts the paper**,
+so no 1st/2nd/3rd list is built from it. The observed action's own rank,
+equilibrium probability and regret are stored per player-moment and are shown.
+
+**The one missing input** is the opening payoff table per solved moment —
+`solve.root_game`'s `M[defender command, attack column]`, 5x6 for a 2v1 and
+5x5 for a 3v1, which `analyze_eval.py` already has in memory. Numbers only, no
+tracking. With it, every feasible option's value and rank follow by the
+paper's own definition.
+
+## 19. The research demo (2026-10-01, upstream `33378ac`)
+
+**Title.** The Defender's Dilemma, 26 px bold ink, with the browser title
+`The Defender's Dilemma | SSAC 2027` and matching OpenGraph tags. The full
+paper title stays in Details.
+
+**Tabs.** `1. Play`, `2. Dilemma`, `3. Nash equilibrium`, `4. Player
+evaluation`, in that DOM order, plain type, no subtitles.
+
+**Views are per tab.** Play, Dilemma and Player evaluation open on the full
+pitch; Nash opens in Focus. A view the reader picks is remembered while they
+stay in that tab and forgotten when they leave, so Play always shows the play.
+
+**Nothing shot-dependent, nothing run-onset-dependent.** The public scrubber
+carries no marks, `Run starts` is the explorer's, and the clip opens at the
+scene's own `t = 0` rather than an inferred onset or an influence peak. The
+shot number, the shooter and the outcome leave the header. A scene with no
+shot now renders exactly like one with a shot; the detector and the metadata
+are untouched and still in the explorer and Details.
+
+**Date.** The second header line is `date · clock` and shows the clock alone,
+because no reachable source carries a kickoff: `BundesligaMatchMeta` has no
+date field and the window cache keeps only the match id, period and frame
+range. `scene.match_date` is read when it exists. Nothing is guessed.
+
+**Role sweep.** `Compare as: Runner | Teammate | Defender`, then a click on the
+pitch or in the Players list assigns that player to that role. A side cannot
+take the other side's role and a goalkeeper takes none. Clicking the same
+player again clears it, as does `Reset` and leaving the tab. The marking line,
+the held-defender ghost, the run trail and the space field all follow, and
+`data/compare` now carries marking evidence for **every outfield attacker
+against every outfield defender**, so a swept runner gets numbers measured for
+that pairing rather than the curated one's borrowed.
+
+**It cannot touch the science.** A sweep lives in `state.compare`; Nash and
+Player evaluation read the curated cast only, and a probe confirms their
+numbers are identical before and after a sweep.
+
+**Figure conventions from `33378ac`**: open chevron arrowheads with their
+stroke capped (`HEAD_LW_MAX`), players outside the game at 50 %
+(`OTHER_ALPHA`), and `--min-arrow` — a move that would show almost nothing
+outside its marker is scaled about its own start until it reads, **shape kept
+and length then not to scale**, which is upstream's own answer to a 0.57 m
+move vanishing under a player. Probability still never touches geometry.
+Upstream's per-panel `--label-at`, `--exit-angle`, `--straight` and
+`--stretch-to` are **not** ported: they hand-place one printed figure, and the
+demo's placement has to be automatic and scene-general.
+
+**Focus holds what it draws.** The crop is computed from the geometry about to
+be drawn — the ball and the man on it unconditionally, every strategic body,
+every drawn option path, the pass target and the real next 0.6 s — then padded,
+and grown back over anything the pitch-edge clamp would have pushed out.
+
+## 20. Two clocks (2026-10-01)
+
+The public timeline and the solver's coordinate are different clocks, and only
+one of them is public.
+
+| | zero at | used by |
+| --- | --- | --- |
+| `solverTimeSec` = `scene.times[i]` | the annotated shot | every solved moment, every panel's `frame`, every evaluation series, the explorer's readout |
+| `clipTimeSec` = `scene.times[i] - scene.times[0]` | the clip's first provided frame | the public readout, and nothing else |
+
+`scene.times` is **not rewritten**. The re-zeroing is a display, so a solved
+moment stays exactly where the solver put it: `renderMoments` still reads
+`panel.dt` for its labels and `panel.frame` for the frame it jumps to, and
+`panelAt` still matches the playhead against `panel.frame`.
+
+**A public clip opens on frame 0** — its own first provided frame. Three things
+used to move it and no longer do in public: the run-onset detector, the
+influence model's peak-gain frame, and `decisionFrame`. The last one still
+applies to Dilemma and Nash, which are about a decision and need a frame that
+has someone on the ball; Play never moves.
+
+The peak-gain jump was the subtle one: `applyUrlState` ran it whenever the URL
+carried **any** parameter, so `?showcase=S05` alone was enough to land the
+public clip on an influence-derived frame.
+
+## 21. The 2026-10-01 vector-field and ranking bundle
+
+`local_inputs/offball_vectorfield_ranking_20261001/`. It closed both gaps.
+
+### 21.1 The defender field is real now
+
+`vector_field/` carries S05's three solved moments as full solver JSON (8-10 MB
+each) and as one row per lattice start in `<code>_defender_grid.csv`. The demo
+reads the CSVs: the JSONs' extra weight is per-command 0.6 s paths, which the
+field does not draw.
+
+| moment | starts | solved |
+| --- | --- | --- |
+| 0.0 s | 298 | 290 |
+| 0.6 s | 340 | 333 |
+| 1.2 s | 253 | 246 |
+
+The seven dropped at each moment are inside the carrier's tackle radius.
+`export_grid.py` writes `data/grid/S05_<dt>.json`, **61 KB for all three**, and
+keeps the two quantities the figure uses:
+
+* `v` — the equilibrium value with the defender starting there. The background
+  shade, **darker at the LOWER values**, because low is good for the defence.
+* `dx, dy` — Σ p × (end − start) over his five commands: his
+  probability-weighted 0.6 s displacement. The field's arrows.
+
+Coordinates arrive in the demo's own frame (centre spot, attack to the right),
+so nothing is converted. The abstract's own flags apply, from the README at
+`33378ac`: `--flow-color #FF8000`, `--flow-alpha 0.4`, and the key
+`preferred defender position` — not the renderer's red-at-20% defaults.
+
+Upstream integrates the vectors into streamlines (0.25 m mesh, Gaussian 0.6 m,
+`streamplot`). The demo draws the measured vectors themselves, one per lattice
+point: the same field, without reimplementing a streamline integrator and
+without inventing values between the starts that were actually solved.
+
+### 21.2 The ranking was always reproducible -- section 18.2 was wrong
+
+That audit concluded a per-option ranking could not be rebuilt without the
+opening payoff table. **The fault was in the audit, not the data.** It mapped
+every `runner` row to `receiver_slot_values`, and in a 3v1 the runner sits in
+the **carrier** slot:
+
+| | carrier slot | receiver slot |
+| --- | --- | --- |
+| 2v1 | the ball carrier | the runner |
+| 3v1 | **the runner** | the teammate |
+
+With the slot taken from the game kind, the bundle's own rule -- value an
+option by choosing it with the others left at equilibrium (`slot_values`),
+ties taking the best position -- reproduces `players.csv`'s stored `rank` for:
+
+| role | agrees | disagrees |
+| --- | --- | --- |
+| 2v1 ball carrier | 28 | **5** |
+| 2v1 runner | 37 | 0 |
+| 2v1 defender | 37 | 0 |
+| 3v1 runner | 32 | 0 |
+| 3v1 teammate | 32 | 0 |
+| 3v1 defender | 32 | 0 |
+
+**198 of 203**, and every miss is a 2v1 ball carrier off by exactly +1 — his
+option set is six, and the sixth is the pass, whose value the bundle does not
+publish. Those role-moments carry `rank_partial` and show no rank rather than
+one that would contradict the paper. Four more rows, whose observed action was
+the pass, have no rank for the same reason.
+
+So **no payoff table is needed**. `export_options.py` writes
+`data/options/<scene>.json` -- 133 KB over 7 scenes x 3 moments x 3 roles --
+with each option's value, rank, equilibrium probability, command name and the
+solver's own 0.6 s path. A test re-derives every exported rank against
+`players.csv` and allows a mismatch only where `rank_partial` is set.
+
+### 21.3 What the ranking files are not
+
+`ranking/` is byte-identical to the 2026-09-30 bundle's `analysis/`. The new
+thing is the README, which states the ranking rule. The abstract's chance
+baselines (3rd, 0.19) and its 25% / 77% static figures are in neither bundle;
+`moments.json`'s `static_*` are the first version and do not match the
+abstract.
+
+## 22. Four readings that were not moving (2026-10-01)
+
+Four defects, all of the same kind: the demo had the right number but showed
+it in the wrong place, or showed one of a set and hid the rest.
+
+### 22.1 The label halo
+
+Figure 2 sets its labels straight on the shading. The public stylesheet was
+casing each glyph in a 2.6px white stroke, which at the figure's type size is
+wider than the gap between two lines of text and reads as a plate behind the
+words. It is now `paint-order: stroke` with **1.1px** -- a hairline, enough to
+keep a glyph off a line it crosses, not enough to be seen as a box.
+
+### 22.2 Every solved moment pauses, and every solved moment is in the table
+
+Playback steps **two** frames at a time, so only even frames were ever landed
+on. S05's solved frames are 55, 70 and 85; only 70 is even, so only 0.6 s ever
+paused. `startPlayTimer` now asks `solvedFrameBetween(from, to)` whether the
+step would cross a solved frame and lands on it if so. Nothing about the
+timings changed -- the three moments were always there, two of them were being
+stepped over.
+
+The Equilibrium card showed the nearest solved moment only, which made the
+other two solves invisible unless the reader moved the playhead and
+remembered. `renderMomentTable` now draws one column per solved moment --
+0.0 / 0.6 / 1.2 s -- with the column the playhead stands on marked `is-now`.
+The numbers are the panels' own `dilemma` and `static` fields, read, never
+interpolated: `nashMetrics` is gone and its two tests now pin the table.
+
+### 22.3 The dilemma reads where the playhead is
+
+`marking_distance_m` is a **mean over the window from the run's onset**, so it
+could not move while the clip played. `export_compare.py` now also writes
+`marking_dm`: the same `offball_value.dynamic_marking` cost, frame by frame, in
+whole decimetres, and the panel reads the frame the playhead is on. The files
+go from 15 KB to ~113 KB each (5.1 MB over 45 scenes), fetched only when
+Dilemma opens -- the initial load is untouched at **287.1 KB** against the
+302 KB guard.
+
+Reaction is one event in the tracking, so it cannot honestly be re-measured
+every frame. What it can do is say where the playhead stands relative to it:
+`in 0.8 s` while the commit is still ahead, and the measured `1.3 s` once it
+has happened. `reaction_index` is exported for exactly this and nothing is
+recomputed in the browser.
+
+**The three comparison roles are independent.** `compareWith` held
+`{ [role]: playerId }` and `renderSweep` cleared the comparison when the role
+chip changed, so picking a defender dropped the teammate you had just picked.
+Both now carry the other roles forward, and a reader can build a whole
+alternative cast -- runner, teammate and defender at once. Each picked player
+keeps its ring on the pitch, and the Default column is the curated pairing
+whenever any comparison is open, so a swap that leaves the marking alone shows
+the same number twice rather than a dash beside a number.
+
+### 22.4 Player evaluation shows the options, not a plot of them
+
+Every feasible option's path is now drawn on the pitch, quietly, so the three
+that are named have a fan to be named out of. Three carry colour:
+
+| reading | colour |
+|---|---|
+| played | the role's own blue or red, as everywhere else |
+| best-valued | sky `#00A8D8` |
+| the option clicked | pink `#FF2D8E` |
+
+The list's rows wear the same two accents, so the row clicked and the line that
+appeared need no legend between them. All of it is drawn in a new `decision`
+layer, added above `labels`, so nothing covers the thing being read; each line
+is cased in the pitch colour first so a bright stroke stays a stroke.
+
+The frame-by-frame rank / equilibrium-probability / regret strip under the
+pitch is now **explorer-only**. The public tab reads one solved moment and says
+its three numbers in words; a plot of the same three across frames that are not
+solved answered a question the public reader was not asking. `renderEvalStrip`
+is unchanged otherwise, and the explorer keeps it.
