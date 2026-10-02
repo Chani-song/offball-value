@@ -1,0 +1,28 @@
+name: tests
+
+# What runs from the public contents of this repository: the unit tests (tests/, including the checks of the
+# committed pass models, movement limits and EPV grid) and a byte-compile of every script. The solver
+# packages' check scripts are not run here: they need the collaborator's solver base (andrew/) and the
+# processed scenes, neither of which is in the repository (docs/reproduction.md).
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install -e . --no-deps
+      - name: Unit tests
+        run: PYTHONPATH=src python -m unittest discover -s tests -v
+      - name: Byte-compile
+        run: python -m compileall -q src scripts andrew-passer2on1 andrew-fixedpasser

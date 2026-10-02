@@ -33,3 +33,4 @@ chani/
 local_inputs/
 *.tar.gz
 *.zip
+build/
