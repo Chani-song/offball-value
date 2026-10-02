@@ -742,7 +742,8 @@ class LabelPlacementTests(unittest.TestCase):
 
     def test_a_leader_never_crosses_another_label_or_leader(self):
         labels = (SITE / "js" / "labels.js").read_text()
-        block = labels[labels.index("  search(item, walls, labelBoxes)"):]
+        # the leader rule lives where a candidate is accepted: `pick`
+        block = labels[labels.index("  pick(item, cands, walls, labelBoxes"):]
         block = block[:block.index("\n  /**")]
         self.assertIn("if (!free(dot, labelBoxes)) { blocked = true", block)
         self.assertIn("0.4 * over", block)
