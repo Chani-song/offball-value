@@ -1,14 +1,14 @@
 # Reproduction
 
 This file lists every step behind the paper's figures and evaluation numbers, the inputs each step
-reads, and what we could and could not re-run from this repository on 2026-10-01. Data sources and
+reads, and what could and could not be re-run from this repository on 2026-10-01. Data sources and
 redistribution terms are in [data.md](data.md).
 
 ## Status at a glance
 
 | Step | Command | Needs | Checked 2026-10-01 |
 | --- | --- | --- | --- |
-| Unit tests | `PYTHONPATH=src python -m unittest discover -s tests` | this repository only | 71 tests pass (also in CI) |
+| Unit tests | `PYTHONPATH=src python -m unittest discover -s tests` | this repository only | run in CI on every push |
 | Solver check scripts | `andrew-*/tests/*.py` | solver base, processed scenes | 2 of 18 run without processed data and pass; 16 need `data/processed/` files that are not in the repository |
 | Run onsets, scenes, triples | `scripts/extract_settled_possession_run_onsets.py` and steps 2 to 3 below | IDSSE tracking; steps 3 and 5 also the team's annotation and rating sheets | not re-run |
 | Pass model, movement limits | `scripts/fit_pass_sym.py`, `scripts/measure_accelerations.py` | IDSSE tracking | not re-run; their outputs are committed |
@@ -87,9 +87,10 @@ files) and `out/` is written by the pipeline and ignored by Git.
 3. **Annotated scenes and rating.** `scripts/map_chani_annotations.py` joins a team member's shot-clip
    annotations to the tracking and `scripts/trace_chani_scenes.py` follows them through the pipeline.
    `scripts/build_rating_package.py` assembles 75 scenes for a dilemma rating: the 45 annotated clips
-   and 30 pipeline scenes that an earlier solver configuration flagged as dilemmas (12 2v1, 18 3v1); `scripts/merge_ratings.py` collects the raters' scores, and
-   `scripts/export_showcase.py` keeps the scenes the raters scored 4 or 5 with at least one 5.
-   The annotation and rating sheets are team data and are not in the repository.
+   and 30 pipeline scenes that an earlier solver configuration flagged as dilemmas (12 2v1, 18 3v1).
+   `scripts/merge_ratings.py` collects the raters' scores, and `scripts/export_showcase.py` keeps the
+   scenes the raters scored 4 or 5 with at least one 5. The annotation and rating sheets are team data
+   and are not in the repository.
 
 4. **Pass model and movement limits.** `scripts/build_pass_dataset.py` collects open-play passes from
    six of the seven matches (DFL-MAT-J03WN1 is excluded, see its docstring).
@@ -106,7 +107,7 @@ files) and `out/` is written by the pipeline and ignored by Git.
 
 6. **Solve.** Each moment is solved as its own game with the same settings: 3 decisions of 0.6 s,
    compass commands, the solver base's threat function, pass candidates along the run, every pass its
-   own attack column priced after the defender has carried out his command for 0.2 s, the A-sym pass
+   own attack column priced after the defender has carried out their command for 0.2 s, the A-sym pass
    model, the measured limits. In 2v1 games the other defenders, on their real tracks, can also tackle
    the ball carrier.
 
@@ -206,13 +207,13 @@ game already solved), the equilibrium strategies `p` (defender) and `q` (attack)
 0.6 s later.
 
 * **Observed option.** Each player's real move is the command whose 0.6 s end point (the solver's own
-  movement) is nearest where he was 0.6 s later. The ball carrier's observed option is the pass when
+  movement) is nearest where the player was 0.6 s later. The ball carrier's observed option is the pass when
   the ball moved faster than any player can run with it (9 m/s). This is an approximation: the median
   distance to the nearest command end is 0.78 m.
 * **Value of an option.** For an attack column `a`, `p · M[:, a]`: its value against the defender's
   equilibrium. An attacker's command is worth the best column containing it, with the teammate
-  choosing his best command; the ball carrier's pass is the best pass column. A defender's command `d`
-  is worth `M[d, :] · q`, lower being better for him. The panels' `slot_values` come from the same
+  choosing their best command; the ball carrier's pass is the best pass column. A defender's command `d`
+  is worth `M[d, :] · q`, lower being better for the defender. The panels' `slot_values` come from the same
   definitions in the solver's modal-line output.
 * **Rank.** 1 plus the number of legal options strictly better than the observed one; the fractional
   rank splits ties evenly. Ties are frequent: 42.5% of observed options tie with another option, and
@@ -222,7 +223,7 @@ game already solved), the equilibrium strategies `p` (defender) and `q` (attack)
   than one command.
 
 `scripts/static_counterfactual.py` rebuilds each evaluation game and solves it four times: free (V,
-checked against the saved value), the defender held to his observed commands at every decision (S),
+checked against the saved value), the defender held to their observed commands at every decision (S),
 the attack's best plan against that held defender then answered by a free defender (R), and the
 observed attack held (A). `scripts/summarize_static.py` reports `(S - V) / V`, `(S - R) / S`,
 `(S - V) / S` and `(V - A) / V`. The `static_*` fields in `analyze_eval.py`'s output are an earlier

@@ -1,13 +1,13 @@
 # Code status
 
 Which code produces the paper's results, which supports it, and which is left from earlier stages of
-the project. Compiled on 2026-10-01 from the import graph of this branch and the jobs' commands. The
-tree before this audit is tagged `pre-ssac-repo-cleanup-2026-10-01`; the tree before the first cleanup
-(199 scripts, docs, examples, deploy files) is tagged `pre-cleanup-2026-09-30`.
+the project. Compiled on 2026-10-01 from the import graph and the jobs' commands. The tree before
+this audit is commit `33378ac`; the tree before the first cleanup (199 scripts, docs, examples, deploy
+files) is tagged `pre-cleanup-2026-09-30`.
 
-Nothing listed here was moved or deleted. The demo branches import several of the legacy modules and
-refer to the `andrew-*` folders by path, so renaming or removing them would break the demo's eventual
-merge. That decision is left for after the submission.
+Nothing listed here was moved or deleted. The demo (`demo_viz/`) imports some of the legacy modules
+and refers to the `andrew-*` folders by path, so renaming or removing them would break it. That
+decision is left for after the submission.
 
 ## Paper path
 
@@ -53,10 +53,10 @@ cited by `local_game_payoff`).
 
 ## Legacy modules
 
-Not imported by any script, job or other module on this branch. They come from earlier formulations
+Not imported by any pipeline script, job or paper-path module. They come from earlier formulations
 (the OBSO-style proxy, the pass-window value, the defender best-response and attacker max-min
-prototypes, the structural audits). Kept because the demo branches import some of them
-(`reference_obso`, `action_space`).
+prototypes, the structural audits). Kept because the demo uses some of them (`reference_obso`,
+`action_space`).
 
 `action_space`, `action_value`, `adapters`, `animated_audit`, `attacker_maximin`,
 `attacker_trajectory`, `beneficiary_selection`, `blind_derived_review`, `causal_attribution`,
@@ -65,7 +65,7 @@ prototypes, the structural audits). Kept because the demo branches import some o
 `loaders`, `marginal_assignment`, `pass_window_search`, `pass_window_value`, `point_value`,
 `reference_obso`, `scene_audit`, `scene_extractor`, `shot_context_audit`, `vacated_space_rule`.
 
-Used only by their unit tests (also imported by the demo branch): `background_rollout`,
+Used only by their unit tests: `background_rollout`,
 `clear_core_scene_audit`, `dynamic_response_game`, `local_game_structure_audit`,
 `meeting_scene_gallery`.
 
