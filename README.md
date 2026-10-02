@@ -9,35 +9,19 @@ equilibrium shows how both sides should move when each can respond to the other.
 
 ## Demo
 
-This repository accompanies our MIT Sloan Sports Analytics Conference submission and includes an
-interactive demo.
+Demo URL: TBD
 
-Demo URL: TBD (the SSAC version of the demo is being finalized)
-
-The explorer currently deployed at <https://chani-song.github.io/offball-value/> is an earlier
-version. It shows the annotated scenes with a space-based measure, not the equilibrium results
-reported below. Its code (`demo_viz/`) is developed on separate branches.
-
-![Earlier version of the interactive explorer: an annotated Bundesliga scene with the runner, beneficiary and defender marked](docs/assets/demo_screenshot.png)
+![Nash equilibrium view of the interactive demo](docs/assets/demo_screenshot.png)
 
 ## Key figures
 
 ![Figure 1](docs/assets/figure1.png)
 
-**Figure 1.** An off-ball run creates a defensive dilemma: follow the runner or stay with the ball
-carrier. Positions are from the tracking. Future 2 is a counterfactual: the solver supplies the through
-ball's target and the defender's motion.
+**Figure 1.** The defender's choice: follow the runner or stay with the ball carrier.
 
 ![Figure 2](docs/assets/figure2.png)
 
-**Figure 2.** Nash equilibrium choices at 0.0, 0.6 and 1.2 s of the same play. Percentages are the
-probabilities the equilibrium strategy assigns to each action. Orange lines show the defender's
-expected first move from each starting position on a 1 m grid. Gray dotted lines and hollow markers
-show the players' actual movement over the next 0.6 s. Shading is the attack's expected threat in
-equilibrium if the defender had started at that spot (darker means lower threat).
-
-Both images are converted from the submitted figure PDFs. The scripts and inputs that produce them are
-listed in [docs/reproduction.md](docs/reproduction.md#figure-1).
+**Figure 2.** Equilibrium choices at 0.0, 0.6 and 1.2 s of the same play.
 
 ## Overview
 
@@ -136,6 +120,13 @@ scripts and from modules left over from earlier formulations, which are kept for
 | Evaluation numbers | need the evaluation run's solver output and the IDSSE files |
 
 Commands, inputs and what was checked are in [docs/reproduction.md](docs/reproduction.md).
+
+The figure images in `docs/assets/` are converted from the submitted PDFs. Figure 1 is drawn from the
+tracking; only its Future 2 panel uses the solver (the through ball's target and the defender's motion).
+Figure 2 is solver output. The demo screenshot is the
+Nash equilibrium view of the showcase built from branch `chani-ssac-demo-latest-paper` at commit
+`ae3f38b`, which is not deployed yet. The site at <https://chani-song.github.io/offball-value/> is an
+earlier explorer.
 
 ## Data
 
