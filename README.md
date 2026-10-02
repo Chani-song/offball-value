@@ -8,15 +8,17 @@ between two attackers and one defender, and solve the game at 0.6 s intervals fo
 equilibrium. The equilibrium describes how both sides should move when each can respond
 strategically to the other.
 
+## Demo tour
+
+https://github.com/user-attachments/assets/7606d839-5d92-4e17-a011-cc6d21da98ac
+
 ## Interactive demo
 
-**[OPEN INTERACTIVE DEMO](https://chani-song.github.io/offball-value/)**
+[![Interactive demo](https://img.shields.io/badge/INTERACTIVE_DEMO-OPEN-0000FF?style=for-the-badge)](https://chani-song.github.io/offball-value/)
 
-[![Interactive demo](docs/assets/demo_screenshot.png)](https://chani-song.github.io/offball-value/)
+[![The interactive demo, Nash equilibrium view](docs/assets/demo_screenshot.png)](https://chani-song.github.io/offball-value/)
 
-### Demo tour
-
-[![Demo tour](docs/assets/demo_tour.png)](docs/assets/demo_tour.mp4)
+**▶ [Open the interactive demo](https://chani-song.github.io/offball-value/)**
 
 ## Key figures
 
@@ -136,9 +138,11 @@ the same document.
 
 `docs/assets/figure1_ssac.pdf` and `figure2_ssac.pdf` are the submitted figures; the PNGs are full-page
 renders of them. Figure 1 is drawn from the tracking; only its Future 2 panel uses the solver (the
-through ball's target and the defender's motion). Figure 2 is solver output. The demo screenshot and
-the demo tour are recorded from the deployed demo at
-[chani-song.github.io/offball-value](https://chani-song.github.io/offball-value/).
+through ball's target and the defender's motion). Figure 2 is solver output. The demo screenshot is
+taken from the deployed demo at
+[chani-song.github.io/offball-value](https://chani-song.github.io/offball-value/); the demo tour is a
+recording of the same interface, kept in `docs/assets/demo_tour.mp4` and played in this page from its
+GitHub attachment.
 
 ## Data
 
