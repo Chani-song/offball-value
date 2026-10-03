@@ -53,6 +53,12 @@ from typing import Any, Mapping, Sequence
 BUNDLE = "offball_demo_data_20260930"
 UPSTREAM_SHA = "8a5c69d0bb1c42948c3f9d50becd2ffc41e72344"
 
+#: Later bundles that add scenes, read after the first from the same folder.
+#: Same solver, flags and files as the first (deploy eval_batch2, 2026-10-03:
+#: S02 S03 S04 S08 S10 S35 at the starts picked for them). A code an earlier
+#: bundle already covers is never replaced.
+EXTRA_BUNDLES = ("offball_demo_data_batch2_20261003",)
+
 DEFAULT_ROOT = (Path(__file__).resolve().parent.parent.parent
                 / "local_inputs" / BUNDLE)
 
@@ -104,11 +110,27 @@ class Moment:
     frame: int           # scene frame index
     panel: dict
     analysis: dict
+    bundle: str = BUNDLE  # which bundle the moment was read from
 
 
 def available(root: Path | None = None) -> bool:
     root = Path(root or os.environ.get("OFFBALL_BUNDLE", DEFAULT_ROOT))
     return (root / "panels").is_dir() and (root / "analysis" / "moments.json").is_file()
+
+
+def roots(root: Path | None = None) -> list[tuple[str, Path]]:
+    """The installed bundles as (name, folder), the first bundle first.
+
+    The later ones are looked for beside the first, so moving the first with
+    ``OFFBALL_BUNDLE`` moves them too. One that is not installed is skipped.
+    """
+
+    first = Path(root or os.environ.get("OFFBALL_BUNDLE", DEFAULT_ROOT))
+    found = [(BUNDLE, first)]
+    for name in EXTRA_BUNDLES:
+        if available(first.parent / name):
+            found.append((name, first.parent / name))
+    return found
 
 
 class BundleEvaluationSource:
@@ -124,16 +146,27 @@ class BundleEvaluationSource:
     def __init__(self, root: Path | None = None, showcase=None):
         self.root = Path(root or os.environ.get("OFFBALL_BUNDLE", DEFAULT_ROOT))
         self.name = BUNDLE
+        self._roots = roots(self.root)
+        self._bundle_of: dict[str, tuple[str, Path]] = {}
         self._scenes = self._read_scenes()
-        self._analysis = {row["code"]: row
-                          for row in json.loads(
-                              (self.root / "analysis" / "moments.json").read_text())}
+        self._analysis = {}
+        for _, folder in self._roots:
+            for row in json.loads((folder / "analysis" / "moments.json").read_text()):
+                self._analysis.setdefault(row["code"], row)
         self._by_scene = self._index(showcase)
 
     # -- loading ----------------------------------------------------------
     def _read_scenes(self) -> dict[str, dict]:
-        with (self.root / "scenes.csv").open(encoding="utf-8-sig") as handle:
-            return {row["code"]: row for row in csv.DictReader(handle)}
+        """Every bundle's scenes; a code keeps the first bundle that has it."""
+
+        scenes: dict[str, dict] = {}
+        for name, folder in self._roots:
+            with (folder / "scenes.csv").open(encoding="utf-8-sig") as handle:
+                for row in csv.DictReader(handle):
+                    if row["code"] not in scenes:
+                        scenes[row["code"]] = row
+                        self._bundle_of[row["code"]] = (name, folder)
+        return scenes
 
     def _index(self, showcase) -> dict[str, list[Moment]]:
         """scene_id -> its solved moments, in time order.
@@ -154,16 +187,17 @@ class BundleEvaluationSource:
             if not entry.scene_id or code not in self._scenes:
                 continue
             first = int(self._scenes[code]["clip_first_frame"])
+            name, folder = self._bundle_of[code]
             moments = []
             for key, dt in ((code, 0.0), (f"{code}@0.6", 0.6), (f"{code}@1.2", 1.2)):
-                path = self.root / "panels" / f"eval-{key}.json"
+                path = folder / "panels" / f"eval-{key}.json"
                 if not path.exists():
                     continue            # a moment the run skipped: left out
                 panel = json.loads(path.read_text())
                 moments.append(Moment(
                     code=code, key=key, dt=dt,
                     frame=int(panel["start_frame"]) - first,
-                    panel=panel, analysis=self._analysis.get(key, {})))
+                    panel=panel, analysis=self._analysis.get(key, {}), bundle=name))
             if moments:
                 out[entry.scene_id] = moments
         return out
@@ -174,6 +208,13 @@ class BundleEvaluationSource:
 
     def moments(self, scene_id: str) -> list[Moment]:
         return self._by_scene.get(scene_id, [])
+
+    def name_for(self, scene_id: str) -> str:
+        """The bundle a scene's solved moments come from; the first bundle's
+        name for a scene with none."""
+
+        moments = self._by_scene.get(scene_id)
+        return moments[0].bundle if moments else self.name
 
     def _at(self, scene_id: str, frame: int | None) -> Moment | None:
         """The solved moment at `frame`, or the first when none is asked for.
@@ -396,7 +437,7 @@ def panel_payload(source: BundleEvaluationSource, scene_id: str) -> dict | None:
         "caveat": "",
         "panels": panels,
         "provenance": {
-            "bundle": BUNDLE,
+            "bundle": moments[0].bundle,
             "upstream": UPSTREAM_SHA,
             "repository": "Chani-song/offball-value@kyuhyeok-dev",
             "script": "analyze_eval.py + extract_panel_policy.py",

@@ -105,3 +105,24 @@ policy can never appear on a scene the demo does not publish:
 `S05 S13 S15 S20 S34 S36 S44` → 7 scenes × 3 moments.
 
 **S53** is in the bundle but has no published tracking, so it is not indexed.
+
+## 7. The second bundle (2026-10-03)
+
+    local_inputs/offball_demo_data_batch2_20261003/
+
+Six more curated scenes, each solved at its real 0.0 / 0.6 / 1.2 s: **S02 S03
+S04 S08 S10 S35** → 6 scenes × 3 moments. Same solver, flags, scripts and file
+layout as the first bundle (eval_v1's `run.py` call; `extract_panel_policy.py`
++ `analyze_eval.py`); the starts and roles are the ones picked for these scenes
+on 2026-10-03 and travel with the bundle as `starts.csv`. Its `analysis/` covers
+only these 18 moments, so the first bundle's corpus summary is unchanged.
+
+`paper_story/bundle.py` reads it after the first (`EXTRA_BUNDLES`, looked for
+beside the first bundle); a code the first bundle already has is never
+replaced. Each scene's payload names the bundle it came from
+(`provenance.bundle`, and the story payload's `evaluation_source`). Every body's
+start was checked against the published scene payload at its frame: 0.0000 m
+on all 18 moments.
+
+Coverage is now 13 published scenes: `S05 S13 S15 S20 S34 S36 S44` from the
+first bundle, `S02 S03 S04 S08 S10 S35` from this one.

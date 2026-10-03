@@ -83,11 +83,14 @@ class SolverUnavailableTests(unittest.TestCase):
             self.assertIn("Unreadable", result.reason)
 
     def test_a_solver_claim_is_backed_by_a_real_export(self):
-        """Replaces "no demo scene claims solver output". Seven published
-        scenes carry the 2026-09-30 bundle's solved moments; what must not
-        happen is a claim with nothing behind it."""
+        """Replaces "no demo scene claims solver output". Thirteen published
+        scenes carry solved moments -- seven from the 2026-09-30 bundle, six
+        from the 2026-10-03 batch; what must not happen is a claim with
+        nothing behind it."""
 
         import json
+
+        from demo_viz.paper_story.bundle import BUNDLE, EXTRA_BUNDLES
 
         root = REPO_ROOT / "demo_viz" / "web_data" / "solver"
         for path in sorted(root.glob("*.json")):
@@ -95,8 +98,7 @@ class SolverUnavailableTests(unittest.TestCase):
             if payload.get("kind") != "bundle_panels":
                 continue
             self.assertTrue(payload["panels"], f"{path.name} claims no moments")
-            self.assertEqual("offball_demo_data_20260930",
-                             payload["provenance"]["bundle"])
+            self.assertIn(payload["provenance"]["bundle"], (BUNDLE, *EXTRA_BUNDLES))
             for panel in payload["panels"]:
                 self.assertTrue(panel["bodies"], "a moment with no bodies")
 

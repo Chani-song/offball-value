@@ -441,7 +441,9 @@ def build_scene(
         clip_summary=_clip_summary(scene_id, source),
         equilibrium=equilibrium or EquilibriumRef(),
         action_value=action_value,
-        provenance={"evaluation_source": source.name,
+        # a source that reads several bundles names the one this scene came from
+        provenance={"evaluation_source": (source.name_for(scene_id)
+                                          if hasattr(source, "name_for") else source.name),
                     "definition_version": source.definition_version,
                     **dict(provenance or {})},
     )

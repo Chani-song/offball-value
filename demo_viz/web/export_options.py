@@ -38,7 +38,7 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
     __package__ = "demo_viz.web"
 
-from ..paper_story.bundle import BUNDLE, DEFAULT_ROOT, to_scene_xy
+from ..paper_story.bundle import BUNDLE, DEFAULT_ROOT, roots, to_scene_xy
 from .export_data import WEB_DATA, slug
 
 #: (game kind, the panel's slot) -> the role the demo calls it.
@@ -117,19 +117,23 @@ def main(argv: list[str] | None = None) -> int:
     if not (root / "analysis" / "players.csv").exists():
         print(f"no {BUNDLE} bundle at {root}; nothing to export", file=sys.stderr)
         return 1
+    folders = [folder for _, folder in roots(root)]     # the first bundle, then any later
 
     players = {}
-    with (root / "analysis" / "players.csv").open() as handle:
-        for row in csv.DictReader(handle):
-            players.setdefault(row["code"], {})[row["role"]] = {
-                "action": row["observed"],
-                "rank": int(row["rank"]),
-                "rank_fractional": float(row["rank_fractional"]),
-                "n": int(row["n"]),
-                "tied": int(row["tied"]),
-                "equilibrium_probability": float(row["similarity"]),
-                "regret": float(row["regret"]),
-            }
+    for folder in folders:
+        with (folder / "analysis" / "players.csv").open() as handle:
+            for row in csv.DictReader(handle):
+                if row["role"] in players.get(row["code"], {}):
+                    continue                            # an earlier bundle keeps the code
+                players.setdefault(row["code"], {})[row["role"]] = {
+                    "action": row["observed"],
+                    "rank": int(row["rank"]),
+                    "rank_fractional": float(row["rank_fractional"]),
+                    "n": int(row["n"]),
+                    "tied": int(row["tied"]),
+                    "equilibrium_probability": float(row["similarity"]),
+                    "regret": float(row["regret"]),
+                }
 
     showcase = json.loads((WEB_DATA.parent / "data" / "submission_showcase.json").read_text())
     rows = showcase["scenes"] if isinstance(showcase, dict) else showcase
@@ -139,8 +143,9 @@ def main(argv: list[str] | None = None) -> int:
         if not code or not scene_id:
             continue
         moments = []
+        home = next((f for f in folders if (f / "panels" / f"eval-{code}.json").exists()), root)
         for suffix, dt in (("", 0.0), ("@0.6", 0.6), ("@1.2", 1.2)):
-            panel_file = root / "panels" / f"eval-{code}{suffix}.json"
+            panel_file = home / "panels" / f"eval-{code}{suffix}.json"
             if not panel_file.exists():
                 continue
             panel = json.loads(panel_file.read_text())

@@ -395,7 +395,9 @@ class ExportedPayloadTests(unittest.TestCase):
         """Replaces a test that required `none`. The local bundle is now a
         real source; what must never appear is a stub or a fixture."""
 
-        allowed = {"none", "offball_demo_data_20260930"}
+        from demo_viz.paper_story.bundle import BUNDLE, EXTRA_BUNDLES
+
+        allowed = {"none", BUNDLE, *EXTRA_BUNDLES}
         for path in self.files:
             payload = json.loads(path.read_text())
             source = payload["provenance"]["evaluation_source"]
@@ -427,8 +429,9 @@ class ExportedPayloadTests(unittest.TestCase):
 
     def test_an_equilibrium_claim_is_backed_by_an_exported_file(self):
         """Replaces "no tracked scene claims an equilibrium", which was true
-        until the 2026-09-30 bundle arrived. Seven scenes claim one now, and
-        each must have the file to show for it."""
+        until the 2026-09-30 bundle arrived. Thirteen scenes claim one now
+        (seven from that bundle, six from the 2026-10-03 batch), and each must
+        have the file to show for it."""
 
         claimed = []
         for path in self.files:
@@ -485,7 +488,8 @@ class EquilibriumArtifactTests(unittest.TestCase):
                 self.assertIn("not a tracked match scene", state["caveat"])
 
     def test_the_adapter_finds_no_equilibrium_for_a_scene_without_one(self):
-        block = equilibrium_for("J03WOY:shot_011_P2_0903", WEB_DATA / "solver")
+        # S06: curated, not solved (S02, the example until 2026-10-03, now is)
+        block = equilibrium_for("J03WMX:shot_017_P2_1743", WEB_DATA / "solver")
         self.assertEqual("artifact_missing", block.availability)
         self.assertIn("batch job", block.detail)
 
@@ -1508,7 +1512,7 @@ class PublicShellTests(unittest.TestCase):
 
 
 class SceneListTests(unittest.TestCase):
-    """Seven scenes have a solved equilibrium; the list leads with them."""
+    """Thirteen scenes have a solved equilibrium; the list leads with them."""
 
     def test_the_build_counts_each_scenes_solved_moments(self):
         build = (REPO_ROOT / "demo_viz" / "web" / "build.py").read_text()
@@ -1908,13 +1912,15 @@ class BundleIntegrationTests(unittest.TestCase):
 
         import csv
 
-        from demo_viz.paper_story.bundle import DEFAULT_ROOT
+        from demo_viz.paper_story.bundle import DEFAULT_ROOT, roots
 
         players = DEFAULT_ROOT / "analysis" / "players.csv"
         if not (self.OPTIONS.exists() and players.exists()):
             self.skipTest("no options export or no bundle")
-        stored = {(r["code"], r["role"]): r
-                  for r in csv.DictReader(players.open())}
+        stored = {}
+        for _, folder in roots():               # every installed bundle, the first first
+            for r in csv.DictReader((folder / "analysis" / "players.csv").open()):
+                stored.setdefault((r["code"], r["role"]), r)
         bad = []
         checked = partial = 0
         for path in sorted(self.OPTIONS.glob("*.json")):
