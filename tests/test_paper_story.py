@@ -429,8 +429,8 @@ class ExportedPayloadTests(unittest.TestCase):
 
     def test_an_equilibrium_claim_is_backed_by_an_exported_file(self):
         """Replaces "no tracked scene claims an equilibrium", which was true
-        until the 2026-09-30 bundle arrived. Thirteen scenes claim one now
-        (seven from that bundle, six from the 2026-10-03 batch), and each must
+        until the 2026-09-30 bundle arrived. Eighteen scenes claim one now
+        (twelve from that bundle, six from the 2026-10-03 batch), and each must
         have the file to show for it."""
 
         claimed = []
@@ -1512,7 +1512,7 @@ class PublicShellTests(unittest.TestCase):
 
 
 class SceneListTests(unittest.TestCase):
-    """Thirteen scenes have a solved equilibrium; the list leads with them."""
+    """Eighteen scenes have a solved equilibrium; the list leads with them."""
 
     def test_the_build_counts_each_scenes_solved_moments(self):
         build = (REPO_ROOT / "demo_viz" / "web" / "build.py").read_text()

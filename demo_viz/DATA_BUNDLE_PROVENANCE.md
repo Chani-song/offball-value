@@ -126,3 +126,27 @@ on all 18 moments.
 
 Coverage is now 13 published scenes: `S05 S13 S15 S20 S34 S36 S44` from the
 first bundle, `S02 S03 S04 S08 S10 S35` from this one.
+
+## 8. The five pipeline scenes, published (2026-10-03)
+
+**S46 S48 S53 S58 S66** were solved in the first bundle but could not be
+played: the stage-3 pipeline found them, so they have no shot row and no
+published scene (section 6). `data/pipeline_scenes.json` now lists each one --
+match, half, run-onset frame (time 0) and the frame window the bundle's panels
+are indexed against, copied from the bundle's `scenes.csv`, plus the three role
+ids; metadata only, no trajectory. `sources/window_scene.py` builds a scene
+from that window exactly as `annotation_scene.py` builds one around a shot
+(same IDSSE window loader, player records, direction and carrier rules), and
+`loader.load_scene` resolves those ids (`J03WOH:run_P2_1009` = S53: half and
+seconds at the onset, as the annotated ids carry the shot's). `export_data`,
+`export_compare` and `export_release` export them after the annotated clips;
+their index rows carry `effect: "solver"`. The ingest then maps all five
+("roles identical"), so all 21 curated entries are playable.
+
+Checks: re-exporting the 45 annotated scenes, their compare and release files
+reproduced the committed ones byte for byte; every solved body's start equals
+the new scene payload at its frame (0.0000 m). S46 and S48 have the 0.0 s
+moment only (the bundle skipped 0.6 / 1.2 s; section 5).
+
+Coverage is now 18 published scenes with an equilibrium: twelve from the first
+bundle, six from the second.

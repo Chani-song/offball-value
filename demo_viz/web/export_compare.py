@@ -43,6 +43,7 @@ if __package__ in (None, ""):                      # python demo_viz/web/export_
 from ..annotations import select_clips
 from ..core.role_logic import defender_reaction_index, runner_onset_index
 from ..loader import load_scene
+from ..sources.window_scene import pipeline_scene_ids
 from ..quantities import marking_series
 from ..scene import Scene
 from .export_data import WEB_DATA, slug
@@ -155,27 +156,29 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--limit", type=int, default=None)
     args = parser.parse_args(argv)
 
-    clips = select_clips(tuple(args.effects))
+    clips = [clip.clip_id for clip in select_clips(tuple(args.effects))]
     if args.limit:
         clips = clips[: args.limit]
+    else:
+        clips += pipeline_scene_ids()     # the curated scenes the pipeline found
     args.out.mkdir(parents=True, exist_ok=True)
 
     total = written = 0
     for position, clip in enumerate(clips, start=1):
         try:
-            scene = load_scene(clip.clip_id, quantities=False, surfaces=False)
+            scene = load_scene(clip, quantities=False, surfaces=False)
         except Exception as error:                              # noqa: BLE001
-            print(f"!! {clip.clip_id}: {error}", file=sys.stderr)
+            print(f"!! {clip}: {error}", file=sys.stderr)
             continue
         payload = scene_payload(scene)
         if payload is None:
-            print(f"[{position:2d}/{len(clips)}] {clip.clip_id:<30} no annotated runner")
+            print(f"[{position:2d}/{len(clips)}] {clip:<30} no annotated runner")
             continue
-        path = args.out / f"{slug(clip.clip_id)}.json"
+        path = args.out / f"{slug(clip)}.json"
         path.write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
         total += path.stat().st_size
         written += 1
-        print(f"[{position:2d}/{len(clips)}] {clip.clip_id:<30} "
+        print(f"[{position:2d}/{len(clips)}] {clip:<30} "
               f"{len(payload['defenders']):2d} defenders · {path.stat().st_size / 1024:.1f} KB")
 
     print(f"\n{written} files, {total / 1024:.0f} KB total, "

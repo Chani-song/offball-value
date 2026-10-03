@@ -270,7 +270,8 @@ class BuildTests(unittest.TestCase):
         index = json.loads((WEB_DATA / "index.json").read_text())["scenes"]
         self.assertTrue(index)
         for row in index:
-            self.assertIn(row["effect"], {"strong", "medium"})
+            # "solver": a curated scene the pipeline found (data/pipeline_scenes.json)
+            self.assertIn(row["effect"], {"strong", "medium", "solver"})
             self.assertTrue((WEB_DATA / row["file"]).exists(), row["file"])
 
     @unittest.skipIf(not (WEB_DATA / "index.json").exists(), "no exported web data")

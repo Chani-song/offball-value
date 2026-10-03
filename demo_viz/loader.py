@@ -85,6 +85,15 @@ def load_scene(
             _attach(scene, surfaces, every, grid_resolution_m, freeze_at, baseline_mode)
         return scene
 
+    from .sources.window_scene import build_scene_from_spec, find_spec
+
+    spec = find_spec(scene_id)
+    if spec is not None:                 # a curated scene the pipeline found: no shot row
+        scene = build_scene_from_spec(spec, stride=stride)
+        if quantities:
+            _attach(scene, surfaces, every, grid_resolution_m, freeze_at, baseline_mode)
+        return scene
+
     from .sources.annotation_scene import build_scene_from_clip
 
     effect, _, position = scene_id.partition(":")

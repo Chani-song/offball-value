@@ -685,13 +685,14 @@ class DefenderNameTests(unittest.TestCase):
         self.assertIn('full.replace("Toward", "To")', self.figure)
 
     def test_the_near_final_settings_are_recorded(self):
-        """The README's own command for the final figure."""
+        """The repository's own command for the final figure: the README until
+        its 2026-10-02 rewrite, docs/reproduction.md since."""
 
-        readme = _show("README.md")
-        if readme is None:
+        recorded = "\n".join(t for t in (_show("README.md"), _show("docs/reproduction.md")) if t)
+        if not recorded:
             self.skipTest("README not available")
-        self.assertIn("--defender-names short --label-gap 0.35", readme)
-        self.assertIn('--flow-color "#FF8000" --flow-alpha 0.4', readme)
+        self.assertIn("--defender-names short --label-gap 0.35", recorded)
+        self.assertIn('--flow-color "#FF8000" --flow-alpha 0.4', recorded)
         self.assertIn('defenderNames: "short"', self.figure)
         self.assertIn("labelGapM: 0.35", self.figure)
         self.assertIn('flowColour: "#FF8000"', self.figure)

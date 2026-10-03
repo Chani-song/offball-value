@@ -52,7 +52,8 @@ if __package__ in (None, ""):
 
 from ..annotations import select_clips  # noqa: E402
 from ..core.candidates import CANDIDATE_ANGLES_DEG, CANDIDATE_DISTANCE_M, candidate_passes  # noqa: E402
-from ..loader import load_scene  # noqa: E402
+from ..loader import load_scene
+from ..sources.window_scene import pipeline_scene_ids  # noqa: E402
 from ..scene import Scene  # noqa: E402
 from ..solver_native import PANEL_FEATURES, availability, release_quantities  # noqa: E402
 from .export_data import WEB_DATA, slug  # noqa: E402
@@ -180,26 +181,28 @@ def main(argv: list[str] | None = None) -> int:
               file=sys.stderr)
         return 0                                  # not a failure: this is optional
 
-    clips = select_clips(tuple(args.effects))
+    clips = [clip.clip_id for clip in select_clips(tuple(args.effects))]
     if args.limit:
         clips = clips[: args.limit]
+    else:
+        clips += pipeline_scene_ids()     # the curated scenes the pipeline found
     args.out.mkdir(parents=True, exist_ok=True)
     (args.out / "model.json").write_text(json.dumps(model_card(), indent=2))
 
     started, total = time.time(), 0
     for position, clip in enumerate(clips, start=1):
         try:
-            scene = load_scene(clip.clip_id, quantities=False, surfaces=False)
+            scene = load_scene(clip, quantities=False, surfaces=False)
         except Exception as error:                        # pragma: no cover
-            print(f"!! {clip.clip_id}: {error}", file=sys.stderr)
+            print(f"!! {clip}: {error}", file=sys.stderr)
             continue
         payload = scene_payload(scene, args.stride)
         if not payload:
             continue
-        path = args.out / f"{slug(clip.clip_id)}.json"
+        path = args.out / f"{slug(clip)}.json"
         path.write_text(json.dumps(payload, separators=(",", ":")))
         total += path.stat().st_size
-        print(f"[{position}/{len(clips)}] {clip.clip_id}  "
+        print(f"[{position}/{len(clips)}] {clip}  "
               f"{len(payload['frames'])} frames  {path.stat().st_size / 1024:.0f} KB",
               flush=True)
 

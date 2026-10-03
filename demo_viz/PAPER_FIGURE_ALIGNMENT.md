@@ -1105,12 +1105,14 @@ The **vector field is S05's alone**. `vector_field/` in the 2026-10-01 bundle
 holds `S05`, `S05@0.6` and `S05@1.2` and nothing else, so Nash's shading and
 flow are drawn for S05 and are absent -- not approximated -- everywhere else.
 
-## 25. Six more scenes have an equilibrium (2026-10-03)
+## 25. Eleven more scenes have an equilibrium (2026-10-03)
 
-**Thirteen** now: the seven of section 24 plus **S02, S03, S04, S08, S10, S35**
-from the 2026-10-03 bundle (`DATA_BUNDLE_PROVENANCE.md` section 7). Nothing in
-the browser changed -- `build.py` counts solved moments from the exported
-panels, so the list leads with all thirteen. The test that used S02 as "a
+**Eighteen** now: the seven of section 24, plus **S02, S03, S04, S08, S10,
+S35** from the 2026-10-03 bundle (`DATA_BUNDLE_PROVENANCE.md` section 7), plus
+**S46, S48, S53, S58, S66**, which the first bundle had solved and which are
+now published scenes (section 8 there), so no curated entry is "not available"
+any more. Nothing in the browser changed -- `build.py` counts solved moments
+from the exported panels, so the list leads with all eighteen. The test that used S02 as "a
 scene without an equilibrium" now uses S06, which still has none.
 
 In S03 the first solved moment is the clip's first frame (frame 0): its start

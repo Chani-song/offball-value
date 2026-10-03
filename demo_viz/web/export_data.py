@@ -31,6 +31,7 @@ from ..annotations import select_clips
 from ..core.role_logic import runner_onset_index
 from ..loader import load_scene
 from ..scene import Scene
+from ..sources.window_scene import EFFECT, find_spec, pipeline_scene_ids
 
 WEB_DATA = Path(__file__).resolve().parent.parent / "web_data"
 
@@ -102,6 +103,13 @@ def scene_payload(scene: Scene, clip) -> dict:
     }
 
 
+class _PipelineClip:
+    """What scene_payload reads from an annotated clip, for a scene that has none."""
+
+    def __init__(self, effect: str, shape: str, match_clock: str):
+        self.effect, self.shape, self.match_clock = effect, shape, match_clock
+
+
 def slug(scene_id: str) -> str:
     return "".join(ch if ch.isalnum() else "_" for ch in scene_id)
 
@@ -149,6 +157,26 @@ def main(argv: list[str] | None = None) -> int:
             "kb": round(size / 1024, 1),
         })
         print(f"[{position:2d}/{len(clips)}] {clip.clip_id:<30} {size / 1024:6.1f} KB")
+
+    # the curated scenes the pipeline found (data/pipeline_scenes.json), after the annotated ones
+    for scene_id in pipeline_scene_ids():
+        spec = find_spec(scene_id)
+        try:
+            scene = load_scene(scene_id, quantities=False, surfaces=False)
+        except Exception as error:
+            print(f"!! {scene_id}: {error}", file=sys.stderr)
+            continue
+        clip = _PipelineClip(EFFECT, "1R-1D-1B", spec["match_clock"])
+        payload = scene_payload(scene, clip)
+        name = f"{slug(scene_id)}.json"
+        path = args.out / name
+        path.write_text(json.dumps(payload, ensure_ascii=False,
+                                   separators=(",", ":"), indent=args.indent))
+        size = path.stat().st_size
+        total += size
+        index.append({"scene_id": scene_id, "effect": clip.effect, "shape": clip.shape, "file": name,
+                      "title": scene.title, "match_clock": clip.match_clock, "kb": round(size / 1024, 1)})
+        print(f"[pipeline] {scene_id:<30} {size / 1024:6.1f} KB")
 
     order = {"strong": 0, "medium": 1, "low": 2}
     index.sort(key=lambda row: (order.get(row["effect"], 9), row["scene_id"]))

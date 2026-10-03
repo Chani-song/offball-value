@@ -105,8 +105,10 @@ class ShowcaseMappingTests(unittest.TestCase):
         scenes = load(SHOWCASE)
         verified = [s for s in scenes if s.mapping_status == "verified"]
         unresolved = [s for s in scenes if s.mapping_status == "unresolved"]
-        self.assertEqual(EXPECTED_HUMAN, len(verified))
-        self.assertEqual(EXPECTED_SOLVER, len(unresolved))
+        # since 2026-10-03 the five pipeline scenes are published too
+        # (data/pipeline_scenes.json), so every curated entry maps
+        self.assertEqual(EXPECTED_TOTAL, len(verified))
+        self.assertEqual(0, len(unresolved))
         self.assertEqual(0, sum(1 for s in scenes if s.mapping_status == "ambiguous"))
 
     def test_a_verified_mapping_points_at_a_scene_the_demo_ships(self):

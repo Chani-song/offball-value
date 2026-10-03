@@ -971,7 +971,7 @@
     },
     {
       "showcase_id": "S46",
-      "scene_id": null,
+      "scene_id": "J03WPY:run_P1_2648",
       "featured": false,
       "order": null,
       "provenance": "solver",
@@ -1022,14 +1022,16 @@
         "split_metrics": "agile_2m 0.46 · v3 0.00"
       },
       "mapping": {
-        "status": "unresolved",
-        "evidence": "no repository scene shares the team pair, half and hand-labelled roles",
-        "candidates": []
+        "status": "verified",
+        "evidence": "teams and half agree; roles identical",
+        "candidates": [
+          "J03WPY:run_P1_2648"
+        ]
       }
     },
     {
       "showcase_id": "S48",
-      "scene_id": null,
+      "scene_id": "J03WOY:run_P1_0286",
       "featured": false,
       "order": null,
       "provenance": "solver",
@@ -1080,14 +1082,16 @@
         "split_metrics": "agile_2m 0.21 · v3 0.18"
       },
       "mapping": {
-        "status": "unresolved",
-        "evidence": "no repository scene shares the team pair, half and hand-labelled roles",
-        "candidates": []
+        "status": "verified",
+        "evidence": "teams and half agree; roles identical",
+        "candidates": [
+          "J03WOY:run_P1_0286"
+        ]
       }
     },
     {
       "showcase_id": "S53",
-      "scene_id": null,
+      "scene_id": "J03WOH:run_P2_1009",
       "featured": false,
       "order": null,
       "provenance": "solver",
@@ -1138,14 +1142,16 @@
         "split_metrics": "agile_2m 0.33 · v3 0.12"
       },
       "mapping": {
-        "status": "unresolved",
-        "evidence": "no repository scene shares the team pair, half and hand-labelled roles",
-        "candidates": []
+        "status": "verified",
+        "evidence": "teams and half agree; roles identical",
+        "candidates": [
+          "J03WOH:run_P2_1009"
+        ]
       }
     },
     {
       "showcase_id": "S58",
-      "scene_id": null,
+      "scene_id": "J03WR9:run_P1_2187",
       "featured": false,
       "order": null,
       "provenance": "solver",
@@ -1196,14 +1202,16 @@
         "split_metrics": "agile_2m 0.49 · v3 0.00"
       },
       "mapping": {
-        "status": "unresolved",
-        "evidence": "no repository scene shares the team pair, half and hand-labelled roles",
-        "candidates": []
+        "status": "verified",
+        "evidence": "teams and half agree; roles identical",
+        "candidates": [
+          "J03WR9:run_P1_2187"
+        ]
       }
     },
     {
       "showcase_id": "S66",
-      "scene_id": null,
+      "scene_id": "J03WR9:run_P1_1426",
       "featured": false,
       "order": null,
       "provenance": "solver",
@@ -1254,9 +1262,11 @@
         "split_metrics": "agile_2m 0.39 · v3 0.00"
       },
       "mapping": {
-        "status": "unresolved",
-        "evidence": "no repository scene shares the team pair, half and hand-labelled roles",
-        "candidates": []
+        "status": "verified",
+        "evidence": "teams and half agree; roles identical",
+        "candidates": [
+          "J03WR9:run_P1_1426"
+        ]
       }
     }
   ]
