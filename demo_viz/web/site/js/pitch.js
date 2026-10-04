@@ -29,7 +29,11 @@ import { ballAt, playerAt, view } from "./scene.js";
 const SVG_NS = "http://www.w3.org/2000/svg";
 const PITCH_L = 105;
 const PITCH_W = 68;
-const MARGIN = 2;
+// Clear ground round the pitch in the full view. It has to hold a role
+// marker whose player is standing on the touchline: the ring round a role
+// diamond reaches 3.19 m at this zoom, and 2 m cut the runner's ring in S46,
+// who starts half a metre inside the line.
+const MARGIN = 3.3;
 
 export class Pitch {
   constructor(root, { onPlayerDown, onBackground } = {}) {

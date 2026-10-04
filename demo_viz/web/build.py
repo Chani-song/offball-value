@@ -59,7 +59,25 @@ def build(out: Path, data_dir: Path = WEB_DATA, clean: bool = True,
             source = data_dir / extra
             if source.exists():
                 shutil.copytree(source, target / extra, dirs_exist_ok=True)
+        _grid_index(target / "grid")
     return out
+
+
+def _grid_index(folder: Path) -> None:
+    """Name the defender grids this build ships, so the page asks for no others.
+
+    The vector field exists for the scenes whose bundle carried one. Without
+    this list the page asked the server for every scene's grid and took three
+    404s for each scene that has none.
+    """
+
+    if not folder.exists():
+        return
+    names = sorted(path.stem for path in folder.glob("*.json")
+                   if path.stem != "index")
+    (folder / "index.json").write_text(
+        json.dumps({"schema": "grid-index/1", "grids": names},
+                   separators=(",", ":")))
 
 
 #: Curation a public first paint never reads: the reviewers' scores, their

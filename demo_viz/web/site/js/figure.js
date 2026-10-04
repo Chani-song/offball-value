@@ -298,7 +298,7 @@ export const DEFENDER_NAME = {
   "toward runner": "Toward runner",
   // Upstream's table stops here because the README's final command renders
   // S05, a 2v1 game. `stage3_read.targets_for` gives a 3v1 defender a fourth
-  // target, and four of the demo's seven scenes are 3v1 -- S15 at 0.6 s plays
+  // target, and eleven of the demo's twenty scenes are 3v1 -- S15 at 0.6 s plays
   // it 26% of the time. Title-cased by the same rule rather than left as a
   // bare percentage, which is the very thing naming these moves fixes.
   "toward beneficiary": "Toward beneficiary",

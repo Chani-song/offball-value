@@ -15,6 +15,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import unittest
 from pathlib import Path
 
@@ -61,6 +62,22 @@ const wait = (ms) => new Promise(r => setTimeout(r, ms));
 
 
 def _render(site: Path, codes: list[str]) -> list[dict]:
+    """One short Chrome run per scene.
+
+    A single run of every scene stopped finishing once the demo had twenty of
+    them: the pages fetch their modes lazily, so virtual time crawls and the
+    probe posted nothing inside the timeout -- which this module then read as
+    "no report" and skipped, quietly losing its coverage. One run per scene is
+    what `test_label_collisions` already does, for the same reason.
+    """
+
+    out: list[dict] = []
+    for code in codes:
+        out.extend(_render_one(site, [code]))
+    return out
+
+
+def _render_one(site: Path, codes: list[str]) -> list[dict]:
     result: list[dict] = []
 
     class Handler(http.server.SimpleHTTPRequestHandler):
@@ -85,19 +102,43 @@ def _render(site: Path, codes: list[str]) -> list[dict]:
         port = httpd.server_address[1]
         with tempfile.TemporaryDirectory() as profile, \
                 tempfile.TemporaryDirectory() as shot:
+            chrome = subprocess.Popen(
+                [find_chrome(), "--headless", "--disable-gpu", "--no-sandbox",
+                 f"--user-data-dir={profile}", "--window-size=1500,1200",
+                 "--virtual-time-budget=90000",
+                 f"--screenshot={Path(shot) / 'x.png'}",
+                 f"http://127.0.0.1:{port}/timeline.html"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            # the probe's post is the signal: since Chrome 154 the process
+            # writes its screenshot and stays up, so waiting for it to exit
+            # spent the whole timeout on every run
+            deadline = time.monotonic() + 240
+            while time.monotonic() < deadline:
+                if result:
+                    time.sleep(0.3)
+                    break
+                if chrome.poll() is not None:
+                    break
+                time.sleep(0.2)
+            chrome.kill()
             try:
-                subprocess.run(
-                    [find_chrome(), "--headless", "--disable-gpu", "--no-sandbox",
-                     f"--user-data-dir={profile}", "--window-size=1500,1200",
-                     "--virtual-time-budget=90000",
-                     f"--screenshot={Path(shot) / 'x.png'}",
-                     f"http://127.0.0.1:{port}/timeline.html"],
-                    capture_output=True, timeout=240)
+                chrome.wait(timeout=10)
             except subprocess.TimeoutExpired:
                 pass
         httpd.shutdown()
     probe.unlink(missing_ok=True)
     return result
+
+
+def _panels_of(code: str) -> list[dict]:
+    """The solved panels this showcase code exports."""
+
+    scenes = json.loads((REPO_ROOT / "demo_viz" / "data"
+                         / "submission_showcase.json").read_text())["scenes"]
+    scene_id = next(s["scene_id"] for s in scenes if s.get("showcase_id") == code)
+    path = (REPO_ROOT / "demo_viz" / "web_data" / "solver"
+            / f"{scene_id.replace(':', '_')}.json")
+    return json.loads(path.read_text())["panels"]
 
 
 class PublicTimelineRenderTests(unittest.TestCase):
@@ -143,12 +184,20 @@ class PublicTimelineRenderTests(unittest.TestCase):
         self.assertEqual([], bad, "\n".join(bad))
 
     def test_the_solved_moments_are_unchanged(self):
-        """Re-zeroing the display may not move a model-evaluation moment."""
+        """Re-zeroing the display may not move a model-evaluation moment.
+
+        Against the scene's own panels, not a fixed 0.0 / 0.6 / 1.2: S48 is
+        solved at one moment only, because from 0.6 s the ball is already with
+        its runner and a 2v1 game needs the carrier on it. Reading the export
+        keeps the question "are these the solved moments?" rather than "are
+        there three of them?".
+        """
 
         bad = []
         for row in self.report:
-            if row["moments"] != ["0.0 s", "0.6 s", "1.2 s"]:
-                bad.append(f"{row['code']}: moments {row['moments']}")
+            want = [f"{panel['dt']:.1f} s" for panel in _panels_of(row["code"])]
+            if row["moments"] != want:
+                bad.append(f"{row['code']}: moments {row['moments']} != {want}")
         self.assertEqual([], bad, "\n".join(bad))
 
     def test_each_moment_jumps_to_its_own_solved_frame(self):
@@ -156,15 +205,7 @@ class PublicTimelineRenderTests(unittest.TestCase):
 
         bad = []
         for row in self.report:
-            path = (REPO_ROOT / "demo_viz" / "web_data" / "solver")
-            scene_id = next(
-                s["scene_id"] for s in json.loads(
-                    (REPO_ROOT / "demo_viz" / "data"
-                     / "submission_showcase.json").read_text())["scenes"]
-                if s.get("showcase_id") == row["code"])
-            panels = json.loads(
-                (path / f"{scene_id.replace(':', '_')}.json").read_text())["panels"]
-            want = [p["frame"] for p in panels]
+            want = [p["frame"] for p in _panels_of(row["code"])]
             if row["momentFrames"] != want:
                 bad.append(f"{row['code']}: {row['momentFrames']} != {want}")
         self.assertEqual([], bad, "\n".join(bad))

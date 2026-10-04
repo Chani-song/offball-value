@@ -19,6 +19,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import unittest
 from pathlib import Path
 
@@ -157,14 +158,29 @@ def _render_one(site: Path, codes: list[str], widths: list[int]) -> list[dict]:
         port = httpd.server_address[1]
         with tempfile.TemporaryDirectory() as profile, \
                 tempfile.TemporaryDirectory() as shot:
+            chrome = subprocess.Popen(
+                [find_chrome(), "--headless", "--disable-gpu", "--no-sandbox",
+                 f"--user-data-dir={profile}", "--window-size=1900,1200",
+                 "--virtual-time-budget=20000",
+                 f"--screenshot={Path(shot) / 'x.png'}",
+                 f"http://127.0.0.1:{port}/collide.html"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            # The probe posts its measurements and the page is then done with.
+            # Waiting for Chrome to exit used to end the render; since Chrome
+            # 154 it writes the screenshot and stays up, so every render cost
+            # the whole timeout -- minutes per scene once the demo had twenty.
+            # The result is the signal; the timeout stays as the deadline.
+            deadline = time.monotonic() + 90
+            while time.monotonic() < deadline:
+                if result:
+                    time.sleep(0.3)        # a second POST, if one is coming
+                    break
+                if chrome.poll() is not None:
+                    break
+                time.sleep(0.2)
+            chrome.kill()
             try:
-                subprocess.run(
-                    [find_chrome(), "--headless", "--disable-gpu", "--no-sandbox",
-                     f"--user-data-dir={profile}", "--window-size=1900,1200",
-                     "--virtual-time-budget=20000",
-                     f"--screenshot={Path(shot) / 'x.png'}",
-                     f"http://127.0.0.1:{port}/collide.html"],
-                    capture_output=True, timeout=90)
+                chrome.wait(timeout=10)
             except subprocess.TimeoutExpired:
                 pass
         httpd.shutdown()

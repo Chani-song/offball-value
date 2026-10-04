@@ -45,10 +45,34 @@ const cache = new Map();
  * Null is the normal state today and is not an error: the control that would
  * draw it is hidden unless every moment resolves.
  */
+let shipped = null;
+
+/**
+ * Which grids this build ships (`data/grid/index.json`).
+ *
+ * The vector field exists for the scenes whose bundle carried one, and for no
+ * others. Without this list every other scene asked the server for a file that
+ * is not there: harmless on the page, three 404s per scene in the log. A build
+ * with no manifest falls back to asking, so an older build still works.
+ */
+async function gridIndex() {
+  if (!shipped) {
+    shipped = fetch("data/grid/index.json")
+      .then((response) => (response.ok ? response.json() : null))
+      .catch(() => null);
+  }
+  return shipped;
+}
+
 export async function loadGrid(code, dt) {
   const key = `${code}@${dt.toFixed(1)}`;
   if (cache.has(key)) return cache.get(key);
   const name = `${code}_${dt.toFixed(1)}`.replace(/[^A-Za-z0-9_@.-]+/g, "_");
+  const index = await gridIndex();
+  if (index && !(index.grids || []).includes(name)) {
+    cache.set(key, null);
+    return null;
+  }
   let payload = null;
   try {
     const response = await fetch(`data/grid/${name}.json`);

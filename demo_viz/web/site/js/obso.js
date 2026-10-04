@@ -6,7 +6,7 @@
 // expensive term and the slow-moving one. The other two are exact here at
 // every frame -- transition because the ball moves fast enough that
 // interpolating it would smear the brightest moment of a clip, and score
-// because one static grid serves all 45 scenes.
+// because one static grid serves all 50 scenes.
 //
 // Nothing in this file depends on which runner, defender or beneficiary the
 // visitor has picked. The surface is a property of the frame and the two

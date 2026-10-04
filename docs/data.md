@@ -57,8 +57,8 @@ y_csv = attack_direction * (y_panel - 34.0)
 ## Public demo data
 
 The interactive explorer (<https://chani-song.github.io/offball-value/>) is built from `demo_viz/` on
-other branches. The `main` branch carries its exported scene files (`demo_viz/web_data/`, 45 scenes,
-about 3.6 MB), which hold every player's and the ball's position at 25 Hz over an 11 s clip per scene,
+other branches. The `main` branch carries its exported scene files (`demo_viz/web_data/`, 50 scenes,
+about 3.8 MB), which hold every player's and the ball's position at 25 Hz over an 11 s clip per scene,
 and the site serves them publicly. None of these files are on this branch.
 
 ## Citing the data
