@@ -53,11 +53,14 @@ from typing import Any, Mapping, Sequence
 BUNDLE = "offball_demo_data_20260930"
 UPSTREAM_SHA = "8a5c69d0bb1c42948c3f9d50becd2ffc41e72344"
 
-#: Later bundles that add scenes, read after the first from the same folder.
-#: Same solver, flags and files as the first, at the starts picked for them:
-#: eval_batch2 (2026-10-03) S02 S03 S04 S08 S10 S35; eval_batch3 (2026-10-04)
-#: S06 S27. A code an earlier bundle already covers is never replaced.
-EXTRA_BUNDLES = ("offball_demo_data_batch2_20261003", "offball_demo_data_batch3_20261004")
+#: Later bundles that add scenes or moments, read after the first from the same
+#: folder. Same solver, flags and files as the first, at the starts picked for
+#: them: eval_batch2 (2026-10-03) S02 S03 S04 S08 S10 S35; eval_batch3
+#: (2026-10-04) S06 S27; eval_s46clip (2026-10-04) S46 at 0.6 / 1.2 s, the two
+#: moments the first bundle skipped (DATA_BUNDLE_PROVENANCE.md section 10). A
+#: moment an earlier bundle already has is never replaced.
+EXTRA_BUNDLES = ("offball_demo_data_batch2_20261003", "offball_demo_data_batch3_20261004",
+                 "offball_demo_data_s46_20261004")
 
 DEFAULT_ROOT = (Path(__file__).resolve().parent.parent.parent
                 / "local_inputs" / BUNDLE)
@@ -187,13 +190,15 @@ class BundleEvaluationSource:
             if not entry.scene_id or code not in self._scenes:
                 continue
             first = int(self._scenes[code]["clip_first_frame"])
-            name, folder = self._bundle_of[code]
             moments = []
             for key, dt in ((code, 0.0), (f"{code}@0.6", 0.6), (f"{code}@1.2", 1.2)):
-                path = folder / "panels" / f"eval-{key}.json"
-                if not path.exists():
-                    continue            # a moment the run skipped: left out
-                panel = json.loads(path.read_text())
+                # the scene's own bundle first, then any later one that adds the moment
+                found = next(((name, folder) for name, folder in [self._bundle_of[code], *self._roots]
+                              if (folder / "panels" / f"eval-{key}.json").exists()), None)
+                if found is None:
+                    continue            # a moment no run solved: left out
+                name, folder = found
+                panel = json.loads((folder / "panels" / f"eval-{key}.json").read_text())
                 moments.append(Moment(
                     code=code, key=key, dt=dt,
                     frame=int(panel["start_frame"]) - first,

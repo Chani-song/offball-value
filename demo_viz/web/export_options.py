@@ -143,10 +143,11 @@ def main(argv: list[str] | None = None) -> int:
         if not code or not scene_id:
             continue
         moments = []
-        home = next((f for f in folders if (f / "panels" / f"eval-{code}.json").exists()), root)
         for suffix, dt in (("", 0.0), ("@0.6", 0.6), ("@1.2", 1.2)):
-            panel_file = home / "panels" / f"eval-{code}{suffix}.json"
-            if not panel_file.exists():
+            # the first bundle that has the moment (a later one may add moments to a scene)
+            panel_file = next((f / "panels" / f"eval-{code}{suffix}.json" for f in folders
+                               if (f / "panels" / f"eval-{code}{suffix}.json").exists()), None)
+            if panel_file is None:
                 continue
             panel = json.loads(panel_file.read_text())
             moments.append({

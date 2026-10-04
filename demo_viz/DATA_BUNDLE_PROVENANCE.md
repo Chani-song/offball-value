@@ -176,3 +176,22 @@ roles in its `starts.csv`. Two things differ from the earlier scenes:
 Every solved body's start equals the published scene at its frame (0.0000 m).
 Coverage is now 20 published scenes with an equilibrium; of the 21 curated
 entries only S30 has none.
+
+## 10. S46's other two moments (2026-10-04)
+
+    local_inputs/offball_demo_data_s46_20261004/
+
+The first bundle has S46 at 0.0 s only: at 0.6 and 1.2 s the 2v1 ball carrier
+(Appelkamp) dribbles at 7.45 and 7.66 m/s, over the 7.2 m/s carrier top speed
+the states files carry -- the solver code's uncommented default, not a measured
+value -- so the state builder skipped them. This bundle solves those two
+moments with his start velocity scaled down to 7.2 m/s (direction kept, 4-6%
+slower; the reviewer's call); everything else is as the first bundle, and each
+panel keeps the observed speed in `provenance.carrier_speed_clipped`.
+
+`paper_story/bundle.py` now looks for each moment in the scene's own bundle
+first and then in any later one, so S46 reads 0.0 s from the first bundle and
+0.6 / 1.2 s from this one (its scenes.csv row and tracking are the first
+bundle's, byte for byte). Starts at all three frames: 0.0000 m. Every curated
+scene but S48 now has three solved moments; S48 keeps one, because from 0.6 s
+the ball is already with its runner and a 2v1 game needs the carrier on it.
