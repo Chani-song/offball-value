@@ -53,11 +53,24 @@ FORBIDDEN_KEYS = ("t", "ball", "xy", "players", "tracks")
 #: filter stays "all" and every curated scene stays in the list.
 LEAD_SCENE = "S05"
 
+#: Curated entries the demo leaves out, with the reason. A curation decision like
+#: LEAD_SCENE, so it lives here and `--check` still proves the committed file is
+#: what this code produces.
+EXCLUDED = {
+    # dropped from the abstract's showcase on 2026-09-28 and from the demo on
+    # 2026-10-04 (the reviewer's call): the attack's possession is too short for
+    # a game window, one reviewer marked the off-ball run unclear, and the
+    # annotation note says the dilemma did not happen ("if #19 had made the run")
+    "S30": "possession too short for a game; dilemma did not occur",
+}
+
 
 def build(source: Path | None = None) -> dict:
     entries = map_all(read_showcase(source), repository_scenes())
     records = []
     for entry in sorted(entries, key=lambda e: e.showcase_id):
+        if entry.showcase_id in EXCLUDED:
+            continue
         solver_status = "unresolved" if entry.provenance == "solver" else "unavailable"
         records.append({
             "showcase_id": entry.showcase_id,

@@ -1118,7 +1118,13 @@ On 2026-10-04 **S06** and **S27** followed (`DATA_BUNDLE_PROVENANCE.md`
 section 9): **twenty** now, every curated entry but S30. In S06 the game's
 runner is Sané and its ball carrier Choupo-Moting, the reverse of the
 annotation the Players card shows; the test that used S06 as "a scene without
-an equilibrium" now uses S30. The test that used S02 as "a
+an equilibrium" now uses S30.
+
+S30 itself is now left out of the curated list (`ingest_showcase.EXCLUDED`,
+the reviewer's call): its possession is too short for a game window, one
+reviewer marked the run unclear and the annotation says the dilemma did not
+happen. The list has 20 entries, every one playable and solved; S30 stays a
+published scene in the explorer. The test that used S02 as "a
 scene without an equilibrium" now uses S06, which still has none.
 
 In S03 the first solved moment is the clip's first frame (frame 0): its start

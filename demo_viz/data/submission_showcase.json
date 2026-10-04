@@ -670,66 +670,6 @@
       }
     },
     {
-      "showcase_id": "S30",
-      "scene_id": "J03WN1:shot_017_P2_1003",
-      "featured": false,
-      "order": null,
-      "provenance": "human",
-      "review": {
-        "reviewers": [
-          {
-            "name": "규혁",
-            "rating": 4,
-            "offball": "확신",
-            "note": ""
-          },
-          {
-            "name": "찬의",
-            "rating": 5,
-            "offball": "애매",
-            "note": ""
-          }
-        ],
-        "agreement_label": "4/5"
-      },
-      "roles": {
-        "runners": [
-          "9"
-        ],
-        "defenders": [
-          "23"
-        ],
-        "beneficiaries": [
-          "19"
-        ]
-      },
-      "role_labels": {
-        "runners": "#9 S. Azmoun",
-        "defenders": "#23 S. Janko",
-        "beneficiaries": "#19 M. Diaby"
-      },
-      "match": "VfL Bochum 1848 vs Bayer 04 Leverkusen · 후반",
-      "half": "second",
-      "event": "woodwork · Jeremie Frimpong",
-      "goal": false,
-      "timing": "슛",
-      "source_kind": "medium",
-      "annotation": "19번이 적극적으로 침투햇으면 횡방향 크로스 옵션이 열렷을지도",
-      "solver": {
-        "scenario_type": null,
-        "artifact": null,
-        "status": "unavailable",
-        "split_metrics": ""
-      },
-      "mapping": {
-        "status": "verified",
-        "evidence": "teams and half agree; roles identical; shooter 'Jeremie Frimpong' matches",
-        "candidates": [
-          "J03WN1:shot_017_P2_1003"
-        ]
-      }
-    },
-    {
       "showcase_id": "S34",
       "scene_id": "J03WR9:shot_004_P1_0794",
       "featured": false,

@@ -34,8 +34,8 @@ from demo_viz.web.build import SITE  # noqa: E402
 
 SHOWCASE = REPO_ROOT / "demo_viz" / "data" / "submission_showcase.json"
 SOURCE = REPO_ROOT / "local_inputs" / "dilemma_showcase.html"
-EXPECTED_TOTAL = 21
-EXPECTED_HUMAN = 16
+EXPECTED_TOTAL = 20     # 21 curated, S30 left out (ingest_showcase.EXCLUDED, 2026-10-04)
+EXPECTED_HUMAN = 15
 EXPECTED_SOLVER = 5
 
 
@@ -341,8 +341,10 @@ class IngestionTests(unittest.TestCase):
 
     def test_the_source_really_holds_the_expected_scene_count(self):
         from demo_viz.core.showcase_ingest import read_showcase
+        from demo_viz.ingest_showcase import EXCLUDED
 
-        self.assertEqual(EXPECTED_TOTAL, len(read_showcase(SOURCE)))
+        # the source keeps every curated entry; the demo leaves EXCLUDED out
+        self.assertEqual(EXPECTED_TOTAL + len(EXCLUDED), len(read_showcase(SOURCE)))
 
 
 if __name__ == "__main__":
