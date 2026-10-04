@@ -54,10 +54,10 @@ BUNDLE = "offball_demo_data_20260930"
 UPSTREAM_SHA = "8a5c69d0bb1c42948c3f9d50becd2ffc41e72344"
 
 #: Later bundles that add scenes, read after the first from the same folder.
-#: Same solver, flags and files as the first (deploy eval_batch2, 2026-10-03:
-#: S02 S03 S04 S08 S10 S35 at the starts picked for them). A code an earlier
-#: bundle already covers is never replaced.
-EXTRA_BUNDLES = ("offball_demo_data_batch2_20261003",)
+#: Same solver, flags and files as the first, at the starts picked for them:
+#: eval_batch2 (2026-10-03) S02 S03 S04 S08 S10 S35; eval_batch3 (2026-10-04)
+#: S06 S27. A code an earlier bundle already covers is never replaced.
+EXTRA_BUNDLES = ("offball_demo_data_batch2_20261003", "offball_demo_data_batch3_20261004")
 
 DEFAULT_ROOT = (Path(__file__).resolve().parent.parent.parent
                 / "local_inputs" / BUNDLE)

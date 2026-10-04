@@ -150,3 +150,29 @@ moment only (the bundle skipped 0.6 / 1.2 s; section 5).
 
 Coverage is now 18 published scenes with an equilibrium: twelve from the first
 bundle, six from the second.
+
+## 9. The third bundle (2026-10-04)
+
+    local_inputs/offball_demo_data_batch3_20261004/
+
+**S06** and **S27**, each at its real 0.0 / 0.6 / 1.2 s, same solver, flags
+and layout as the others; read as the second `EXTRA_BUNDLES` entry. Starts and
+roles in its `starts.csv`. Two things differ from the earlier scenes:
+
+* **S06's game swaps the annotation's roles.** The annotation names #13
+  Choupo-Moting the runner and #10 Sané the beneficiary, but Choupo's run
+  happens while the long ball is flying to him, which no game here can model.
+  The game is solved from his first touch as a 2v1 with **Choupo the ball
+  carrier and Sané the runner** (the reviewer's choice). So the Players card
+  (the curated roles) and the equilibrium's runner name different players in
+  this scene.
+* **S27's passer is on the ball only once per game.** Paqarada crosses first
+  time from a pass that rolls to him for about 2 s; he counts as on the ball
+  only within 1.5 m of it (as S36's schedule), so each game has one pass
+  instant (0.0 s game: the last; 0.6 s: the third; 1.2 s: the second) and no
+  pass at any game's opening decision -- which is the moment the Game
+  solution panel shows.
+
+Every solved body's start equals the published scene at its frame (0.0000 m).
+Coverage is now 20 published scenes with an equilibrium; of the 21 curated
+entries only S30 has none.

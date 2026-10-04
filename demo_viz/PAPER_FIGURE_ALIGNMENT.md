@@ -1112,7 +1112,13 @@ S35** from the 2026-10-03 bundle (`DATA_BUNDLE_PROVENANCE.md` section 7), plus
 **S46, S48, S53, S58, S66**, which the first bundle had solved and which are
 now published scenes (section 8 there), so no curated entry is "not available"
 any more. Nothing in the browser changed -- `build.py` counts solved moments
-from the exported panels, so the list leads with all eighteen. The test that used S02 as "a
+from the exported panels, so the list leads with all eighteen.
+
+On 2026-10-04 **S06** and **S27** followed (`DATA_BUNDLE_PROVENANCE.md`
+section 9): **twenty** now, every curated entry but S30. In S06 the game's
+runner is Sané and its ball carrier Choupo-Moting, the reverse of the
+annotation the Players card shows; the test that used S06 as "a scene without
+an equilibrium" now uses S30. The test that used S02 as "a
 scene without an equilibrium" now uses S06, which still has none.
 
 In S03 the first solved moment is the clip's first frame (frame 0): its start

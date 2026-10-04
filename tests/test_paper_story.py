@@ -429,9 +429,9 @@ class ExportedPayloadTests(unittest.TestCase):
 
     def test_an_equilibrium_claim_is_backed_by_an_exported_file(self):
         """Replaces "no tracked scene claims an equilibrium", which was true
-        until the 2026-09-30 bundle arrived. Eighteen scenes claim one now
-        (twelve from that bundle, six from the 2026-10-03 batch), and each must
-        have the file to show for it."""
+        until the 2026-09-30 bundle arrived. Twenty scenes claim one now
+        (twelve from that bundle, six from the 2026-10-03 batch, two from the
+        2026-10-04 one), and each must have the file to show for it."""
 
         claimed = []
         for path in self.files:
@@ -488,8 +488,8 @@ class EquilibriumArtifactTests(unittest.TestCase):
                 self.assertIn("not a tracked match scene", state["caveat"])
 
     def test_the_adapter_finds_no_equilibrium_for_a_scene_without_one(self):
-        # S06: curated, not solved (S02, the example until 2026-10-03, now is)
-        block = equilibrium_for("J03WMX:shot_017_P2_1743", WEB_DATA / "solver")
+        # S30: curated, not solved (S02 until 2026-10-03, then S06 until 2026-10-04)
+        block = equilibrium_for("J03WN1:shot_017_P2_1003", WEB_DATA / "solver")
         self.assertEqual("artifact_missing", block.availability)
         self.assertIn("batch job", block.detail)
 
@@ -1512,7 +1512,7 @@ class PublicShellTests(unittest.TestCase):
 
 
 class SceneListTests(unittest.TestCase):
-    """Eighteen scenes have a solved equilibrium; the list leads with them."""
+    """Twenty scenes have a solved equilibrium; the list leads with them."""
 
     def test_the_build_counts_each_scenes_solved_moments(self):
         build = (REPO_ROOT / "demo_viz" / "web" / "build.py").read_text()
