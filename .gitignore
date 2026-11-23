@@ -35,3 +35,6 @@ local_inputs/
 *.zip
 build/
 demo_viz/cache/
+
+# process core dumps at the repository root
+/core.*
