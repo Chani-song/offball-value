@@ -22,7 +22,8 @@ from defensive_positioning.markov import certificate, solve_markov_game
 
 from .agile_motion import command_names, relative_commands
 from .game import FixedPasserGame
-from .multi_markov import certificate_multi, modal_line_multi, solve_multi
+from .multi_markov import certificate_multi, modal_line_multi, solve_multi, split_tables
+from .multi_markov import value_split as split_by_receiver
 from .multi_pass import MultiPassFixedGame
 from .physics_pass import load_pass_model
 from .rollout import rollout
@@ -80,8 +81,19 @@ def root_game(game, solution, multi):
                 defender_legal=[bool(x) for x in rows], attack_legal=[bool(x) for x in cols], columns=names)
 
 
+def root_split(game, solution, split, max_error):
+    """The opening payoff table split by whom each entry is earned through (multi_markov.value_split,
+    2026-10-24): {part: [defender command, attack column]} in root_game's layout (illegal entries 0), each
+    part's share of the root value, and the largest |sum of parts - value| over the whole game."""
+    tables = split_tables(game, 0, np.array([0]), {n: v[1] for n, v in split.items()}, solution.schedule)
+    return dict(parts=list(split), root_value={n: float(v[0].flat[0]) for n, v in split.items()},
+                tables={n: [[float(x) if np.isfinite(x) else None for x in row] for row in t[0]]
+                        for n, t in tables.items()},
+                max_error=max_error)
+
+
 def solve_one(record, model_path, allow_proxy, config, output, physics=None, commands=None,
-              threat="andrew", pass_reaction_s=None, multi_pass=False, terminal="pass"):
+              threat="andrew", pass_reaction_s=None, multi_pass=False, terminal="pass", value_split=False):
     start, cpu = time.perf_counter(), time.process_time()
     model = load_pass_model(model_path, allow_proxy)
     game = game_from(record, model, config, physics, commands, threat, pass_reaction_s, multi_pass, terminal)
@@ -133,6 +145,10 @@ def solve_one(record, model_path, allow_proxy, config, output, physics=None, com
                   background_players=len((record.get("background") or {}).get("ids", [])),
                   best_release_to={"runner": int(((codes >= 0) & (codes < len(game.config.passes))).sum()),
                                    "beneficiary": int((codes >= len(game.config.passes)).sum())})
+    if value_split:
+        if not multi:
+            raise ValueError("value_split reads the multi-pass game's pass columns")
+        result["value_split"] = root_split(game, solution, *split_by_receiver(game, solution))
     result["timing"]["total_seconds_with_io_and_visualization"] = time.perf_counter()-start
     (output / "states" / f"{name}.json").write_text(json.dumps(result, indent=2, allow_nan=False)+"\n")
     return result

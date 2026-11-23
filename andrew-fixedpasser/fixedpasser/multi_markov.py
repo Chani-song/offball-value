@@ -146,6 +146,62 @@ def modal_line_multi(game, solution):
     return out
 
 
+def value_split(game, solution):
+    """The solved value of every state split by whom it is earned through (2026-10-24, for the dilemma
+    reading "what the defender concedes to the option he does not cover").
+
+    Every payoff of these games reaches the attack one way: a completed pass to a receiver -- a pass
+    column, or the horizon's best pass -- or, 2v1 only, the carrier keeping the ball to the horizon
+    (`retained`, zero in the 3v1 game). A state's value is p . M . q under the solved policies, and M is
+    the sum of one table per part: the pass columns go to their receiver, the move columns carry each
+    part's own continuation (times the same tackle survival). So the parts add up to the value, and the
+    solution itself is not touched.
+
+    Returns ({part: [array per step]}, max_error): the parts are each receiver of `game.candidates` and
+    "keep"; max_error is the largest |sum of the parts - value| over every state (LP tolerance scale)."""
+    cfg, schedule = game.config, solution.schedule
+    actions, columns = len(cfg.directions), game.attack_columns
+    receivers = list(dict.fromkeys(who for who, _ in game.candidates))
+    owner = np.array([receivers.index(who) for who, _ in game.candidates])
+    parts = receivers + ["keep"]
+    split = {name: [None] * (cfg.steps + 1) for name in parts}
+    code, released = game.pass_index[-1], solution.terminal_release
+    for i, name in enumerate(receivers):
+        split[name][-1] = np.where(released & (owner[np.maximum(code, 0)] == i), game.release[-1], 0.0)
+    split["keep"][-1] = np.where(released, 0.0, game.retained)
+    max_error = float(np.max(np.abs(sum(split[n][-1] for n in parts) - solution.value[-1])))
+    for k in range(cfg.steps - 1, -1, -1):
+        for name in parts:
+            split[name][k] = np.empty(game.shapes[k])
+        for flat in game.chunks(k):
+            p = solution.defender_policy[k].reshape(-1, actions)[flat]
+            q = solution.attack_policy[k].reshape(-1, columns)[flat]
+            tables = split_tables(game, k, flat, {n: split[n][k + 1] for n in parts}, schedule)
+            for name, table in tables.items():
+                split[name][k].flat[flat] = np.einsum("br,brc,bc->b", p, table, q)
+        max_error = max(max_error, float(np.max(np.abs(sum(split[n][k] for n in parts) - solution.value[k]))))
+    return split, max_error
+
+
+def split_tables(game, step, flat, following, schedule):
+    """{part: [state, defender command, attack column]}: `matrices` with each part's continuation in the
+    move columns and only that part's passes in the pass columns; illegal rows and columns 0."""
+    actions = len(game.config.directions)
+    receivers = list(dict.fromkeys(who for who, _ in game.candidates))
+    owner = np.array([receivers.index(who) for who, _ in game.candidates])
+    passes = game.pass_values[step].reshape(-1, actions, len(game.candidates))[flat]
+    rm, cm = game.masks(step, flat, schedule)
+    legal = np.asarray(rm, bool)[:, :, None] & np.asarray(cm, bool)[:, None, :]
+    out = {}
+    for name, onward in following.items():
+        table = np.empty((len(flat), actions, game.attack_columns))
+        table[..., :actions ** 2] = move_columns(game, step, flat, onward)
+        mine = owner == receivers.index(name) if name in receivers else np.zeros(len(owner), dtype=bool)
+        table[..., actions ** 2:] = np.where(mine, passes, 0.0)
+        out[name] = np.where(legal, table, 0.0)
+    return out
+
+
 def move_columns(game, step, flat, following):
     """[state, defender command, joint move] -- markov.FiniteGame.matrices without its release column."""
     c, r, d = game.indices(step, flat)

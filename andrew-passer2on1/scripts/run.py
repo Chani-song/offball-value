@@ -66,6 +66,9 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--limit", type=int, default=None)
     p.add_argument("--indices", type=str, default=None,
                    help="comma-separated state indices to solve instead of the first --limit")
+    p.add_argument("--value-split", action="store_true",
+                   help="also save the opening payoff table split by whom each entry is earned through "
+                        "(multi_markov.value_split, 2026-10-24; multi-pass only); the solve is unchanged")
     return p.parse_args()
 
 
@@ -121,6 +124,8 @@ def main() -> None:
         model_sha256=hashlib.sha256(args.model.read_bytes()).hexdigest(),
         versions=dict(python=platform.python_version(), numpy=np.__version__,
                       scipy=scipy.__version__))
+    if args.value_split:
+        manifest["value_split"] = True
     (args.output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     (args.output / "starting_states.json").write_text(json.dumps({"states": records}) + "\n")
     start, rows = time.perf_counter(), []
@@ -129,7 +134,7 @@ def main() -> None:
         futures = {pool.submit(solve_one, r, model_for(r), args.allow_proxy_labels,
                                config, str(args.output), physics, args.commands, args.threat,
                                args.pass_reaction_s, args.multi_pass, args.background_tackles,
-                               args.terminal): r["index"]
+                               args.terminal, args.value_split): r["index"]
                    for r in records}
         failed = []
         for fut in as_completed(futures):
