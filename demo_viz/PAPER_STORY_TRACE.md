@@ -126,7 +126,7 @@ or declaring A the intended comparison — both team decisions, not mine.
 No stage-3 artifact exists locally for any scene. Confirmed again this pass by
 the bounded search from the previous one: no `stage3`, `passer2on1` or
 `fixedpasser` output on this machine; the runs live on Delta at
-`/work/hdd/bbmr/kseo1/offball-out`. The only real solver artifacts here are
+`<cluster-work-dir>/offball-out`. The only real solver artifacts here are
 `mit_ssac2027_ref/results/exact_100`, which are the solver's own declared 2v1
 study states — not Bundesliga scenes, and never attached to one.
 

@@ -13,8 +13,8 @@ renderer are already written and tested against real artifacts.
 Source on Delta:
 
 ```
-/work/hdd/bbmr/kseo1/offball-out/stage3_passer2on1_agile      (2v1)
-/work/hdd/bbmr/kseo1/offball-out/stage3_fixedpasser_agile     (3v1)
+<cluster-work-dir>/offball-out/stage3_passer2on1_agile      (2v1)
+<cluster-work-dir>/offball-out/stage3_fixedpasser_agile     (3v1)
 ```
 
 Per run, these exact files:

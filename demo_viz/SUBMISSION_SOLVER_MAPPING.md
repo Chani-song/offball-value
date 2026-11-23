@@ -37,7 +37,7 @@ the curated source would republish licensed data. They are therefore listed in
 the showcase and disabled, with the reason on the entry.
 
 **No artifact.** The solved policies for these states live on Delta
-(`/work/hdd/bbmr/kseo1/offball-out`), which is not reachable from this machine.
+(`<cluster-work-dir>/offball-out`), which is not reachable from this machine.
 A bounded search of the locations the docs and configs name found no
 stage-3, `passer2on1` or `fixedpasser` output locally. The only real solver
 artifacts present are `mit_ssac2027_ref/results/exact_100`, which are the
