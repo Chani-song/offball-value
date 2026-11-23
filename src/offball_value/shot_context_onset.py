@@ -38,6 +38,12 @@ class SettledPossessionConfig:
     restart_post_seconds: float = 3.0
     minimum_seconds_before_shot: float = 2.0
     require_ball_in_opponent_half: bool = True
+    # 2026-09-27: with this on, a history frame where nobody controls the ball
+    # (in flight, or too high) takes the owner of the last controlled frame
+    # before it, as stage 0's segmentation keeps a spell open through
+    # unknown-control samples. Off by default, so v0.5 is unchanged. See
+    # RunOnsetConfig.in_flight_control for the matching onset-gate rule.
+    in_flight_control: bool = False
 
     @property
     def history_frames(self) -> int:
@@ -172,6 +178,19 @@ def assess_settled_shot_context_onset(
         max_control_ball_height_m=config.max_control_ball_height_m,
     )
     owners = [controlled_team_at_frame(sample, control_config) for sample in history]
+    if config.in_flight_control:
+        # walk back from the first history frame for the last owner, then carry
+        # the latest known owner forward over unknown frames
+        carry = None
+        back = candidate.frame_id - config.history_frames - 1
+        while back in frames and carry is None:
+            carry = controlled_team_at_frame(frames[back], control_config)
+            back -= 1
+        filled = []
+        for owner in owners:
+            carry = owner if owner is not None else carry
+            filled.append(carry)
+        owners = filled
     known = [owner for owner in owners if owner is not None]
     same_team = sum(owner == candidate.team_id for owner in owners)
     opponent = sum(owner is not None and owner != candidate.team_id for owner in owners)

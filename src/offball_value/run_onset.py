@@ -48,6 +48,26 @@ class RunOnsetConfig:
     minimum_future_known_fraction: float = 0.50
     minimum_future_same_team_fraction: float = 0.80
     required_player_count: int | None = 22
+    # 2026-09-27 (Chani-scene trace): 12 of her 45 strong+medium scenes fail the
+    # context gate because the ball is IN FLIGHT when the run starts -- nobody is
+    # within control_distance_m of it (median 3.45 m). With this on, a frame with
+    # nobody on the ball counts as controlled by the team that last had it, in
+    # both the carrier gate and the stable-history check, exactly as stage 0's
+    # segmentation keeps a spell open through unknown-control samples. The
+    # candidate's carrier is then the last controller (the passer) -- or, when
+    # the runner himself just passed (pass and move), the next team-mate to
+    # control the ball inside the future window -- and the candidate is marked
+    # ball_in_flight. The future-possession check treats an in-flight frame the
+    # same way. Off by default: v0.5 unchanged.
+    in_flight_control: bool = False
+    # 2026-10-23: this gate reads ball control from horizontal distance alone,
+    # while stage 0 and 1c take a ball above 1.5 m to be nobody's
+    # (shot_context.controlled_team_at_frame), so a lofted pass counts here as
+    # the player's it passes over. The pass-anchored onset of Chani's strong
+    # shot_002 (J03WOY) failed the 1 s future check on it. Set, a ball above
+    # this height is in flight in every check of the gate (carrier, history,
+    # future). None: height ignored, v0.6 unchanged.
+    max_control_ball_height_m: float | None = None
     require_ball_inside_pitch: bool = True
     pitch_boundary_tolerance_m: float = 0.20
 
@@ -82,6 +102,32 @@ class RunOnsetConfig:
                 raise ValueError(f"{name} must lie in (0, 1]")
         if self.pitch_boundary_tolerance_m < 0.0:
             raise ValueError("pitch_boundary_tolerance_m must be non-negative")
+        if self.max_control_ball_height_m is not None and self.max_control_ball_height_m <= 0.0:
+            raise ValueError("max_control_ball_height_m must be positive")
+
+
+@dataclass(frozen=True)
+class PassAnchorConfig:
+    """A second candidate source beside the kinematic detector (2026-10-23).
+
+    The detector needs a burst or a turn, so it misses a runner who is already
+    at speed and drags a defender with him: in Chani's strong shot_002 (J03WOY)
+    the runner held 3.3-3.8 m/s and the defender followed him. Here a pass or
+    cross by the attacking team is the onset for a team-mate running at it, but
+    only when a defender near him reacts, i.e. makes a detector onset within
+    reaction_seconds. Without the reaction every pass makes a candidate of every
+    fast team-mate, and on the 7 matches the low-effect controls grew as much as
+    the medium scenes. The candidates then face the same 1b and 1c gates.
+    """
+
+    minimum_runner_speed_mps: float = 3.5
+    reaction_radius_m: float = 10.0
+    reaction_seconds: float = 1.0
+
+    def validate(self) -> None:
+        invalid = [name for name, value in self.__dict__.items() if value <= 0.0]
+        if invalid:
+            raise ValueError(f"pass-anchor parameters must be positive: {invalid}")
 
 
 @dataclass(frozen=True)
@@ -124,9 +170,12 @@ class RunOnsetCandidate:
     stable_control_fraction: float
     future_known_fraction: float
     future_same_team_fraction: float
+    ball_in_flight: bool = False
 
     @property
     def primary_type(self) -> str:
+        if "pass_anchor" in self.labels:
+            return "pass_anchor"
         if "deceleration_turn" in self.labels:
             return "deceleration_turn"
         if "direction_change" in self.labels:
@@ -157,6 +206,7 @@ class RunOnsetCandidate:
             "stable_control_fraction": self.stable_control_fraction,
             "future_known_fraction": self.future_known_fraction,
             "future_same_team_fraction": self.future_same_team_fraction,
+            "ball_in_flight": self.ball_in_flight,
         }
 
 
@@ -494,10 +544,16 @@ def detect_kinematic_run_onsets(
     return _merge_onsets(detected, config)
 
 
-def _nearest_player(frame: BundesligaFrame) -> tuple[str | None, float | None]:
+def _nearest_player(
+    frame: BundesligaFrame,
+    max_ball_height_m: float | None = None,
+) -> tuple[str | None, float | None]:
+    """The player nearest the ball and his distance to it. Above
+    max_ball_height_m nobody can be on the ball, so the distance is inf: the
+    ball is in flight, whoever it passes over."""
     if frame.ball is None or not frame.players:
         return None, None
-    return min(
+    nearest = min(
         (
             (
                 player_id,
@@ -507,24 +563,32 @@ def _nearest_player(frame: BundesligaFrame) -> tuple[str | None, float | None]:
         ),
         key=lambda item: item[1],
     )
+    if (
+        max_ball_height_m is not None
+        and frame.ball.z is not None
+        and frame.ball.z > max_ball_height_m
+    ):
+        return nearest[0], math.inf
+    return nearest
 
 
 def team_controls_ball(
     frame: BundesligaFrame,
     team_id: str,
     control_distance_m: float,
+    max_ball_height_m: float | None = None,
 ) -> bool:
     """Return whether the closest player to the ball belongs to ``team_id``.
 
     Merely finding one teammate inside the control radius is insufficient in a
     contested-ball situation: an opponent can still be closer.  The detector
     therefore assigns control to the nearest player first, then applies the
-    distance threshold.
+    distance threshold. A ball above ``max_ball_height_m`` is nobody's.
     """
 
     if control_distance_m <= 0.0:
         raise ValueError("control_distance_m must be positive")
-    nearest_id, distance = _nearest_player(frame)
+    nearest_id, distance = _nearest_player(frame, max_ball_height_m)
     return bool(
         nearest_id is not None
         and distance is not None
@@ -546,6 +610,54 @@ def ball_is_inside_pitch(
         and abs(frame.ball.x) <= FIELD_LENGTH / 2.0 + tolerance_m
         and abs(frame.ball.y) <= FIELD_WIDTH / 2.0 + tolerance_m
     )
+
+
+def _last_controller(frames, frame_id: int, config: RunOnsetConfig):
+    """(player_id, team_id) of the last player within control distance of the
+    ball at or before frame_id, walking back through the loaded frames; None
+    when the loaded window runs out first."""
+    f = frame_id
+    while f in frames:
+        sample = frames[f]
+        if sample.ball is not None:
+            pid, dist = _nearest_player(sample, config.max_control_ball_height_m)
+            if pid is not None and dist is not None and dist <= config.control_distance_m:
+                return pid, sample.players[pid].team_id
+        f -= 1
+    return None
+
+
+def _next_controller(frames, frame_id: int, team_id: str, config: RunOnsetConfig, horizon_frames: int):
+    """(player_id) of the first player of `team_id` within control distance of the
+    ball after frame_id, within horizon_frames; None if an opponent gets there
+    first or nobody does."""
+    for f in range(frame_id + 1, frame_id + horizon_frames + 1):
+        sample = frames.get(f)
+        if sample is None or sample.ball is None:
+            continue
+        pid, dist = _nearest_player(sample, config.max_control_ball_height_m)
+        if pid is not None and dist is not None and dist <= config.control_distance_m:
+            return pid if sample.players[pid].team_id == team_id else None
+    return None
+
+
+def _team_has_ball(frames, frame_id: int, team_id: str, config: RunOnsetConfig) -> bool:
+    """team_controls_ball, or -- with in_flight_control -- the ball in flight
+    from that team (nobody on it, and it was last on a team-mate's foot)."""
+    sample = frames.get(frame_id)
+    if sample is None or sample.ball is None:
+        return False
+    if team_controls_ball(
+        sample, team_id, config.control_distance_m, config.max_control_ball_height_m
+    ):
+        return True
+    if not config.in_flight_control:
+        return False
+    pid, dist = _nearest_player(sample, config.max_control_ball_height_m)
+    if pid is not None and dist is not None and dist <= config.control_distance_m:
+        return False                      # someone (the other side) has it
+    last = _last_controller(frames, frame_id, config)
+    return last is not None and last[1] == team_id
 
 
 def _context_candidate(
@@ -575,13 +687,25 @@ def _context_candidate(
         required = expected_player_count(onset.frame_id)
     if required is not None and len(frame.players) != required:
         return None
-    carrier_id, carrier_distance = _nearest_player(frame)
-    if (
-        carrier_id is None
-        or carrier_distance is None
-        or carrier_distance > config.control_distance_m
-        or carrier_id == player_id
-    ):
+    carrier_id, carrier_distance = _nearest_player(frame, config.max_control_ball_height_m)
+    if carrier_id is None or carrier_distance is None:
+        return None
+    ball_in_flight = False
+    if carrier_distance > config.control_distance_m:
+        if not config.in_flight_control:
+            return None
+        last = _last_controller(frames, onset.frame_id, config)
+        if last is None or last[0] not in frame.players:
+            return None
+        carrier_id, ball_in_flight = last[0], True
+        if carrier_id == player_id:
+            # pass and move: the runner released the ball; his carrier is whoever
+            # of his team takes it next, if a team-mate does within the window
+            carrier_id = _next_controller(frames, onset.frame_id, frame.players[player_id].team_id,
+                                          config, int(round(config.future_possession_seconds * FPS)))
+            if carrier_id is None or carrier_id not in frame.players:
+                return None
+    if carrier_id == player_id:
         return None
     runner = frame.players[player_id]
     carrier = frame.players[carrier_id]
@@ -602,7 +726,7 @@ def _context_candidate(
         if sample is None or sample.ball is None:
             continue
         available += 1
-        if team_controls_ball(sample, runner.team_id, config.control_distance_m):
+        if _team_has_ball(frames, frame_id, runner.team_id, config):
             stable += 1
     required = history_frames + 1
     stable_fraction = stable / required
@@ -618,8 +742,13 @@ def _context_candidate(
         if sample is None or sample.ball is None:
             continue
         available_future += 1
-        nearest_id, distance = _nearest_player(sample)
+        nearest_id, distance = _nearest_player(sample, config.max_control_ball_height_m)
         if nearest_id is None or distance is None or distance > config.future_control_distance_m:
+            if config.in_flight_control:
+                last = _last_controller(frames, frame_id, config)
+                if last is not None and last[1] == runner.team_id:
+                    known += 1          # in flight from a team-mate: still theirs
+                    same_team += 1
             continue
         known += 1
         if sample.players[nearest_id].team_id == runner.team_id:
@@ -656,7 +785,20 @@ def _context_candidate(
         stable_control_fraction=float(stable_fraction),
         future_known_fraction=float(known_fraction),
         future_same_team_fraction=float(same_team_fraction),
+        ball_in_flight=ball_in_flight,
     )
+
+
+def _player_tracks(
+    frames: Mapping[int, BundesligaFrame],
+) -> dict[str, list[tuple[int, float, float]]]:
+    """(frame id, x, y) of every player over the loaded frames, in frame order."""
+    player_tracks: dict[str, list[tuple[int, float, float]]] = {}
+    for frame_id in sorted(frames):
+        frame = frames[frame_id]
+        for player_id, player in frame.players.items():
+            player_tracks.setdefault(player_id, []).append((frame_id, player.x, player.y))
+    return player_tracks
 
 
 def detect_run_onsets(
@@ -670,14 +812,8 @@ def detect_run_onsets(
 
     config.validate()
     search = set(search_frame_ids) if search_frame_ids is not None else None
-    player_tracks: dict[str, list[tuple[int, float, float]]] = {}
-    for frame_id in sorted(frames):
-        frame = frames[frame_id]
-        for player_id, player in frame.players.items():
-            player_tracks.setdefault(player_id, []).append((frame_id, player.x, player.y))
-
     candidates: list[RunOnsetCandidate] = []
-    for player_id, track in player_tracks.items():
+    for player_id, track in _player_tracks(frames).items():
         onsets = detect_kinematic_run_onsets(
             [sample[0] for sample in track],
             [sample[1] for sample in track],
@@ -702,3 +838,130 @@ def detect_run_onsets(
             ),
         )
     )
+
+
+@dataclass(frozen=True)
+class PassAnchoredCandidate:
+    candidate: RunOnsetCandidate
+    passer_id: str
+    # (defender id, his distance to the runner at the pass in m, his onset
+    # frame) for every defender that reacted, nearest first
+    reactions: tuple[tuple[str, float, int], ...]
+
+
+def detect_pass_anchored_run_onsets(
+    frames: Mapping[int, BundesligaFrame],
+    metadata: BundesligaMatchMeta,
+    anchors: Sequence[tuple[int, str, str]],
+    config: RunOnsetConfig = RunOnsetConfig(),
+    anchor_config: PassAnchorConfig = PassAnchorConfig(),
+    expected_player_count: Callable[[int], int] | None = None,
+) -> tuple[PassAnchoredCandidate, ...]:
+    """Run onsets anchored on passes; see PassAnchorConfig.
+
+    ``anchors`` holds (frame id, passer id, team id) per pass or cross. A
+    team-mate of the passer, not a keeper, is a candidate at the pass frame when
+    his detector speed there reaches minimum_runner_speed_mps and a defender, not
+    a keeper, within reaction_radius_m of him makes a kinematic onset in
+    [pass, pass + reaction_seconds]. The onset is measured at the pass frame as
+    the detector measures its own (_metrics_at, so post_mean_speed_mps is the
+    run speed the later cuts read), and it must pass _context_candidate. One
+    candidate per pass frame and runner.
+    """
+
+    config.validate()
+    anchor_config.validate()
+    pre = int(round(config.pre_window_seconds * FPS))
+    post = max(
+        int(round(config.post_confirmation_seconds * FPS)),
+        int(round(config.displacement_horizon_seconds * FPS)),
+    )
+    reaction_frames = int(round(anchor_config.reaction_seconds * FPS))
+    keepers = {metadata.goalkeeper_id(team_id) for team_id in metadata.teams}
+    segments: dict[str, list[tuple[np.ndarray, dict[str, np.ndarray]]]] = {}
+    onset_frames: dict[str, np.ndarray] = {}
+    for player_id, track in _player_tracks(frames).items():
+        ids = np.asarray([sample[0] for sample in track], dtype=int)
+        xs = np.asarray([sample[1] for sample in track], dtype=float)
+        ys = np.asarray([sample[2] for sample in track], dtype=float)
+        onset_frames[player_id] = np.asarray(
+            [onset.frame_id for onset in detect_kinematic_run_onsets(ids, xs, ys, config)],
+            dtype=int,
+        )
+        boundaries = np.flatnonzero(np.diff(ids) != 1) + 1
+        segments[player_id] = [
+            (ids[start:end], _motion_arrays(xs[start:end], ys[start:end], config))
+            for start, end in zip(np.r_[0, boundaries], np.r_[boundaries, len(ids)])
+            if end - start > pre + post + 2
+        ]
+
+    def motion_at(player_id: str, frame_id: int):
+        # the frame's index in its contiguous track, where the detector itself
+        # could place an onset (so every _metrics_at window is inside the track)
+        for ids, arrays in segments.get(player_id, ()):
+            if ids[0] <= frame_id <= ids[-1]:
+                index = int(frame_id - ids[0])
+                return (index, arrays) if pre + 1 <= index < len(ids) - post - 1 else None
+        return None
+
+    found: dict[tuple[int, str], PassAnchoredCandidate] = {}
+    for frame_id, passer_id, team_id in anchors:
+        frame = frames.get(frame_id)
+        if frame is None or passer_id not in frame.players:
+            continue
+        for runner_id, runner in frame.players.items():
+            if (
+                runner.team_id != team_id
+                or runner_id == passer_id
+                or runner_id in keepers
+                or (frame_id, runner_id) in found
+            ):
+                continue
+            motion = motion_at(runner_id, frame_id)
+            if motion is None:
+                continue
+            index, arrays = motion
+            speed = float(arrays["speed"][index])
+            if not speed >= anchor_config.minimum_runner_speed_mps:
+                continue
+            reactions = []
+            for defender_id, defender in frame.players.items():
+                if defender.team_id == team_id or defender_id in keepers:
+                    continue
+                distance = math.hypot(defender.x - runner.x, defender.y - runner.y)
+                if distance > anchor_config.reaction_radius_m:
+                    continue
+                onsets = onset_frames.get(defender_id, np.empty(0, dtype=int))
+                hits = onsets[(onsets >= frame_id) & (onsets <= frame_id + reaction_frames)]
+                if len(hits):
+                    reactions.append((defender_id, float(distance), int(hits[0])))
+            if not reactions:
+                continue
+            metrics = _metrics_at(index, arrays, config)
+            onset = KinematicRunOnset(
+                frame_id=frame_id,
+                labels=("pass_anchor",),
+                x=float(arrays["x"][index]),
+                y=float(arrays["y"][index]),
+                onset_speed_mps=speed,
+                pre_mean_speed_mps=metrics["pre_speed"],
+                post_mean_speed_mps=metrics["post_speed"],
+                speed_gain_mps=metrics["speed_gain"],
+                direction_change_degrees=metrics["direction_change"],
+                post_displacement_m=metrics["post_displacement"],
+                peak_acceleration_mps2=metrics["peak_acceleration"],
+                peak_deceleration_mps2=metrics["peak_deceleration"],
+                # how far past the speed threshold, as the detector's own
+                # scores read against theirs
+                confidence_score=speed / anchor_config.minimum_runner_speed_mps,
+            )
+            candidate = _context_candidate(
+                onset, runner_id, frames, metadata, config, expected_player_count
+            )
+            if candidate is not None:
+                found[(frame_id, runner_id)] = PassAnchoredCandidate(
+                    candidate=candidate,
+                    passer_id=passer_id,
+                    reactions=tuple(sorted(reactions, key=lambda reaction: reaction[1])),
+                )
+    return tuple(found[key] for key in sorted(found))

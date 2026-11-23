@@ -41,7 +41,12 @@ from offball_value.bundesliga import (
     load_bundesliga_sendings_off,
     normalize_bundesliga_match_id,
 )
-from offball_value.run_onset import RunOnsetConfig, detect_run_onsets
+from offball_value.run_onset import (
+    PassAnchorConfig,
+    RunOnsetConfig,
+    detect_pass_anchored_run_onsets,
+    detect_run_onsets,
+)
 from offball_value.settled_possession_phase import (
     SettledPossessionPhaseConfig,
     segment_settled_possession_phases,
@@ -121,6 +126,35 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--min-direction-change-degrees", type=float, default=30.0)
     parser.add_argument("--min-post-displacement-m", type=float, default=3.0)
     parser.add_argument("--onset-control-distance-m", type=float, default=1.50)
+    parser.add_argument(
+        "--in-flight-control",
+        action="store_true",
+        help="count a ball in flight from a team-mate as that team's control in the onset "
+        "context gate (RunOnsetConfig.in_flight_control); off = v0.5 behaviour",
+    )
+    parser.add_argument(
+        "--keep-reviewed",
+        action="store_true",
+        help="keep candidates within the dedupe window of already-reviewed onsets in the pool "
+        "instead of flagging them out (they stay marked excluded_reviewed)",
+    )
+    parser.add_argument(
+        "--onset-max-ball-height-m",
+        type=float,
+        default=None,
+        help="in the onset context gate a ball above this height is nobody's (in flight), as "
+        "stage 0 and 1c take it above 1.5 m (RunOnsetConfig.max_control_ball_height_m); "
+        "default: height ignored, v0.6 behaviour",
+    )
+    parser.add_argument(
+        "--pass-anchored",
+        action="store_true",
+        help="add run candidates anchored on the possessing team's passes and crosses, kept only "
+        "when a defender near the runner reacts (run_onset.PassAnchorConfig); off = v0.6",
+    )
+    parser.add_argument("--pass-anchor-min-speed-mps", type=float, default=3.5)
+    parser.add_argument("--pass-anchor-reaction-radius-m", type=float, default=10.0)
+    parser.add_argument("--pass-anchor-reaction-seconds", type=float, default=1.0)
     # Phase splitting, separate from the onset gate above. 0.32 s cuts a
     # phase on a grazed touch: 343 of 720 phases resume with the same team
     # within 5 s, and 129 shots fall into the gaps that creates.
@@ -223,6 +257,53 @@ def _is_reviewed_duplicate(
     return any(abs(frame_id - reviewed) <= window_frames for reviewed in reviewed_frames)
 
 
+def _pass_anchors(events: pd.DataFrame, phases: pd.DataFrame) -> list[tuple[int, str, str]]:
+    """(frame id, passer id, team id) of every pass or cross by the possessing
+    team inside a phase's search window, once per frame and passer."""
+
+    passes = events[
+        events["event_type"].isin(["pass", "cross"])
+        & events["frame_id"].notna()
+        & events["player_id"].notna()
+    ]
+    frame_ids = passes["frame_id"].astype(int)
+    anchors: dict[tuple[int, str], str] = {}
+    for _, phase in phases.iterrows():
+        team_id = str(phase["team_id"])
+        inside = passes[
+            (passes["team_id"].astype(str) == team_id)
+            & frame_ids.between(
+                int(phase["search_start_frame_id"]), int(phase["search_end_frame_id"])
+            )
+        ]
+        for frame_id, player_id in zip(inside["frame_id"].astype(int), inside["player_id"]):
+            anchors.setdefault((int(frame_id), str(player_id)), team_id)
+    return [(frame_id, player_id, team_id) for (frame_id, player_id), team_id in anchors.items()]
+
+
+def _repeated_pass_anchors(fresh: pd.DataFrame, window_frames: int) -> dict[int, str]:
+    """Pass-anchored rows of ``fresh`` that repeat a scene already in the pool, by
+    row index: within the window of a kinematic onset of the same runner
+    ("kinematic"), or of the first pass of the same runner's run, which is the
+    one kept ("pass_anchor"). A run seen at several passes is one scene."""
+
+    kinematic: dict[str, list[int]] = {}
+    for _, row in fresh[fresh["candidate_source"] == "kinematic"].iterrows():
+        kinematic.setdefault(str(row["player_id"]), []).append(int(row["frame_id"]))
+    repeats: dict[int, str] = {}
+    first_pass: dict[str, int] = {}
+    passes = fresh[fresh["candidate_source"] == "pass_anchor"]
+    for index, row in passes.sort_values("frame_id", kind="stable").iterrows():
+        player_id, frame_id = str(row["player_id"]), int(row["frame_id"])
+        if any(abs(frame_id - other) <= window_frames for other in kinematic.get(player_id, [])):
+            repeats[index] = "kinematic"
+        elif player_id in first_pass and frame_id - first_pass[player_id] <= window_frames:
+            repeats[index] = "pass_anchor"
+        else:
+            first_pass[player_id] = frame_id
+    return repeats
+
+
 def _audit_rows(frame: pd.DataFrame, count: int) -> pd.DataFrame:
     """Pick the strongest fresh primary candidates, spread over distinct phases."""
 
@@ -279,7 +360,7 @@ def _payload(row: pd.Series, frames, metadata, args: argparse.Namespace) -> dict
         )
     runner_meta = metadata.players.get(str(row["player_id"]))
     carrier_meta = metadata.players.get(str(row["ball_carrier_id"]))
-    return {
+    payload = {
         "match_id": str(row["match_id"]),
         "match_label": (
             f"{metadata.home_team_name} vs {metadata.away_team_name}"
@@ -302,8 +383,12 @@ def _payload(row: pd.Series, frames, metadata, args: argparse.Namespace) -> dict
         "seconds_before_shot": float(row["seconds_before_shot"]),
         "shot_frame_id": int(row["shot_frame_id"]),
         "phase_human_review": str(row["phase_human_review"]),
+        "ball_in_flight": bool(row.get("ball_in_flight", False)),
         "frames": samples,
     }
+    if "candidate_source" in row:
+        payload["candidate_source"] = str(row["candidate_source"])
+    return payload
 
 
 def main() -> None:
@@ -323,9 +408,17 @@ def main() -> None:
         minimum_direction_change_degrees=args.min_direction_change_degrees,
         minimum_post_displacement_m=args.min_post_displacement_m,
         control_distance_m=args.onset_control_distance_m,
+        in_flight_control=args.in_flight_control,
+        max_control_ball_height_m=args.onset_max_ball_height_m,
+    )
+    anchor_config = PassAnchorConfig(
+        minimum_runner_speed_mps=args.pass_anchor_min_speed_mps,
+        reaction_radius_m=args.pass_anchor_reaction_radius_m,
+        reaction_seconds=args.pass_anchor_reaction_seconds,
     )
     settled_config = SettledPossessionConfig(
         require_ball_in_opponent_half=args.require_ball_in_opponent_half,
+        in_flight_control=args.in_flight_control,
     )
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -395,20 +488,48 @@ def main() -> None:
                 f"→ players expected afterwards {22 - len(dismissals)}",
                 flush=True,
             )
+        expected_players = (
+            expected_player_count_at(dismissals) if args.adjust_for_dismissals else None
+        )
         detected = detect_run_onsets(
             frames,
             metadata,
             search_frame_ids=search_ids,
             config=onset_config,
-            expected_player_count=(
-                expected_player_count_at(dismissals)
-                if args.adjust_for_dismissals
-                else None
-            ),
+            expected_player_count=expected_players,
         )
+        # (candidate, columns of its source); the source columns only exist
+        # with --pass-anchored, so without it the output is v0.6's
+        sourced = [
+            (candidate, {"candidate_source": "kinematic"} if args.pass_anchored else {})
+            for candidate in detected
+        ]
+        if args.pass_anchored:
+            sourced.extend(
+                (
+                    found.candidate,
+                    {
+                        "candidate_source": "pass_anchor",
+                        "pass_anchor_passer_id": found.passer_id,
+                        "pass_anchor_reactions": ";".join(
+                            f"{defender_id}@{(onset_frame - found.candidate.frame_id) / FPS:.2f}s"
+                            f"/{distance:.1f}m"
+                            for defender_id, distance, onset_frame in found.reactions
+                        ),
+                    },
+                )
+                for found in detect_pass_anchored_run_onsets(
+                    frames,
+                    metadata,
+                    _pass_anchors(events, phase_ranges),
+                    config=onset_config,
+                    anchor_config=anchor_config,
+                    expected_player_count=expected_players,
+                )
+            )
         match_reviewed = reviewed_frames.get(match_id, [])
         match_records = []
-        for candidate in detected:
+        for candidate, source in sourced:
             phase = _nearest_phase(candidate, phase_ranges)
             if phase is None:
                 continue
@@ -443,6 +564,9 @@ def main() -> None:
                 }
             )
             record.update(assessment.as_record())
+            record.update(source)
+            if args.pass_anchored:
+                record["repeats_scene"] = ""
             match_records.append(record)
             all_rows.append(record)
 
@@ -456,9 +580,16 @@ def main() -> None:
             primary_frame = match_frame[
                 match_frame["primary_candidate"] == True  # noqa: E712
             ].copy()
-            fresh_frame = primary_frame[
+            fresh_frame = primary_frame if args.keep_reviewed else primary_frame[
                 primary_frame["excluded_reviewed"] == False  # noqa: E712
             ].copy()
+            if args.pass_anchored:
+                # match_frame rows are match_records in order, so the index finds
+                # the record to flag in the candidates CSV
+                repeats = _repeated_pass_anchors(fresh_frame, dedupe_window_frames)
+                for index, kind in repeats.items():
+                    match_records[index]["repeats_scene"] = kind
+                fresh_frame = fresh_frame.drop(index=list(repeats))
             settled_count = int(match_frame["settled_possession"].sum())
             excluded_reviewed_primary = int(primary_frame["excluded_reviewed"].sum())
         selected = _audit_rows(fresh_frame, args.audit_per_match)
@@ -481,10 +612,27 @@ def main() -> None:
                 "audit_scenes": len(selected),
             }
         )
+        if args.pass_anchored:
+            summaries[-1].update(
+                {
+                    "pass_anchored_onsets": int(
+                        (match_frame["candidate_source"] == "pass_anchor").sum()
+                    ) if not match_frame.empty else 0,
+                    "pass_anchored_fresh": int(
+                        (fresh_frame["candidate_source"] == "pass_anchor").sum()
+                    ) if not fresh_frame.empty else 0,
+                }
+            )
         print(
             f"{match_id}: {len(match_phase_frame)} phases → {len(match_frame)} contextual onsets "
             f"→ {len(primary_frame)} primary settled → {len(fresh_frame)} fresh "
-            f"({excluded_reviewed_primary} near reviewed) → {len(selected)} audit",
+            f"({excluded_reviewed_primary} near reviewed) → {len(selected)} audit"
+            + (
+                f" (pass-anchored: {summaries[-1]['pass_anchored_onsets']} contextual, "
+                f"{summaries[-1]['pass_anchored_fresh']} fresh new scenes)"
+                if args.pass_anchored
+                else ""
+            ),
             flush=True,
         )
         del frames
@@ -561,6 +709,20 @@ def main() -> None:
                     "opponent_control_confirmation_seconds": phase_config.opponent_control_confirmation_seconds,
                 },
                 "run_onset_config": onset_config.__dict__,
+                **(
+                    {
+                        "pass_anchor_config": anchor_config.__dict__,
+                        "pass_anchor_notes": (
+                            "Rows with candidate_source=pass_anchor are onsets at a pass or "
+                            "cross (run_onset.detect_pass_anchored_run_onsets) through the same "
+                            "1b and 1c gates. One whose runner has a kinematic pool onset, or "
+                            "an earlier pass-anchored one, within the dedupe window repeats that "
+                            "scene (repeats_scene) and stays out of audit_selection."
+                        ),
+                    }
+                    if args.pass_anchored
+                    else {}
+                ),
                 "settled_possession_config": settled_config.__dict__,
                 "notes": [
                     "Phases are ALL settled attacking possessions in open play, not only shot-ending ones.",
