@@ -32,7 +32,7 @@ from .bundesliga import (
     BundesligaFrame,
     BundesligaObjectState,
 )
-from .dynamic_marking import interpolate_timed_point
+from .dynamic_marking import interpolate_timed_point, prepare_path
 from .causal_defender_policy import (
     CausalPolicyConfig,
     rollout_causal_defender_path,
@@ -486,12 +486,24 @@ def _observed_ball_path(
     return tuple(sorted(samples))
 
 
+def _prepared(path_txy: tuple[TimedPoint, ...]) -> tuple[TimedPoint, ...]:
+    # Checked and sorted once per scene instead of on every interpolation. A path
+    # that fails the check stays raw, so the error is raised where it was before.
+    try:
+        return prepare_path(path_txy)
+    except ValueError:
+        return path_txy
+
+
 def _scene_runtime(game: Mapping[str, object]) -> _SceneRuntime:
     frames: Sequence[Mapping[str, object]] = game["background_frames"]  # type: ignore[assignment]
     return _SceneRuntime(
         onset_players=_frame_lookup(_onset_frame(frames)),
-        player_paths=_observed_player_paths(frames),
-        ball_path=_observed_ball_path(frames),
+        player_paths={
+            player_id: _prepared(path)
+            for player_id, path in _observed_player_paths(frames).items()
+        },
+        ball_path=_prepared(_observed_ball_path(frames)),
     )
 
 

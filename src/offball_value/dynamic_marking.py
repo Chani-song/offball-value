@@ -94,19 +94,40 @@ def _deduplicate_path(path_txy: Sequence[TimedPoint]) -> tuple[TimedPoint, ...]:
     return tuple((time_s, *samples[time_s]) for time_s in sorted(samples))
 
 
+class PreparedPath(tuple):
+    """A path already through _deduplicate_path, with its sample times kept as an
+    array. interpolate_timed_point uses it as it is rather than re-checking and
+    re-sorting the whole path on every call, which was most of a stage-2 build;
+    the result is the same. Make one with prepare_path."""
+
+    times: np.ndarray
+
+
+def prepare_path(path_txy: Sequence[TimedPoint]) -> PreparedPath:
+    if isinstance(path_txy, PreparedPath):
+        return path_txy
+    path = PreparedPath(_deduplicate_path(path_txy))
+    path.times = np.asarray([sample[0] for sample in path], dtype=float)
+    return path
+
+
 def interpolate_timed_point(
     path_txy: Sequence[TimedPoint],
     time_s: float,
 ) -> tuple[float, float]:
     """Linearly interpolate a path while clamping outside its time range."""
 
-    path = _deduplicate_path(path_txy)
+    if isinstance(path_txy, PreparedPath):
+        path, times = path_txy, path_txy.times
+    else:
+        path, times = _deduplicate_path(path_txy), None
     time_s = float(time_s)
     if time_s <= path[0][0]:
         return path[0][1], path[0][2]
     if time_s >= path[-1][0]:
         return path[-1][1], path[-1][2]
-    times = np.asarray([sample[0] for sample in path], dtype=float)
+    if times is None:
+        times = np.asarray([sample[0] for sample in path], dtype=float)
     upper = int(np.searchsorted(times, time_s, side="right"))
     before, after = path[upper - 1], path[upper]
     fraction = (time_s - before[0]) / max(after[0] - before[0], 1e-12)

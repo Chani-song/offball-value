@@ -338,7 +338,7 @@ def player_time_to_point(
     speed = min(velocity.speed, config.player_max_speed_mps)
     if speed > 1e-9:
         direction_cosine = float(
-            np.clip((velocity.vx * ux + velocity.vy * uy) / speed, -1.0, 1.0)
+            _clamp((velocity.vx * ux + velocity.vy * uy) / speed, -1.0, 1.0)
         )
         turn_angle = math.acos(direction_cosine)
         speed_toward_target = max(0.0, velocity.vx * ux + velocity.vy * uy)
@@ -384,8 +384,14 @@ def ball_time_to_point(
     return float(distance), float(distance / speed)
 
 
+def _clamp(value: float, low: float, high: float) -> float:
+    # np.clip for one number without numpy's per-call cost (player_time_to_point
+    # runs millions of times per scene). NaN passes through, as with np.clip.
+    return low if value < low else high if value > high else value
+
+
 def _logistic(value: float) -> float:
-    return 1.0 / (1.0 + math.exp(-float(np.clip(value, -60.0, 60.0))))
+    return 1.0 / (1.0 + math.exp(-float(_clamp(value, -60.0, 60.0))))
 
 
 def path_survival_estimate(

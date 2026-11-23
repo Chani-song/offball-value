@@ -26,6 +26,12 @@ ended 3 cm outside it: to him both were in the duel. 2 m is his choice, not a
 measured value, and is recorded as such.
 
 Positions are the real tracking, linearly interpolated to each instant.
+
+`--mark-run-speed` keeps a second, stricter run-speed cut visible without
+applying it: every kept state records its run speed and whether it reaches the
+mark in its provenance, which the solver copies into starting_states.json, so
+one solve at the looser cut can be read at both. `--mark-buffer-m` does the
+same for the triangle buffer (e.g. cut at 1.8 m, mark who also clears 2 m).
 """
 
 from __future__ import annotations
@@ -54,6 +60,12 @@ def parse_args() -> argparse.Namespace:
                    help="also drop a scene when someone is within this distance of the triangle")
     p.add_argument("--instants", default="0,0.6,1.2",
                    help="decision instants (s after onset) at which the triangle is checked")
+    p.add_argument("--mark-run-speed", type=float, default=None,
+                   help="record in each kept state's provenance its run speed and whether it reaches "
+                        "this (e.g. 3.8 while cutting at 3.5); nothing is dropped for it")
+    p.add_argument("--mark-buffer-m", type=float, default=None,
+                   help="record in each kept state's provenance whether it also clears this triangle "
+                        "buffer (e.g. 2.0 while cutting at 1.8); nothing is dropped for it")
     return p.parse_args()
 
 
@@ -93,6 +105,23 @@ def positions_at(frames, t0, t):
     return {k: a[k] + (b[k] - a[k]) * w for k in a if k in b}
 
 
+def first_intruder(frames, t0, instants, verts, in_game, buffer_m):
+    """(instant, player, distance) of the first player outside the game inside the
+    triangle or within buffer_m of it, or None."""
+    for t in instants:
+        pos = positions_at(frames, t0, t)
+        if not all(x in pos for x in verts):
+            continue
+        a, b, c = (pos[x] for x in verts)
+        for pid, xy in pos.items():
+            if pid in in_game:
+                continue
+            dist = distance_to_triangle(xy, a, b, c)
+            if dist <= buffer_m + 1e-12 and (dist > 0.0 or inside(xy, a, b, c)):
+                return t, pid, dist
+    return None
+
+
 def main() -> None:
     args = parse_args()
     instants = [float(x) for x in args.instants.split(",")]
@@ -125,39 +154,44 @@ def main() -> None:
             verts = (str(prov["carrier_id"]), str(prov["runner_id"]), str(prov["defender_id"]))
             in_game = set(verts)
         names = {str(p[0]): p[4] for p in frames[0]["players"]}
-        intruder = None
-        for t in instants:
-            pos = positions_at(frames, t0, t)
-            if not all(x in pos for x in verts):
-                continue
-            a, b, c = (pos[x] for x in verts)
-            for pid, xy in pos.items():
-                if pid in in_game:
-                    continue
-                dist = distance_to_triangle(xy, a, b, c)
-                if dist <= args.buffer_m + 1e-12 and (dist > 0.0 or inside(xy, a, b, c)):
-                    intruder = (t, pid, dist)
-                    break
-            if intruder:
-                break
+        intruder = first_intruder(frames, t0, instants, verts, in_game, args.buffer_m)
         if intruder:
             where = ("inside the triangle" if intruder[2] == 0.0
                      else f"{intruder[2]:.2f} m from the triangle")
             dropped.append({"index": rec["index"],
                             "reason": f"{names.get(intruder[1], intruder[1])} {where} at {intruder[0]:g} s"})
             continue
+        if args.mark_run_speed is not None:
+            prov["run_speed_mps"] = v
+            prov["meets_run_speed_mark"] = v >= args.mark_run_speed
+        if args.mark_buffer_m is not None:
+            prov["meets_buffer_mark"] = first_intruder(frames, t0, instants, verts, in_game,
+                                                       args.mark_buffer_m) is None
         kept.append(rec)
     out = {k: v for k, v in source.items() if k != "states"}
     out["states"] = kept
     out["filters"] = {"min_run_speed": args.min_run_speed, "triangle_instants": instants,
                       "triangle_buffer_m": args.buffer_m,
                       "source": str(args.states), "kept": len(kept), "dropped": dropped}
+    marked = None
+    if args.mark_run_speed is not None:
+        marked = sum(1 for rec in kept if rec["provenance"]["meets_run_speed_mark"])
+        out["filters"]["run_speed_mark"] = args.mark_run_speed
+        out["filters"]["kept_meeting_mark"] = marked
+    buffer_marked = None
+    if args.mark_buffer_m is not None:
+        buffer_marked = sum(1 for rec in kept if rec["provenance"]["meets_buffer_mark"])
+        out["filters"]["buffer_mark_m"] = args.mark_buffer_m
+        out["filters"]["kept_meeting_buffer_mark"] = buffer_marked
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(out, indent=1))
     runs = sum(1 for d in dropped if d["reason"].startswith("run speed"))
     tri = sum(1 for d in dropped if "triangle" in d["reason"])  # inside or within the buffer
     print(f"{len(source['states'])} → {len(kept)}  (dropped for run speed {runs} · triangle {tri} · "
-          f"other {len(dropped) - runs - tri})  → {args.output}")
+          f"other {len(dropped) - runs - tri})"
+          + (f"  · {marked} of the kept reach run speed {args.mark_run_speed}" if marked is not None else "")
+          + (f"  · {buffer_marked} clear {args.mark_buffer_m} m" if buffer_marked is not None else "")
+          + f"  → {args.output}")
 
 
 if __name__ == "__main__":

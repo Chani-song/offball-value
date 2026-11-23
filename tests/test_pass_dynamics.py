@@ -8,6 +8,7 @@ import numpy as np
 from offball_value.bundesliga import BundesligaFrame, BundesligaObjectState
 from offball_value.pass_dynamics import (
     ArrivalModelConfig,
+    _clamp,
     VelocityEstimate,
     detect_kick_frame,
     estimate_velocity,
@@ -314,6 +315,19 @@ class PassDynamicsTest(unittest.TestCase):
             estimate.expected_receive_probability,
             places=9,
         )
+
+
+class ClampTest(unittest.TestCase):
+    def test_matches_np_clip_for_one_number(self) -> None:
+        for value in (-2.0, -1.0, -0.0, 0.0, 0.3, 1.0, 1.5, math.inf, -math.inf, 3, 61.0, -61.0):
+            for low, high in ((-1.0, 1.0), (-60.0, 60.0)):
+                got, want = float(_clamp(value, low, high)), float(np.clip(value, low, high))
+                self.assertEqual(got, want)
+                self.assertEqual(math.copysign(1.0, got), math.copysign(1.0, want))
+
+    def test_nan_passes_through_as_with_np_clip(self) -> None:
+        self.assertTrue(math.isnan(_clamp(math.nan, -1.0, 1.0)))
+        self.assertTrue(math.isnan(float(np.clip(math.nan, -1.0, 1.0))))
 
 
 if __name__ == "__main__":

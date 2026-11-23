@@ -3,8 +3,10 @@ import unittest
 from offball_value.dynamic_marking import (
     DynamicMarkingConfig,
     MarkingPathCandidate,
+    interpolate_timed_point,
     marking_sample,
     moving_goal_side_target,
+    prepare_path,
     rank_dynamic_marking_paths,
     summarize_dynamic_marking,
 )
@@ -78,6 +80,35 @@ class DynamicMarkingTest(unittest.TestCase):
             ranked[0].summary.mean_weighted_error_m,
             ranked[1].summary.mean_weighted_error_m,
         )
+
+
+class PreparedPathTest(unittest.TestCase):
+    # unsorted, with a repeated time whose later sample must win
+    RAW = ((0.4, 4.0, -1.0), (0.0, 0.0, 0.0), (0.2, 1.0, 2.0), (0.2, 3.0, 5.0), (1.0, 6.0, 1.5))
+
+    def test_interpolates_exactly_like_the_raw_path(self) -> None:
+        prepared = prepare_path(self.RAW)
+        for time_s in (-1.0, 0.0, 0.05, 0.2, 0.31, 0.4, 0.99, 1.0, 3.0):
+            self.assertEqual(
+                interpolate_timed_point(prepared, time_s),
+                interpolate_timed_point(self.RAW, time_s),
+            )
+
+    def test_holds_the_deduplicated_sorted_samples(self) -> None:
+        prepared = prepare_path(self.RAW)
+        self.assertEqual(
+            tuple(prepared),
+            ((0.0, 0.0, 0.0), (0.2, 3.0, 5.0), (0.4, 4.0, -1.0), (1.0, 6.0, 1.5)),
+        )
+        self.assertEqual(prepared.times.tolist(), [0.0, 0.2, 0.4, 1.0])
+        self.assertIs(prepare_path(prepared), prepared)
+
+    def test_rejects_non_finite_samples_like_interpolation_does(self) -> None:
+        bad = ((0.0, 0.0, 0.0), (0.2, float("nan"), 1.0))
+        with self.assertRaises(ValueError):
+            interpolate_timed_point(bad, 0.1)
+        with self.assertRaises(ValueError):
+            prepare_path(bad)
 
 
 if __name__ == "__main__":
